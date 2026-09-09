@@ -1,262 +1,289 @@
 # Preface: How to Read an Algorithm Catalog
 
-An algorithm is a way of learning or computing. An architecture is a pattern of
-connections and operations. A trained model is the result of applying a learning
-procedure to particular data. A product is a system that may contain several
-models, retrieval, rules, human review, and application-specific infrastructure.
-Confusing these objects is one of the quickest ways to misunderstand machine
-learning.
+Machine learning means teaching a computer to find useful patterns in data.
+Instead of writing a rule for every situation, we give it examples. A learning
+method uses those examples to build a model.
 
-This book treats them as related, but not interchangeable. Random forests are
-not a vendor product; a Transformer is not synonymous with a chatbot; a model
-with publicly downloadable weights does not necessarily have a reproducible
-training dataset. A successful laboratory benchmark is not evidence of a
-successful production deployment.
+You do not need a college course to start this book. Basic algebra helps, but
+the main ideas come first. Equations are marked as optional. On a first read,
+focus on what a method takes in, what it does, and what it gives back.
 
-The aim is a working technical reference: enough history to understand an
-idea's origin, enough mathematics to explain its behavior, enough systems detail
-to anticipate deployment constraints, and enough evidence to distinguish a
-documented result from an attractive story.
+Four words will help you keep the pieces straight:
+
+| Word | Plain meaning | Example |
+|---|---|---|
+| Algorithm | A set of steps for solving a problem or learning from data | Steps that group similar records |
+| Architecture | The way a model's parts connect | The layers and shortcuts in a neural network |
+| Trained model | The result after a learning method has adjusted its settings | A network whose learned numbers help it recognize digits |
+| Product | A complete application that may use models, search, rules, and people | A chatbot that also searches documents |
+
+These are related, but they are not the same thing. A Transformer is a network
+design, not a complete chatbot. Downloading a model's learned numbers does not
+mean its training data are also available. A good lab test does not prove that
+the model works well in a live business.
+
+The book keeps the history, sources, and technical details. It now explains
+them in shorter steps, so you can build understanding before tackling the math.
 
 ## P.1 The book's organization
 
-The three primary learning sections appear in the requested order:
+The first three parts group methods by the kind of feedback they learn from:
 
-1. **Supervised Learning Algorithms:** fitting externally supplied targets,
-   including classical predictors and representative supervised neural systems.
-2. **Semi-Supervised Learning Algorithms:** using both labeled and unlabeled
-   examples to improve the same learning task.
-3. **Unsupervised Learning Algorithms:** discovering structure or modeling
-   observations without task-specific target annotations, including an explicitly
-   identified self-supervised pretraining division.
+1. **Supervised Learning Algorithms:** learn from examples with known answers,
+   such as pictures labeled "cat" or past houses with known sale prices.
+2. **Semi-Supervised Learning Algorithms:** learn from a few examples with
+   answers and many more examples without them.
+3. **Unsupervised Learning Algorithms:** find patterns without the task's
+   answer labels. This part also covers self-supervised learning, which creates
+   practice questions from the data itself.
 
-A fourth, standalone part examines **Mixture of Experts (MoE)** as an
-architecture and a distributed-systems design. Its individual models also
-appear in the appropriate learning section. The original supervised mixtures
-and GShard translation are not incorrectly reclassified as unsupervised just
-because later language models use experts.
+Part 4 gives **Mixture of Experts (MoE)** a closer look. An MoE model chooses
+which small networks to use for an input. Its individual models also appear
+in the learning section that fits their training. The original MoE and GShard
+translation models used supplied answers, so they stay in supervised learning.
 
-The [complete contents](../CONTENTS.md) links to individual entries. Each
-sub-category ends with a comparison table. The final reference chapters contain
-a [cross-family comparison](09-comparative-guide.md) and a
-[glossary](10-glossary.md). Continuation manifests state both what a chapter
-covers and which extensions would require a later edition.
+Use the [complete contents](../CONTENTS.md) to jump to a method. Comparison
+tables help you compare methods within a group. Near the end, a
+[cross-family guide](09-comparative-guide.md) compares broader choices, and
+the [glossary](10-glossary.md) explains key terms.
+
+A chapter's "coverage and continuation manifest" simply says what it covers
+and what a later edition could add.
 
 ## P.2 What determines a learning category?
 
-**The training signal, not the layer type.** A convolution can participate in a
-supervised image classifier, a semi-supervised consistency model, or an
-unlabeled denoising autoencoder. An architecture does not have an immutable
-supervision category.
+**Look at the training feedback, not just the network's shape.** The same kind
+of layer can help classify a labeled picture, learn from unlabeled pictures,
+or rebuild a damaged picture. The goal and data decide the learning category.
 
-| Learning setting | Information supplied to learning | Representative objective | Important boundary |
+| Learning setting | What the model receives | What it tries to do | Keep in mind |
 |---|---|---|---|
-| Supervised | Inputs and externally supplied targets | Minimize prediction loss against labels or continuous outcomes | Targets can be expensive, noisy, weak, or delayed |
-| Semi-supervised | A labeled subset plus explicitly exploited unlabeled data | Supervised loss plus a consistency, graph, generative, or pseudo-label term | Merely having unlabeled records on disk does not make a method semi-supervised |
-| Unsupervised | Observations without the downstream task's labels | Density likelihood, reconstruction, clustering, or a structural criterion | A discovered group is not automatically a scientifically meaningful class |
-| Self-supervised | Targets constructed from observations themselves | Predict a masked token, next token, corrupted view, or related representation | The objective has a target, but not a manually supplied downstream class label |
-| Weak or naturally paired supervision | Noisy rules, metadata, captions, or naturally associated modalities | Learn from imperfect labels or cross-modal matching | Not equivalent to an absence of supervision |
-| Reinforcement learning | Actions, environmental transitions, and rewards | Improve expected return under a policy | A separate paradigm, not a fourth kind of unlabeled clustering |
+| Supervised | Examples and supplied answers | Make predictions close to those answers | Supplied answers can still be wrong or incomplete |
+| Semi-supervised | Some answers plus extra examples without answers | Use both sets to improve the same task | The method must actually use the unlabeled examples |
+| Unsupervised | Examples without the task's answer labels | Find groups, compact summaries, or patterns | A discovered group may not have a useful real-world meaning |
+| Self-supervised | Practice questions made from the data | Guess a hidden word, next word, or missing image part | It still has a target, but people did not label each practice question |
+| Weak or naturally paired supervision | Noisy clues, rules, captions, or paired data | Learn from useful but imperfect guidance | A caption supplies information; it is not "no supervision" |
+| Reinforcement learning | Actions and rewards from an environment | Learn actions that lead to better rewards | This is a separate learning approach, not a type of clustering |
 
-For foundation models, the placement normally follows the **base pretraining
-objective**. Subsequent instruction tuning, preference optimization,
-distillation, or reinforcement learning is recorded in the training-paradigm
-field. A supervised fine-tuning stage does not erase the self-supervised
-pretraining history; neither does pretraining make the final assistant wholly
-unsupervised.
+Large general-purpose models often learn in several stages. **Pretraining**
+is the broad first stage. **Fine-tuning** adjusts the model later for a task.
+People may also rate answers, or one model may teach another through its
+outputs. This last approach is called **distillation**.
 
-There are genuine taxonomic boundary cases. CLIP's original description is
-*natural language supervision*: a caption is informative supervision, even
-when no one collected ImageNet-style class labels. The representation-learning
-chapter explicitly groups such cross-modal pretraining with self-supervised
-methods for comparison while identifying the paired signal. Text-conditioned
-image generation likewise combines a self-generated denoising/reconstruction
-target with conditioning from associated text. These are **cross-referenced
-hybrids**, not evidence that paired language is unlabeled in every sense.
+The book usually places these models by their base pretraining stage. Each
+entry then explains the later stages. A model does not become wholly
+unsupervised just because its first stage used self-made questions.
 
-Graph learning needs similar care. A model trained with a small label mask on
-a graph containing unlabeled nodes can be a semi-supervised, transductive
-system. The same message-passing architecture trained on fully labeled graphs
-is supervised. Each graph entry identifies its representative formulation.
+Some cases cross the boundaries. CLIP learns from pictures paired with text.
+The original paper calls this *natural language supervision*. The captions
+give clues about the pictures, even without a fixed list of class labels.
+We discuss CLIP beside other methods that learn reusable features, but do not
+pretend its text supplies no guidance.
+
+Text-to-image models have a similar mix. They may learn to remove noise from
+an image while a caption tells them what the image should show. The noise
+task and the caption provide different kinds of training information.
+
+For **graphs**, the inputs are items called nodes and links called edges.
+A graph model may learn from labels on only some nodes. If it can also see
+the unlabeled nodes it must later classify, the test is **transductive**.
+That means the test inputs, but not their answers, were visible during
+learning. A model tested on wholly new graphs faces a different setting.
 
 ## P.3 Scope and the meaning of comprehensive
 
-This is a **broad first-edition reference with an explicit boundary**, not an
-assertion that every algorithm, modification, vendor release, and application
-ever published has been enumerated. Such a claim would be unverifiable.
-Several entries intentionally cover a named family and distinguish its
-important variants; a family entry is not counted once per mentioned
-checkpoint.
+This is a wide first-edition guide, not a list of every method ever published.
+It contains 170 entries across 32 sub-categories. Some entries cover a family
+of related models and explain the differences. Mentioning several versions
+does not turn one family entry into several counted entries.
 
-The edition covers classical prediction, kernels and ensembles, structured
-prediction, supervised neural architectures, major semi-supervised methods,
-clustering, dimensionality reduction, density and anomaly modeling, pattern
-mining, neural generation, representation pretraining, foundation-model
-families, and sparse experts. It includes the neural families and MoE examples
-specified in the research brief.
+The book covers prediction, trees, kernels, neural networks, and methods using
+partly labeled data. It also covers grouping, smaller data summaries, unusual
+record detection, text and image generation, large model families, and MoE.
+The names may be new; each entry explains its purpose.
 
-Standalone reinforcement-learning algorithms, the full causal-inference
-literature, every recommender-system design, every optimizer, every neural
-architecture-search method, and every domain-specific scientific model are
-**not exhaustive sub-catalogs in this edition**. Training-related concepts such
-as RLHF appear where they clarify included entries. The chapter manifests
-identify further extensions without disguising them as completed coverage.
+Some areas need their own future volumes. We do not fully catalog learning
+through rewards, cause-and-effect methods, recommendation systems, every
+weight-update rule, or every scientific network. Related terms still appear
+when they help explain a method in this book.
 
-**Evidence cutoff: September 8, 2026.** This is an editorial boundary, not a
-claim that every source was published recently or that every model is the
-latest available version. Historical checkpoint names and dates are retained.
-Proprietary families are described only to the level supported by their cited
-public disclosures.
+**Evidence cutoff: September 8, 2026.** The simpler wording does not update
+the research cutoff. A source may be much older. Model versions keep their
+dates, and an older model is not presented as the latest release.
+
+For closed, company-run models, we describe only what public sources support.
+If the company has not shared a detail, that gap stays visible.
 
 ## P.4 Anatomy of an entry
 
-Every individual catalog entry supplies nine common fields:
+Every method starts with **In plain English**. Read that first. Then try the
+core mechanism and worked example. Return to the other fields when you need
+them. The same field names appear throughout the book so details are easy
+to find.
 
-| Field | What the reader should learn |
+Here is what the nine common field names mean:
+
+| Field | Plain meaning |
 |---|---|
-| Name | The canonical name, abbreviation, aliases, and the entry's boundaries |
-| Category & sub-category | The representative training signal and related uses |
-| Originating paper/vendor/year | Where the idea was introduced and which implementation or release is being discussed |
-| Core mechanism | The model, objective, update rule, or mathematical intuition |
-| Inputs/outputs and typical data types | What enters the method and what its output actually means |
-| Strengths and limitations | Conditions under which its assumptions help or fail |
-| Computational complexity / scalability notes | Costs with explicit dimensions and computational assumptions |
-| Real-world problem solved - REQUIRED WORKED EXAMPLE | A named application, research case, or clearly labeled illustrative calculation |
-| Notable vendor implementations/libraries | Implementations, not unsupported claims of customer adoption |
+| Name | What the method is called, including short names |
+| Category & sub-category | Which learning group it belongs to |
+| Originating paper/vendor/year | Who introduced it, when, and which version we mean |
+| Core mechanism | How it works, step by step |
+| Inputs/outputs and typical data types | What goes in and what comes out |
+| Strengths and limitations | Where it helps and where it can fail |
+| Computational complexity / scalability notes | How the work and memory needs grow as the problem gets bigger |
+| Real-world problem solved - REQUIRED WORKED EXAMPLE | A named use or research test, with clear limits on what it proves |
+| Notable vendor implementations/libraries | Software that provides the method; not proof of who uses it in a business |
 
-Neural-network entries add architecture descriptions, activations, loss
-functions, optimizers and schedules, regularization, backpropagation
-considerations, parameter/scaling behavior, training stages, and
-hardware/parallelism requirements.
+Neural-network entries add nine more fields:
 
-An explicit **not publicly disclosed** is a substantive value, not a missing
-field. An API model can be useful and extensively evaluated without exposing
-its expert count, activation function, or training optimizer. Filling those
-fields with a conventional Transformer recipe would manufacture knowledge.
+| Field | Plain meaning |
+|---|---|
+| Architecture diagram description | A map of the network's layers and connections |
+| Activation functions used and why | Small rules that change signals between layers |
+| Loss function(s) | The score the model tries to reduce while learning |
+| Optimization algorithm(s) | The rule for adjusting the model's learned numbers |
+| Regularization techniques | Controls that help the model avoid learning only training-set quirks |
+| Backpropagation considerations | How error information travels backward to guide updates |
+| Parameter count / scaling behavior | How many numbers the model learns, and how size changes its needs |
+| Training paradigm | The stages used to teach the model |
+| Hardware/parallelism considerations | The computers it needs and how they can share the work |
+
+An answer of **not publicly disclosed** means the source does not tell us.
+It is not permission to fill the field with another model's design.
+Even a widely used chatbot may have an unknown size or training recipe.
 
 ## P.5 Evidence policy for worked examples
 
-Every worked-example paragraph carries an evidence label:
+Each worked example tells you which kind of evidence it uses:
 
-| Label | Meaning | What it does not establish |
+| Label | Meaning | What it does not prove |
 |---|---|---|
-| **Sourced application** | A named organization or published scientific application actually used the method | A randomized causal estimate of business impact unless the source supplies one |
-| **Research benchmark** | A real, named study evaluated the method on identifiable data | Commercial deployment, patient benefit, or production cost savings |
-| **Illustrative (not a claimed deployment)** | A transparent teaching scenario or calculation where verified deployment evidence was not established | That the named hypothetical outcome happened in the world |
+| **Sourced application** | A named study or organization really used the method | That it caused a business gain, unless the source shows that |
+| **Research benchmark** | A named test on specified data | That a hospital or company put it into everyday use |
+| **Illustrative (not a claimed deployment)** | A clear teaching example or calculation | That the example happened in the real world |
 
-Some entries combine a documented application with an explicitly illustrative
-arithmetic step. The two are distinguished locally. If a source does not
-report downtime, profit, latency, or another business KPI, the entry says so.
-The phrase **production KPI not reported** must never be interpreted as a zero
-effect, a failed deployment, or an invitation to invent a percentage.
+Some examples include both a real study and a small made-up calculation.
+The text tells you which is which. A toy calculation can explain an update;
+it cannot prove that a company saved money.
 
-A source-backed example follows a chain:
+**KPI** means "key performance indicator": a useful business measure, such as
+cost or downtime. **Production KPI not reported** means the source gives
+no such result. It does not mean the effect was zero or the project failed.
 
-**problem -> data -> learning mechanism -> output -> decision -> reported result**.
+A worked example follows this path:
 
-For a code model, for example, a programming benchmark is a real research
-case: a function signature and problem statement become a generated function,
-which is evaluated against the benchmark's tests. A reported pass rate
-describes that protocol; it does not measure how much developer time an
-organization saved.
+**problem -> data -> method -> output -> decision -> reported result**.
 
-The reason an algorithm fits is sometimes the author's technical analysis
-rather than the original organization's documented procurement decision.
-Entries distinguish these. "This method accommodates nonlinear tabular
-interactions" does not imply that a hospital or manufacturer publicly gave that
-reason for choosing it.
+For example, a code test gives a model a function description. The model
+writes code, and the test checks it. A pass rate describes that code test.
+It does not tell us how much time a programmer saved at work.
 
-Primary papers, official model cards, technical reports, source repositories,
-and official implementation documentation are preferred. Origin and
-application claims carry nearby links. A vendor comparison remains a
-**vendor-reported comparison**, even when the numbers are accurately quoted.
-Versions, baselines, label budgets, shot counts, data splits, and metric
-definitions are part of the result.
+Sometimes we explain why a method is a sensible choice. That is our technical
+reasoning unless the source says the organization chose it for that reason.
+"This method can find curved patterns" does not mean a hospital publicly
+gave that reason for buying it.
+
+Links lead to original papers, model reports, code, or official documentation.
+A company's own comparison remains a **vendor-reported comparison**.
+The model version, data split, and scoring rules are part of the result,
+not small details that can be dropped.
 
 ## P.6 Reading numbers without being misled
 
-**Accuracy, error, and percentage points differ.** An error rate falling from
-10% to 8% is a reduction of 2 percentage points and a relative error reduction
-of 20%. It is not automatically a 20% gain in accuracy.
+**Accuracy and error are different.** If error falls from 10% to 8%, it
+falls by 2 percentage points. That is a 20% relative reduction in error.
+It is not a 20% rise in accuracy.
 
-**Training cost, inference FLOPs, latency, throughput, and price differ.**
-GPU-hours describe resource consumption under a stated implementation.
-Inference FLOPs omit memory movement and communication. API prices include
-commercial decisions. A lower active-parameter count is not an audited
-cost-per-token reduction.
+**Speed, work, memory, and price are also different.** A GPU is a processor
+often used for many calculations at once. GPU-hours count how long such
+processors were used. FLOPs count arithmetic work. **Latency** is the wait
+for an answer. **Throughput** is how much work finishes in a given time.
+None of these alone gives the price of running a complete service.
 
-**Data and protocol matter.** A few-shot score with eight sampled answers and
-majority voting is not a single-sample score. An ImageNet ensemble's top-5
-error is not a single model's top-1 error. Different prompt parsers can change a
-language-model benchmark without changing its weights.
+**Read the test rules.** A model allowed eight tries and a majority vote
+has a different task from one allowed one answer. Top-5 accuracy accepts
+an answer anywhere in five guesses; top-1 accepts only the first.
+Changing how answers are extracted can change a score without changing
+the model.
 
-**Uncertainty is not confined to confidence intervals.** Dataset contamination,
-label errors, undisclosed training data, different serving kernels, and
-nonrepresentative traffic can all limit a comparison. Cross-study numbers
-should not be combined into an unofficial universal leaderboard.
+**Good comparisons need more than a number.** A model may have seen test
+items during training. Labels may be wrong. The tested traffic may differ
+from real use. Results from different studies should not be combined into
+a single ranking without checking those differences.
 
-**Scaling laws are empirical models, not guarantees.** The influential
-[neural language-model scaling study](https://arxiv.org/abs/2001.08361) and
-[compute-optimal training study](https://arxiv.org/abs/2203.15556) concern
-particular objectives, datasets, budgets, and model families. Their fitted
-relationships do not certify that a small specialized dataset, an MoE router,
-or a long-context production service will behave identically.
+**Scaling laws describe measured trends, not promises.** Researchers have
+studied how model size, training data, and compute relate to performance.
+The [language-model scaling study](https://arxiv.org/abs/2001.08361) and
+[compute-optimal training study](https://arxiv.org/abs/2203.15556) are
+important examples. Their results apply to their tested conditions.
+They do not prove that every new dataset or network will follow the same rule.
 
 ## P.7 Mathematical and systems notation
 
-| Symbol | Default meaning | Qualification |
+**Optional math:** you can skip the formulas on a first read. These symbols
+let authors write a short expression instead of a long sentence. Entries
+explain their local meanings.
+
+| Symbol | Usual meaning | Keep in mind |
 |---|---|---|
-| $`n`$ | Number of training examples | Tokens or observations are stated explicitly when used instead |
-| $`d`$ | Input features or hidden width | A chapter declares the relevant interpretation |
-| $`p`$ | Number of model parameters | Total and active MoE parameters are distinguished |
-| $`k`$ | Neighbors, clusters, or selected experts | A local definition takes precedence |
-| $`T`$ | Sequence length or time steps | Not automatically the number of training epochs |
-| $`L`$ | Number of layers | A loss is written as $`\mathcal{L}`$ where ambiguity matters |
-| $`B`$ | Batch size | Often counts sequences, not tokens |
-| $`E`$ | Epochs or number of experts | Explicitly disambiguated in the MoE chapters |
-| $`X,y`$ | Features and targets | Targets may be scalar, class-valued, structured, or self-generated |
-| $`\theta`$ | Trainable parameters | Includes routers when they are learned |
-| $`\lambda`$ | Regularization or auxiliary-loss weight | Not a universal hyperparameter shared across methods |
+| $`n`$ | Number of training examples | Sometimes it counts tokens instead; the text says when |
+| $`d`$ | Number of input details or width of a hidden layer | Check the definition beside the formula |
+| $`p`$ | Number of learned settings, called parameters | MoE total and active counts are different |
+| $`k`$ | Number of neighbors, groups, or chosen experts | The local meaning takes priority |
+| $`T`$ | Sequence length or number of time steps | Not usually the number of passes through training data |
+| $`L`$ | Number of layers | A loss may use the different symbol $`\mathcal{L}`$ |
+| $`B`$ | Batch size: examples processed together | It may count whole sequences rather than tokens |
+| $`E`$ | Training passes or experts | The MoE chapters explain which |
+| $`X,y`$ | Input data and target answers | An answer can be a number, class, or sequence |
+| $`\theta`$ | The model's learned numbers | This can include the router's learned numbers |
+| $`\lambda`$ | The strength of an extra penalty or loss | The same symbol need not mean the same setting in two methods |
 
-Big-O statements describe an algorithmic regime, not a benchmark on a
-particular processor. Dense least-squares factorization, sparse iterative
-least squares, and streaming SGD have different costs despite fitting closely
-related statistical models. Exact Gaussian processes and inducing-point
-approximations are likewise different computational regimes.
+**Big-O** describes how work grows, not how many seconds a computer takes.
+For example, $`O(n)`$ means work grows roughly in proportion to the number
+of examples. With $`O(n^2)`$, doubling that number can require about four
+times the work. These are growth patterns under stated assumptions.
 
-For dense self-attention, the attention operation scales quadratically in
-sequence length, but the **whole Transformer block** also contains projection
-and FFN costs. Memory-efficient exact attention can avoid materializing a
-quadratic intermediate without turning all attention arithmetic into a
-linear-time computation.
+Different ways to fit the same kind of model can have different costs.
+A method that stores every pair of examples may need far more memory than
+one that uses a smaller approximation. The simpler method may also give
+a different answer.
+
+In ordinary dense attention, each sequence position can compare with every
+other position. That part grows roughly with sequence length squared.
+A Transformer also does other work, including moving features through
+learned layers. A memory-saving attention method can store less without
+removing all those pairwise calculations.
 
 ## P.8 From a catalog to a deployed system
 
-Start with the decision and its failure cost, not a fashionable model name.
-Establish an appropriate baseline, a leakage-resistant data split, a metric
-that matches the decision, and a realistic operating threshold. Compare methods
-at the same data and resource budget before attributing a gain to architecture.
+Start with the problem, not the newest model name. Decide what a useful
+answer looks like and what a wrong answer would cost. Choose a simple
+**baseline**: a starting method that a more complex one should beat.
 
-For temporal, grouped, medical, or multi-site data, random row splitting can
-be misleading. For clustering and visualization, convincing pictures do not
-substitute for stability or external validity. For generative models, inspect
-failure modes, data rights, privacy, factuality, and the consequences of acting
-on generated output.
+Keep training and test data separate. That rule includes learning how to
+scale inputs or fill missing values. If a model learns those steps from
+test data, the test is no longer fully fresh. This is called **data leakage**.
 
-Hosted services such as Vertex AI, Azure Machine Learning, and Amazon
-SageMaker are platforms, not learning algorithms. Their catalogs, regions,
-versions, licenses, and serving capabilities change. A library listing in an
-entry is a starting point for implementation, not a guarantee of service
-availability or a deployment instruction.
+Randomly splitting rows is not always enough. Records from the same patient,
+machine, or time period may share clues. A fair test should match how new
+cases will arrive.
+
+For grouping methods, a pretty plot is not proof that the groups matter.
+For text and image generators, check errors, privacy, data rights, and what
+happens if someone trusts a wrong answer.
+
+Vertex AI, Azure Machine Learning, and Amazon SageMaker are hosting and
+development platforms, not learning algorithms. Their available models and
+rules can change. A software link tells you where to start, not that a model
+is ready for your use without further work.
 
 ## Coverage and continuation manifest
 
-This guide establishes the taxonomy, evidence labels, entry schema, notation,
-and boundaries used throughout the first edition. Continue with
-[classical supervised methods](01-supervised-classical.md) or use the
-[complete contents](../CONTENTS.md) to select a topic.
+This guide explains the book's groups, field names, sources, notation, and
+limits. Continue with [classical supervised methods](01-supervised-classical.md)
+or choose a topic from the [complete contents](../CONTENTS.md).
 
-Further editions can deepen the deliberately bounded areas listed in P.3,
-expand independently documented production case studies, and add newer
-version-specific disclosures. None of those extensions is implied by the
-word "comprehensive."
+Later editions could expand the areas listed in P.3 and add more well-documented
+real-world results. The word "comprehensive" does not claim those additions
+are already present.

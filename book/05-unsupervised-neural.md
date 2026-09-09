@@ -1,36 +1,54 @@
 # 3. Unsupervised Learning Algorithms: Neural Generation and Representation Pretraining
 
-This volume covers sections **3.6-3.10**: reconstruction, adversarial generation, diffusion and text-to-image systems, flows and autoregression, and representation pretraining. It continues [classical unsupervised learning](04-unsupervised-classical.md) and precedes [foundation models](06-foundation-models.md).
+This chapter covers sections **3.6-3.10**. Some methods learn to rebuild data or create new examples. Others learn useful ways to describe images, sounds, or words with numbers. It continues [classical unsupervised learning](04-unsupervised-classical.md) and comes before [foundation models](06-foundation-models.md).
 
-**Evidence policy, checked 2026-09-08.** Historical papers and explicitly identified model versions are reference points, not claims about the newest available systems. A research benchmark, a selected demonstration, and a deployed service establish different things. Reported benchmark measurements below retain their evaluation conditions; none establishes commercial cost savings. Architectural explanations and comparisons are this book's technical synthesis unless attributed to a study.
+An **encoder** turns an input into a list of numbers called a code or representation. A **decoder** turns that code back into an output, such as an image. A compact code uses less space than the original input. A **probability distribution** describes possible outcomes and their relative chances. It can describe a list of choices or a range of possible values.
 
-**Supervision is a property of the objective and data, not the network name.** Reconstructing an input or predicting its missing components supplies self-supervision. Image-caption pairs supply natural-language supervision, even when collected without task-specific annotation. Class-conditioned generation uses class labels. Consequently, this chapter's editorial grouping is broader than strictly label-free learning: it includes conditional generators alongside their unconditional relatives and places CLIP with representation pretraining while explicitly cross-referencing [supervised contrastive and Siamese networks](02-supervised-neural.md). Evaluation with labeled linear probes does not retrospectively make the preceding image-only pretraining supervised.
+A **vector** is a list of numbers. To take two vectors' **dot product**, multiply matching entries, then add those products. A **dense layer** connects each of its input values to each output using learned weights.
 
-**Cost and uncertainty conventions.** Let $`n`$ be training examples, $`B`$ batch size, $`E`$ epochs, $`p`$ trainable parameters, and $`C_f`$ the forward cost of a specified network for one example. An ordinary gradient update is approximately a constant multiple of $`BC_f`$, not universally $`O(Bp)`$: convolutions reuse weights at many positions. A convolution costs approximately $`O(HWk^2c_{\rm in}c_{\rm out})`$; a dense-attention Transformer with sequence length $`T`$, width $`d`$, and $`L`$ layers costs $`O(BL(Td^2+T^2d))`$ per forward pass. $`S`$ denotes sampling steps, not sequence length. Stored weights and optimizer state scale with $`p`$, while activations depend on batch, resolution, depth, and implementation. Sample diversity, reconstruction error, contrastive similarity, and likelihood are **not interchangeable with calibrated predictive uncertainty**.
+During training, a model changes its **weights**, the numbers that control its calculations. A **loss** measures the error it tries to reduce. **Backpropagation** works backward through the calculations to find how weights affect that error. An **optimizer** uses this feedback to update them. Training often processes a batch of examples at once; an **epoch** is one pass through the training set.
+
+**Evidence policy, checked 2026-09-08.** The cited papers and named versions are historical reference points, not a list of today's newest systems. A research test, selected demonstration, and working service prove different things. Results below keep their original test conditions. None establishes commercial cost savings. Unless a study is named, explanations and comparisons are this book's interpretation.
+
+**The data and training task determine the supervision.** Rebuilding an input or predicting hidden parts uses the input itself as a teaching signal. This is self-supervision. Captions supply language supervision, even without specially written class labels. Class-controlled generators use class labels. This chapter therefore includes more than strictly label-free methods. It also includes CLIP and links to [supervised contrastive and Siamese networks](02-supervised-neural.md). Training a labeled classifier later does not change how the earlier image-only model learned.
+
+**Cost and uncertainty conventions.** Running a network once is a forward pass. Training also works backward, so each update costs more. Image filters reuse weights across many positions; counting weights alone does not measure the work. Stored weights and optimizer records grow with model size. Intermediate results also take memory, depending on batch size, image size, depth, and implementation.
+
+**Optional math:** Let $`n`$ be the number of training examples, $`B`$ the batch size, $`E`$ the epochs, $`p`$ the trainable weight count, and $`C_f`$ one example's forward-pass cost. An ordinary update costs roughly a constant times $`BC_f`$, not always $`O(Bp)`$. Here Big-O describes how work grows, rather than exact running time. A convolution costs about $`O(HWk^2c_{\rm in}c_{\rm out})`$: $`H,W`$ are image height and width, $`k`$ is filter width, and $`c_{\rm in},c_{\rm out}`$ count input and output channels. Channels hold different learned image details. A dense-attention Transformer costs $`O(BL(Td^2+T^2d))`$ per forward pass. Here $`T`$ counts sequence items, $`d`$ is their vector width, and $`L`$ counts layers. $`S`$ will mean sampling steps, not sequence length.
+
+Varied samples, small rebuilding errors, close matching scores, and high likelihood are different measurements. None alone gives a trustworthy chance that an answer is correct. **Calibration** means predicted chances match observed frequencies under the conditions tested.
 
 ## 3.6 Reconstruction and latent-variable models
 
-An encoder-decoder bottleneck can learn a useful representation without defining a generative probability distribution. VAEs add an explicit latent-variable distribution; vector-quantized models add discrete codes and typically learn a separate prior. The distinction determines what sampling and likelihood statements are justified.
+These models squeeze an input through a restricted code, then try to rebuild it. That can teach useful patterns without providing a way to create new examples. A VAE adds rules for drawing random codes. A vector-quantized model chooses codes from a learned list and usually learns a separate rule for generating them. These differences matter when claiming that a model can generate data or measure its probability.
 
 ### 3.6.1 Autoencoders
 
-**Name:** Autoencoder, with a deep undercomplete autoencoder as the representative neural realization.
+**In plain English:** An autoencoder learns a compact code by trying to rebuild its input. The code can help compress data or find similar items.
 
-**Category & sub-category:** Unsupervised/self-supervised learning; reconstruction and nonlinear dimensionality reduction.
+**Name:** Autoencoder. This entry uses a deep model with a code smaller than its input, called an undercomplete autoencoder.
 
-**Originating paper/vendor/year:** Autoassociative networks predate modern deep learning. Hinton and Salakhutdinov's [*Reducing the Dimensionality of Data with Neural Networks*, Science, 2006](https://www.cs.toronto.edu/~hinton/absps/science.pdf) is an influential deep formulation, not the invention of every autoencoder.
+**Category & sub-category:** Unsupervised/self-supervised learning. It learns to rebuild inputs and describe them with fewer numbers.
 
-**Core mechanism:** An encoder $`f_\phi`$ maps $`x`$ to a restricted code $`z`$; a decoder $`g_\theta`$ reconstructs $`x`$. Sharing a low-dimensional code forces the model to preserve recurring structure rather than independently storing each input coordinate. With linear layers, squared error, and suitable constraints, the learned subspace relates to PCA; nonlinear layers can represent curved structure. A sufficiently unconstrained network can instead learn a near-identity mapping.
+**Originating paper/vendor/year:** Networks that learn to copy inputs existed before modern deep learning. Hinton and Salakhutdinov's [*Reducing the Dimensionality of Data with Neural Networks*, Science, 2006](https://www.cs.toronto.edu/~hinton/absps/science.pdf) presented an influential deep version. They did not invent every form of autoencoder.
 
-**Inputs/outputs and typical data types:** Numerical vectors, images, spectra, or document-frequency vectors enter; latent coordinates and reconstructions leave. Feature scaling and the output observation model must match the data. A plain autoencoder does not automatically define a distribution from which arbitrary latent samples are meaningful.
+**Core mechanism:** The encoder turns an input into a short code. The decoder uses that code to rebuild the input. Limited code space encourages the model to keep recurring patterns rather than every input detail.
 
-**Strengths and limitations:** Useful for nonlinear compression and initialization when labels are scarce. Reconstruction can emphasize nuisance variation rather than the downstream task. Low residuals are not proof of normality, and high residuals are not calibrated anomaly probabilities; thresholding requires a separately validated reference population.
+With linear layers, squared error, and suitable restrictions, this relates to PCA's straight-line compression. Nonlinear layers can follow curved patterns. Without enough restrictions, however, the network may simply learn to copy its input.
 
-**Computational complexity / scalability notes:** For dense widths $`d_0,\ldots,d_L`$, one example costs $`O(\sum_l d_{l-1}d_l)`$ per forward pass; training adds decoder and backward work. Convolutional versions follow the spatial cost above. Encoding a new item needs only the encoder; reconstruction needs both networks.
+**Inputs/outputs and typical data types:** Inputs include number lists, images, spectra, and document word frequencies. Outputs are codes and rebuilt inputs. Input scaling and output rules must suit the data. Randomly chosen codes do not automatically produce meaningful new examples.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** Hinton and Salakhutdinov studied news retrieval using 804,414 Reuters newswire stories, represented by probabilities over 2,000 word stems. Document vector -> encoder -> ten-dimensional code -> cosine-nearest documents gives a retrieval ranking. The study trained on half the stories and reported better category-based retrieval than latent semantic analysis. Nonlinear compression is the technical reason to prefer this model over a linear projection when semantic neighborhoods are not linearly organized. The [paper's retrieval experiment](https://www.cs.toronto.edu/~hinton/absps/science.pdf) is research evidence, not a Reuters production deployment or a measured analyst-productivity improvement.
+**Strengths and limitations:** It can compress complex patterns and provide useful starting weights when labels are scarce. But rebuilding inputs may preserve irrelevant details instead of useful ones. A small rebuilding error does not prove an item is normal. A large error is not a trustworthy chance of an anomaly. Any cutoff needs testing on a separate, suitable reference population.
 
-**Notable vendor implementations/libraries:** PyTorch and Keras provide the necessary dense and convolutional layers; the authors released supporting code. A framework's ability to construct an autoencoder is not evidence that its vendor operates this retrieval system.
+**Computational complexity / scalability notes:** Wider neighboring layers need more connections and more work. Encoding a new item needs only the encoder; rebuilding it needs both networks. Training also adds backward calculations. Image-filter versions follow the convolution cost described above.
+
+**Optional math:** For layer widths $`d_0,\ldots,d_L`$, a forward pass costs $`O(\sum_{l=1}^{L}d_{l-1}d_l)`$ per example. Here $`L`$ counts the layers being evaluated. Each product counts connections between two neighboring layers.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** Hinton and Salakhutdinov studied search across 804,414 Reuters newswire stories. Each story became probabilities over 2,000 word stems. The encoder reduced these to a ten-dimensional code. Search ranked other stories by cosine similarity, which compares the directions of their codes.
+
+The study trained on half the stories. It reported better retrieval by news category than latent semantic analysis, a linear method. Nonlinear compression can help when related documents do not follow straight-line patterns. The [retrieval experiment](https://www.cs.toronto.edu/~hinton/absps/science.pdf) was research, not a Reuters production system or a measured improvement in analyst productivity.
+
+**Notable vendor implementations/libraries:** PyTorch and Keras supply the needed dense and image-filter layers. The authors also released supporting code. These tools do not prove that their vendors run the news-search system.
 
 **Architecture diagram description:**
 
@@ -40,41 +58,49 @@ word-probability vector (2000)
   -> mirrored decoder -> normalized reconstructed word probabilities
 ```
 
-**Activation functions used and why:** The cited document model uses logistic hidden units and a linear code, with a normalized output appropriate to word probabilities. Contemporary ReLU hidden layers are a different implementation choice, not the 2006 recipe.
+**Activation functions used and why:** The document model uses logistic units, which squeeze values between zero and one. Its code is linear, and its final probabilities are normalized to sum to one. ReLU, which removes negative values, is a modern alternative, not the 2006 recipe.
 
-**Loss function(s):** Reconstruction cross-entropy $`-\sum_j x_j\log \hat x_j`$ for the document experiment. Squared error is appropriate for a fixed-variance Gaussian observation model, not universally for counts or categorical values.
+**Loss function(s):** The document experiment penalizes rebuilt word probabilities that disagree with the input. It uses cross-entropy. Squared error instead suits a model with bell-shaped errors of fixed spread; it is not right for every count or category.
 
-**Optimization algorithm(s):** The historical method first trains stacked restricted Boltzmann machines, then fine-tunes the unrolled network by backpropagation. Its staged optimization should not be relabeled Adam. For a new end-to-end implementation, Adam with validation-controlled learning-rate reduction is a reasonable explicitly proposed alternative, not a reported historical setting.
+**Optional math:** The document loss is $`-\sum_j x_j\log \hat x_j`$. Here $`j`$ indexes word stems, $`x_j`$ is an input probability, and $`\hat x_j`$ is its rebuilt probability. The sum measures disagreement across all stems; lower is better.
 
-**Regularization techniques:** The narrow bottleneck is central. Weight penalties, sparsity, tied weights, and early stopping are optional variants. The original generative pretraining is an initialization strategy; it does not by itself guarantee generalization.
+**Optimization algorithm(s):** The historical method first trains stacked restricted Boltzmann machines to obtain starting weights. It then joins the layers into an encoder-decoder and improves them by backpropagation. This was not Adam training. Adam with a rate reduced when validation stops improving is a possible new recipe, not a historical claim.
 
-**Backpropagation considerations:** The chain rule traverses decoder and encoder. Deep sigmoid networks can saturate and lose gradient magnitude; this motivated the historical pretraining. A detached latent code would prevent ordinary joint encoder training.
+**Regularization techniques:** The narrow code is the main restriction. Other options penalize large weights, favor mostly inactive units, share encoder-decoder weights, or stop training early. Learning starting weights beforehand does not guarantee success on new data.
 
-**Parameter count / scaling behavior:** There is no family-wide count. Dense weights scale as adjacent-width products; shrinking the code does not eliminate the potentially expensive outer layers. Tied encoder-decoder weights reduce stored parameters.
+**Backpropagation considerations:** Error feedback must pass through both decoder and encoder. Logistic units near their limits can pass back very weak feedback; this helped motivate staged pretraining. Cutting the feedback path at the code prevents normal joint training.
 
-**Training paradigm:** Input-as-target self-supervision, optionally followed by supervised downstream learning. The Reuters category labels evaluate neighborhoods rather than serve as reconstruction targets.
+**Parameter count / scaling behavior:** There is no fixed autoencoder size. Dense layers store a weight for each connection between neighboring layers. A smaller code does not remove expensive outer layers. Sharing encoder-decoder weights reduces storage.
 
-**Hardware/parallelism considerations:** Small dense models fit on CPUs; large image autoencoders benefit from GPU data parallelism. Decoder activations can dominate memory during training even when deployment stores only the encoder.
+**Training paradigm:** The input supplies its own target, making reconstruction self-supervised. A later task may add labels. Reuters category labels checked whether nearby codes represented related stories; they were not reconstruction targets.
+
+**Hardware/parallelism considerations:** Small models can run on CPUs. Large image models benefit from GPUs processing different batches together. Decoder intermediate results may use most training memory, even if later use needs only the encoder.
 
 ### 3.6.2 Denoising autoencoders
 
-**Name:** Denoising autoencoder (DAE), including stacked denoising autoencoders.
+**In plain English:** A denoising autoencoder learns by repairing deliberately damaged inputs. This helps it notice relationships, rather than merely copy what it sees.
 
-**Category & sub-category:** Self-supervised learning; corruption-based reconstruction and representation pretraining.
+**Name:** Denoising autoencoder (DAE). Several can also be stacked to learn in stages.
 
-**Originating paper/vendor/year:** Vincent, Larochelle, Bengio, and Manzagol, [*Extracting and Composing Robust Features with Denoising Autoencoders*, ICML 2008](https://www.cs.toronto.edu/~larocheh/publications/icml-2008-denoising-autoencoders.pdf); expanded by Vincent and colleagues in [JMLR, 2010](https://www.jmlr.org/papers/v11/vincent10a.html).
+**Category & sub-category:** Self-supervised learning. It rebuilds damaged inputs to learn useful features before a later task.
 
-**Core mechanism:** Draw a corrupted input $`\tilde x\sim q_D(\tilde x\mid x)`$, then train $`g_\theta(f_\phi(\tilde x))`$ to recover clean $`x`$. The target is not the corrupted observation. In the original masking experiment, a selected fraction of coordinates is forced to zero. Learning to infer missing content discourages a trivial identity mapping and exploits dependencies among coordinates.
+**Originating paper/vendor/year:** Vincent, Larochelle, Bengio, and Manzagol introduced the method in [*Extracting and Composing Robust Features with Denoising Autoencoders*, ICML 2008](https://www.cs.toronto.edu/~larocheh/publications/icml-2008-denoising-autoencoders.pdf). Vincent and colleagues expanded it in [JMLR, 2010](https://www.jmlr.org/papers/v11/vincent10a.html).
 
-**Inputs/outputs and typical data types:** Clean training images or numerical vectors generate corrupted/clean pairs automatically. Outputs are repaired observations or hidden features. Applying this recipe to genuinely noisy measurements requires an appropriate corruption model; synthetically masking digits does not validate clinical-image denoising.
+**Core mechanism:** Start with a clean example and randomly damage part of it. Send the damaged version through an encoder and decoder. Train the output to match the clean original, not the damaged input. The original masking experiment set selected input values to zero. To fill these gaps, the network must use relationships among the remaining values.
 
-**Strengths and limitations:** Makes a useful learning task even for some overcomplete hidden representations. The corruption distribution determines robustness: random missing pixels, sensor noise, and adversarial perturbations are different problems. A deterministic reconstruction is generally a point estimate; variation across masks is not a calibrated posterior.
+**Inputs/outputs and typical data types:** Clean images or number lists provide both damaged inputs and clean targets automatically. Outputs are repaired data or learned features. Real noisy measurements need a suitable damage model. Repairing masked digits does not validate a system for clinical images.
 
-**Computational complexity / scalability notes:** One sampled corruption requires approximately one encoder-decoder forward/backward update, plus $`O(Bd)`$ masking for $`d`$ input coordinates. Averaging over $`m`$ independently corrupted views multiplies that work approximately by $`m`$. Stacked layerwise pretraining adds separate optimization stages.
+**Strengths and limitations:** The repair task can be useful even when the hidden code is larger than the input. But practice with one kind of damage does not ensure resistance to another. Missing pixels, sensor noise, and deliberately misleading changes differ. One repaired output is a single estimate. Trying different masks does not produce verified probabilities for alternative originals.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The ICML study evaluated digit recognition on the Larochelle benchmark, including MNIST variants with rotation and image or random backgrounds. Images -> random coordinate removal -> stacked denoising encoders -> supervised classifier -> digit predictions separates pretraining from evaluation. The relevant variants used 10,000 training, 2,000 validation, and 50,000 test examples, not standard MNIST's usual split. The [study](https://www.cs.toronto.edu/~larocheh/publications/icml-2008-denoising-autoencoders.pdf) found denoising-based initialization competitive with or better than ordinary autoencoder initialization on these tasks; the JMLR extension also reports lower classification errors and learned edge/stroke detectors. The technical fit is robustness-oriented initialization rather than PCA's variance preservation. No production OCR savings or business KPI was reported.
+**Computational complexity / scalability notes:** Each damaged version needs an encoder-decoder training pass, plus the work of creating damage. Using several independently damaged versions adds roughly that many passes. Training stacked layers separately adds more stages.
 
-**Notable vendor implementations/libraries:** Keras and PyTorch support denoising reconstruction directly. Historical research code and the cited JMLR article document stacked training; a modern tutorial may use a different architecture.
+**Optional math:** Masking costs $`O(Bd)`$ for $`B`$ examples with $`d`$ input values each. Using $`m`$ damaged views multiplies the corresponding work by roughly $`m`$.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The ICML study tested digit recognition on the Larochelle benchmark. Its MNIST variants included rotation and image or random backgrounds. It removed random input values, trained stacked repair networks, then trained a labeled classifier on their features. The relevant variants used 10,000 training, 2,000 validation, and 50,000 test examples. This is not standard MNIST's usual split.
+
+The [study](https://www.cs.toronto.edu/~larocheh/publications/icml-2008-denoising-autoencoders.pdf) found these starting weights competitive with or better than ordinary autoencoder starting weights. The JMLR extension also reports lower classification errors and units that detect edges or strokes. Unlike PCA, the aim is useful resistance to damage, not just preserving the largest variation. No production text-recognition savings or business performance measure was reported.
+
+**Notable vendor implementations/libraries:** Keras and PyTorch support this repair task. Historical code and the JMLR article describe stacked training. Modern tutorials may use different networks.
 
 **Architecture diagram description:**
 
@@ -86,41 +112,49 @@ clean x -----> corruption sampler -----> corrupted x
    +-------- reconstruction loss <----- decoder -> repaired x
 ```
 
-**Activation functions used and why:** The original basic formulation uses sigmoid encoder and decoder units for inputs in $`[0,1]`$. ReLU convolutional encoders and linear Gaussian-output decoders are later practical choices for different data ranges.
+**Activation functions used and why:** The original basic model uses sigmoid units for inputs in $`[0,1]`$, or zero to one. Outputs also stay in that range. Later models may use ReLU image filters or linear outputs with bell-shaped error assumptions for other data ranges.
 
-**Loss function(s):** $`\mathbb E_{x,\tilde x}[\ell(x,g_\theta(f_\phi(\tilde x)))]`$, with Bernoulli cross-entropy or squared reconstruction error as appropriate. It is conditional denoising, not adversarial discrimination or diffusion-chain likelihood.
+**Loss function(s):** Compare the repaired output with the clean input, averaging over examples and random damage. Use binary cross-entropy or squared error as the data require. This trains repair from an input. It is not a GAN's real/fake test or the probability calculation for a diffusion chain.
 
-**Optimization algorithm(s):** Original training uses stochastic gradient descent; layer sizes, corruption levels, pretraining duration, and supervised early stopping are selected experimentally. The paper does not prescribe a universal learning-rate schedule. A fixed initial rate followed by validation-triggered reduction is a reproducible design choice, not a claimed universal optimum.
+**Optional math:** The loss is $`\mathbb E_{x,\tilde x}[\ell(x,g_\theta(f_\phi(\tilde x)))]`$. Here $`x`$ is clean data, $`\tilde x`$ is its damaged version, and $`\mathbb E`$ means average. The encoder $`f_\phi`$ and decoder $`g_\theta`$ have learned weights $`\phi,\theta`$. The function $`\ell`$ measures rebuilding error.
 
-**Regularization techniques:** Corruption is the defining regularizer. Undercomplete codes, weight decay, and early stopping can complement it. Corruptions must preserve enough task-relevant information to make reconstruction learnable.
+**Optimization algorithm(s):** Original training uses stochastic gradient descent, which updates weights from small batches of errors. Experiments choose layer sizes, damage levels, pretraining length, and when to stop labeled training. No learning-rate schedule is universal. Starting with a fixed rate and reducing it when validation stalls is a possible reproducible choice.
 
-**Backpropagation considerations:** Gradients traverse the reconstruction network, not the discrete mask draw. Monte Carlo corruption adds gradient variance. Sigmoid saturation and a decoder that over-smooths ambiguous inputs can reduce feature utility.
+**Regularization techniques:** Deliberate damage is the main safeguard against simple copying. Small codes, penalties on large weights, and early stopping can help too. Enough useful information must survive the damage for repair to be learnable.
 
-**Parameter count / scaling behavior:** Normally the same as the corresponding clean autoencoder; the random corruption operator adds no trainable weights. Depth and convolutional channel widths, not the name DAE, determine scale.
+**Backpropagation considerations:** Error feedback passes through the repair network, not through the random mask choice. Random damage makes updates noisier. Nearly saturated sigmoid units weaken feedback. Averaging several plausible repairs into one smooth output can also hurt useful features.
 
-**Training paradigm:** Self-supervised pretraining on corrupted/clean views; supervised fine-tuning is a separate stage. If clean targets come from additional human-curated measurements, that extra supervision must also be recorded.
+**Parameter count / scaling behavior:** A DAE normally has as many weights as its clean-input counterpart. Random masking adds none. Depth and image-filter channel widths determine model size.
 
-**Hardware/parallelism considerations:** Corruption can run on-device; data-parallel workers should use independent random masks. Large images require decoder activation memory, whereas frozen-feature inference can discard the decoder.
+**Training paradigm:** Damaged/clean pairs provide self-supervision. Labeled fine-tuning comes afterward. If people supply extra clean measurements as targets, that additional supervision must also be stated.
+
+**Hardware/parallelism considerations:** Damage can be created directly on the training device. Different workers should use independent random masks. Large-image decoders need substantial training memory; feature extraction afterward can omit the decoder.
 
 ### 3.6.3 Variational autoencoders
 
-**Name:** Variational autoencoder (VAE), using a diagonal-Gaussian approximate posterior.
+**In plain English:** A VAE learns ranges of possible compact codes, rather than one fixed code per input. It can draw a code at random and decode it to create a new example.
 
-**Category & sub-category:** Unsupervised generative modeling; amortized variational inference.
+**Name:** Variational autoencoder (VAE). This version uses a bell-shaped estimate for each code coordinate, without estimated correlations between coordinates.
 
-**Originating paper/vendor/year:** Kingma and Welling, [*Auto-Encoding Variational Bayes*, arXiv 2013, ICLR 2014](https://arxiv.org/abs/1312.6114). Related stochastic-backpropagation work appeared contemporaneously; the VAE is not simply a renamed deterministic autoencoder.
+**Category & sub-category:** Unsupervised generation. It learns a shared encoder that quickly estimates plausible hidden codes for each input.
 
-**Core mechanism:** Define a prior $`p(z)`$, decoder likelihood $`p_\theta(x\mid z)`$, and encoder $`q_\phi(z\mid x)`$. Optimize a variational bound rather than directly integrating every possible latent value. The encoder amortizes inference across examples; the decoder supports generation by sampling a prior latent and then an observation.
+**Originating paper/vendor/year:** Kingma and Welling, [*Auto-Encoding Variational Bayes*, arXiv 2013, ICLR 2014](https://arxiv.org/abs/1312.6114). Related ways to train through random choices appeared around the same time. A VAE is not just a renamed fixed-code autoencoder.
 
-**Inputs/outputs and typical data types:** Images, numerical observations, or other data with a specified likelihood enter. Outputs include posterior mean/variance parameters, sampled latent codes, reconstructed distributions, and generated observations. A decoder's mean image is not the same object as a sample from its likelihood.
+**Core mechanism:** A **prior** describes possible codes before seeing an input. The encoder estimates which codes could explain a particular input. The decoder describes possible outputs for a code. Training balances rebuilding the input against keeping its codes close to the prior. It uses a manageable bound instead of checking every possible code. The same encoder handles new examples. To generate data, draw a code from the prior, then an output from the decoder.
 
-**Strengths and limitations:** Offers a principled reconstruction-versus-complexity objective and efficient approximate inference. Restrictive posteriors introduce an inference gap; factorized output likelihoods can produce blurry mean reconstructions. Latent posterior variance expresses uncertainty within the assumed model, not a Bayesian posterior over all network weights or automatically calibrated out-of-distribution uncertainty.
+**Inputs/outputs and typical data types:** Images or numerical observations enter, with an explicit rule for modeling their probabilities. Outputs include code averages and spreads, sampled codes, and distributions over rebuilt or new observations. A decoder's average image is not the same as a randomly drawn image.
 
-**Computational complexity / scalability notes:** With $`m`$ latent Monte Carlo samples, one minibatch costs an encoder pass plus approximately $`m`$ decoder passes and their gradients. Diagonal-Gaussian KL evaluation is linear in latent dimension $`r`$. Importance-sampled likelihood estimates add cost and must not be mislabeled exact likelihood.
+**Strengths and limitations:** It gives a clear way to balance rebuilding accuracy and code complexity. But simple code distributions may miss important possibilities. Treating output pixels independently can give blurry average images. Code spread only describes uncertainty within these assumptions. It does not describe uncertainty over all network weights or guarantee reliable warnings about unfamiliar data.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [AEVB experiments](https://ar5iv.labs.arxiv.org/html/1312.6114) modeled MNIST and the Frey Face dataset. A face frame -> encoder's Gaussian parameters -> reparameterized latent -> Gaussian-output decoder yields a distribution over reconstructed frames; sampling prior latents yields new frames. The study compared variational bounds and estimated marginal likelihood against alternative estimators and demonstrated learned latent manifolds. The technical advantage over a deterministic autoencoder is an explicit latent prior and tractable inference objective. The original experiment used 200 hidden units for Frey faces and 500 for MNIST, with one Monte Carlo draw per example in minibatches of 100. These are research configurations, not a deployed facial-analysis system or a public business KPI.
+**Computational complexity / scalability notes:** Each batch needs one encoder pass. Drawing more codes per input adds decoder passes and their backward work. The code-distribution penalty grows directly with code length. More elaborate probability estimates add work and remain estimates, not exact probabilities.
 
-**Notable vendor implementations/libraries:** Pyro, TensorFlow Probability, PyTorch, and Keras support VAE construction. Distribution libraries can implement the observation model and KL, but cannot determine whether those assumptions fit an application.
+**Optional math:** With $`m`$ random code draws, the batch needs about $`m`$ decoder passes. The diagonal-Gaussian KL penalty costs $`O(r)`$ per example, where $`r`$ is code length.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [AEVB experiments](https://ar5iv.labs.arxiv.org/html/1312.6114) modeled MNIST digits and Frey Face images. For a face frame, the encoder predicts bell-shaped code distributions. A random code goes to a decoder that describes possible rebuilt frames. Drawing from the prior instead creates new frames.
+
+The study compared training bounds and estimated overall data likelihood with other estimators. It also showed how learned codes organized examples. Unlike a fixed-code autoencoder, the VAE has an explicit prior and a manageable probability-based training goal. The experiment used 200 hidden units for Frey faces and 500 for MNIST. It drew one random code per example in minibatches of 100. This was research, not a deployed face-analysis system or a reported business benefit.
+
+**Notable vendor implementations/libraries:** Pyro, TensorFlow Probability, PyTorch, and Keras support VAEs. Probability libraries implement output distributions and their comparison penalties. They cannot decide whether those assumptions suit an application.
 
 **Architecture diagram description:**
 
@@ -133,41 +167,49 @@ epsilon ~ N(0,I) -> z = mu + sigma * epsilon
 prior N(0,I) ----------^       [generation bypasses encoder]
 ```
 
-**Activation functions used and why:** The original MLP uses tanh hidden layers. Sigmoid outputs parameterize Bernoulli probabilities; Gaussian decoders need suitable mean and positive-variance parameterizations. Log-variance heads are unconstrained before exponentiation.
+**Activation functions used and why:** The original dense network uses tanh, which bounds hidden values between minus one and one. Sigmoid outputs give probabilities for binary data. Bell-shaped output distributions need an average and a positive variance, which measures spread. Predicting log variance and exponentiating it ensures a positive value.
 
-**Loss function(s):** Minimize negative ELBO: $`\mathbb E_q[-\log p_\theta(x\mid z)]+\mathrm{KL}(q_\phi(z\mid x)\|p(z))`$. For diagonal Gaussians against a standard normal, the KL is analytic; only reconstruction usually needs Monte Carlo estimation.
+**Loss function(s):** The loss combines rebuilding error with a penalty for moving code distributions away from the prior. It is called the negative evidence lower bound, or negative ELBO.
 
-**Optimization algorithm(s):** The original experiments use Adagrad, selecting its global step size from 0.01, 0.02, and 0.1. Coordinatewise adaptation is the schedule mechanism reported there. Adam and warmup are common later recipes, not original AEVB requirements.
+**Optional math:** Minimize $`\mathbb E_q[-\log p_\theta(x\mid z)]+\mathrm{KL}(q_\phi(z\mid x)\|p(z))`$. Here $`x`$ is the input and $`z`$ the code. The encoder distribution is $`q_\phi`$, the decoder distribution is $`p_\theta`$, and their weights are $`\phi,\theta`$. The prior is $`p(z)`$. The first term averages rebuilding loss over encoder-drawn codes. KL measures disagreement between the code distribution and prior. For independent Gaussian coordinates and a standard normal prior, KL has a direct formula; rebuilding usually still uses random draws.
 
-**Regularization techniques:** The prior-matching KL constrains information capacity. Weight regularization and early stopping remain optional. KL annealing or free bits can combat collapse but modify the training recipe and must be disclosed.
+**Optimization algorithm(s):** The original experiments use Adagrad, which adjusts step sizes separately for each weight. They choose a global step size from 0.01, 0.02, and 0.1. Adam and gradual learning-rate warmup are later options, not original AEVB requirements.
 
-**Backpropagation considerations:** The reparameterization trick differentiates through $`z=\mu+\sigma\epsilon`$, avoiding a high-variance score-function estimator for continuous Gaussian latents. Monitor exponent overflow, posterior collapse, and decoder dominance.
+**Regularization techniques:** The KL penalty limits how much information the codes carry. Weight penalties and early stopping are optional. Gradually increasing KL pressure, or allowing some unpenalized information through "free bits," can prevent unused codes. These changes must be reported.
 
-**Parameter count / scaling behavior:** Encoder and decoder architecture determine $`p`$; mean and variance heads grow linearly with latent dimension times their input width. Training stores both networks; unconditional generation only needs the decoder and prior.
+**Backpropagation considerations:** Keep the random draw separate from the learned average and spread. This lets error feedback pass through the code calculation with less noise than an alternative probability-score estimator. Check for numerical overflow and for a decoder that ignores the code, called posterior collapse.
 
-**Training paradigm:** Unsupervised density modeling with input-derived reconstruction targets. Conditional VAEs introduce labels or other conditioning data and are not strictly label-free.
+**Optional math:** Draw $`z=\mu+\sigma\epsilon`$. Here $`\mu`$ is the encoder's average code, $`\sigma`$ its coordinate-by-coordinate spread, and $`\epsilon`$ independent standard-normal noise. This is the reparameterization trick: learn $`\mu,\sigma`$ while holding the sampled noise fixed during the backward calculation.
 
-**Hardware/parallelism considerations:** Minibatch data parallelism works naturally; independent noise draws are needed on each worker. Stable KL/log-variance arithmetic may require higher precision than the surrounding matrix multiplications.
+**Parameter count / scaling behavior:** Encoder and decoder sizes determine the weight count. Output layers for code averages and variances grow with code length times their input width. Training stores both networks. Unconditional generation needs only the decoder and prior.
+
+**Training paradigm:** The representative model learns data probabilities without external labels, using inputs as reconstruction targets. Conditional VAEs add labels or other control information, so they are not strictly label-free.
+
+**Hardware/parallelism considerations:** Different workers can train on different minibatches, with independent noise draws. KL and log-variance calculations may need more numerical precision than surrounding matrix multiplications.
 
 ### 3.6.4 Beta-VAE
 
-**Name:** Beta-VAE, with the original weighted-KL objective distinguished from its capacity-controlled follow-up.
+**In plain English:** Beta-VAE puts a tighter limit on what an image's compact code can remember. This can help separate properties such as position and shape, but may lose detail.
 
-**Category & sub-category:** Unsupervised latent-variable modeling; information-constrained and disentangled representation learning.
+**Name:** Beta-VAE. The original method weights a code penalty; a later version controls a changing information limit.
 
-**Originating paper/vendor/year:** Higgins and colleagues, [*beta-VAE: Learning Basic Visual Concepts with a Constrained Variational Framework*, ICLR 2017](https://openreview.net/forum?id=Sy2fzU9gl). [Burgess and colleagues, 2018](https://arxiv.org/abs/1804.03599), analyze capacity control and provide the concrete convolutional recipe described below.
+**Category & sub-category:** Unsupervised learning of hidden codes. It limits information to encourage separate code coordinates for different image properties.
 
-**Core mechanism:** Multiply the VAE KL penalty by $`\beta`$. Larger $`\beta`$ favors a more restricted representation, sometimes separating factors such as position, scale, and orientation at the expense of reconstruction. The follow-up instead penalizes deviation from a gradually increasing target KL capacity $`C`$. These objectives are related but not identical.
+**Originating paper/vendor/year:** Higgins and colleagues introduced [*beta-VAE: Learning Basic Visual Concepts with a Constrained Variational Framework*, ICLR 2017](https://openreview.net/forum?id=Sy2fzU9gl). [Burgess and colleagues, 2018](https://arxiv.org/abs/1804.03599), studied a changing information limit. The detailed image-filter recipe below comes from that follow-up.
 
-**Inputs/outputs and typical data types:** Images with repeated factors of variation enter; approximate latent distributions, reconstructions, and coordinate traversals leave. Ground-truth factors may be used to evaluate disentanglement without being provided to the encoder during the unsupervised experiment.
+**Core mechanism:** Start with a VAE's encoder, random code, and decoder. Increase the penalty for letting each input's code distribution differ from the prior. The multiplier is beta. More pressure sometimes separates position, size, and rotation, but harms rebuilding. The follow-up instead penalizes distance from an information target that grows during training. These are related, not identical, training goals.
 
-**Strengths and limitations:** A simple intervention on representation capacity can improve interpretability in controlled datasets. It does not guarantee that independent coordinates correspond to causal factors, particularly without suitable inductive biases. Reconstruction quality and disentanglement can conflict. Variational uncertainty remains conditional on the chosen prior, likelihood, and encoder family.
+**Inputs/outputs and typical data types:** Inputs are images with repeated, changing properties. Outputs include code distributions, rebuilt images, and images made by changing one code coordinate. Known image properties can check whether coordinates separate them, without supplying those properties during encoder training.
 
-**Computational complexity / scalability notes:** Computational order matches a VAE: encoder, sampled decoder, and analytic diagonal KL per batch. Changing $`\beta`$ adds negligible arithmetic, but selecting it across seeds and datasets can require many complete training runs. Traversal plots sample latent coordinates rather than estimate deployment accuracy.
+**Strengths and limitations:** Restricting information can make codes easier to interpret on controlled datasets. Separate coordinates do not necessarily reveal the real causes of an image. The network's built-in assumptions matter. Better separation may mean worse reconstruction. Its uncertainty still depends on the chosen prior, output distribution, and encoder.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [dSprites dataset](https://github.com/google-deepmind/dsprites-dataset) contains 737,280 generated 64-by-64 binary images with controlled shape, scale, orientation, and position. Sprite pixels -> convolutional beta-VAE -> latent-coordinate traversal -> inspection against known factors tests whether representations separate transformations. The [Burgess study](https://ar5iv.labs.arxiv.org/html/1804.03599) demonstrates the reconstruction/disentanglement trade-off and capacity-controlled recovery of factors. Its separately described ground-truth-factor bottleneck experiment is supervised analysis, not evidence that every experiment was label-free. Compared with PCA, the technical attraction is nonlinear factorization; compared with beta=1, it is explicit information restriction. This is a scientific unit test, not an industrial deployment or business KPI.
+**Computational complexity / scalability notes:** Each batch needs the same main work as a VAE: encoding, decoding sampled codes, and a code-distribution penalty. Changing beta adds little arithmetic. Choosing beta across datasets and random starting conditions can require many full runs. Images made by moving code coordinates are inspections, not deployment-accuracy measurements.
 
-**Notable vendor implementations/libraries:** Google's research disentanglement code and the DeepMind dSprites repository support evaluation; PyTorch and TensorFlow can implement both objective variants. The dataset explicitly is not a commercial Google product.
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** [dSprites](https://github.com/google-deepmind/dsprites-dataset) contains 737,280 generated 64-by-64 binary images. Shape, scale, orientation, and position are controlled. A beta-VAE encodes each image. Researchers change one code coordinate and inspect which known image property changes.
+
+The [Burgess study](https://ar5iv.labs.arxiv.org/html/1804.03599) shows the trade-off between accurate rebuilding and separate properties. It also shows recovery of properties with the changing information limit. A separate experiment directly used known factors in its bottleneck; that analysis was supervised. Compared with PCA, the appeal is separating nonlinear patterns. Compared with beta=1, it is a stronger information restriction. This was a controlled scientific test, not an industrial deployment or business performance measure.
+
+**Notable vendor implementations/libraries:** Google's research code and DeepMind's dSprites repository support these tests. PyTorch and TensorFlow can implement both loss variants. The dataset explicitly is not a commercial Google product.
 
 **Architecture diagram description:**
 
@@ -178,41 +220,49 @@ prior N(0,I) ----------^       [generation bypasses encoder]
                       KL to N(0,I) -> beta or capacity penalty
 ```
 
-**Activation functions used and why:** The 2018 recipe uses ReLU hidden layers, four convolutional layers with 32 channels and 4-by-4 kernels, followed by two 256-unit dense layers. The decoder parameterizes Bernoulli pixels; its output probabilities must be bounded.
+**Activation functions used and why:** The 2018 recipe uses ReLU to keep positive hidden values and remove negative ones. Four image-filter layers have 32 channels and 4-by-4 filters. Two dense layers then have 256 units each. The decoder gives probabilities for binary pixels, so outputs must stay between zero and one.
 
-**Loss function(s):** Original: reconstruction negative log-likelihood plus $`\beta\mathrm{KL}(q\|p)`$. Capacity variant: reconstruction negative log-likelihood plus $`\gamma|\mathrm{KL}(q\|p)-C|`$. For $`\beta\ne1`$, the objective is not the ordinary VAE ELBO.
+**Loss function(s):** Both variants reward successful rebuilding. The original adds a weighted penalty for code distributions differing from the prior. The follow-up instead rewards staying near a chosen amount of code information.
 
-**Optimization algorithm(s):** The checked 2018 appendix uses Adam at $`5\times10^{-4}`$. For dSprites, the capacity target increases linearly from zero to 25 nats over 100,000 iterations; that is an information-capacity schedule, not learning-rate decay. These settings are not attributed to every original 2017 run.
+**Optional math:** The original extra term is $`\beta\mathrm{KL}(q\|p)`$; the follow-up uses $`\gamma|\mathrm{KL}(q\|p)-C|`$. Here $`q`$ is the encoder's code distribution, $`p`$ the prior, and KL their difference measure. $`\beta`$ and $`\gamma`$ set penalty strength; $`C`$ is the target information amount. With $`\beta\ne1`$, this is not the ordinary VAE evidence lower bound.
 
-**Regularization techniques:** KL weighting or capacity control is central. A factorized prior and diagonal approximate posterior impose additional structure. Selecting models using known factors introduces evaluation supervision even when the reconstruction stage does not.
+**Optimization algorithm(s):** The checked 2018 appendix uses Adam at $`5\times10^{-4}`$ (0.0005). For dSprites, the information target grows evenly from zero to 25 nats over 100,000 iterations. A nat is an information unit based on natural logarithms. This changes allowed information, not the learning rate. These are not claimed settings for every 2017 run.
 
-**Backpropagation considerations:** Gaussian reparameterization applies. Excessive KL pressure can silence useful latents; monitor per-coordinate KL and reconstruction, not just total loss. A capacity penalty changes gradient direction when the target is crossed.
+**Regularization techniques:** The information penalty is the central restriction. Treating prior coordinates and estimated code coordinates independently adds further assumptions. Choosing a model using known image properties adds supervision to model selection, even if reconstruction training uses no labels.
 
-**Parameter count / scaling behavior:** The follow-up uses ten Gaussian latents for dSprites; its CelebA experiment uses a different latent size. Beta changes no weights by itself. Convolutional resolution and channel choices determine the actual parameter count.
+**Backpropagation considerations:** As in a VAE, random codes are calculated from learned averages and spreads. Too much penalty pressure can make useful coordinates inactive. Track each coordinate's penalty and rebuilding error. Crossing the information target reverses the direction of the capacity penalty's feedback.
 
-**Training paradigm:** Primarily image-only self-supervised reconstruction, with an optional information-capacity curriculum. Ground-truth-factor interventions and downstream classifiers are distinct stages.
+**Parameter count / scaling behavior:** The follow-up uses ten Gaussian code coordinates for dSprites. Its CelebA experiment uses a different code size. Changing beta alone adds no weights. Image resolution and filter channels determine the actual network size.
 
-**Hardware/parallelism considerations:** Moderate-resolution experiments fit on ordinary GPUs. Data-parallel training must aggregate KL consistently; changing a sum to a mean changes the effective beta and invalidates recipe comparisons.
+**Training paradigm:** Mainly image-only self-supervised rebuilding, sometimes with a gradually changing information limit. Experiments using known factors, and later labeled classifiers, are separate stages.
+
+**Hardware/parallelism considerations:** Moderate-resolution experiments fit on ordinary GPUs. Workers must combine KL penalties consistently. Replacing a sum with an average changes beta's effective strength, so the recipes no longer match.
 
 ### 3.6.5 VQ-VAE
 
-**Name:** Vector-quantized variational autoencoder (VQ-VAE), specifically the original single-level model.
+**In plain English:** VQ-VAE describes an input using entries from a learned code list. A separate model can learn to choose new code sequences, which the decoder turns into new images or sounds.
 
-**Category & sub-category:** Unsupervised generative modeling; discrete latent representations and learned tokenization.
+**Name:** Vector-quantized variational autoencoder (VQ-VAE). This entry covers the original single-level model.
 
-**Originating paper/vendor/year:** Van den Oord, Vinyals, and Kavukcuoglu, DeepMind, [*Neural Discrete Representation Learning*, NeurIPS 2017](https://arxiv.org/abs/1711.00937). Hierarchical VQ-VAE-2 is a later extension, not the architecture assumed here.
+**Category & sub-category:** Unsupervised generation and discrete coding. It turns inputs into selections from a learned list, called a codebook.
 
-**Core mechanism:** An encoder emits continuous vectors. Each is replaced by its nearest learned codebook vector; the decoder reconstructs from these discrete selections. A separately trained autoregressive prior models code indices for unconditional generation. Without this prior, the learned tokenizer is principally a reconstruction model, not a complete sampler of realistic code sequences.
+**Originating paper/vendor/year:** Van den Oord, Vinyals, and Kavukcuoglu, DeepMind, [*Neural Discrete Representation Learning*, NeurIPS 2017](https://arxiv.org/abs/1711.00937). The later VQ-VAE-2 uses several code levels. It is not the model described here.
 
-**Inputs/outputs and typical data types:** Images, speech, or video enter. Outputs include discrete index grids/sequences, reconstructed observations, and samples generated through the learned prior. Codebook entries are vectors, not intrinsically interpretable phonemes or object labels.
+**Core mechanism:** The encoder first outputs number vectors. Replace each vector with the nearest entry in the codebook. The decoder rebuilds the input from these choices. A separate model then learns which code choices follow others. This is an autoregressive prior: it generates codes in order. Without it, the tokenizer mainly rebuilds inputs; it is not a complete generator of realistic code sequences.
 
-**Strengths and limitations:** Makes representation learning compatible with discrete sequence models and compresses the prior's modeling problem. Dead codes, skewed code usage, and straight-through estimator bias require attention. Quantization error and codebook perplexity are diagnostics, not confidence intervals; a categorical prior's uncertainty is only as calibrated as its learned distribution.
+**Inputs/outputs and typical data types:** Images, speech, or video enter. Outputs include grids or sequences of code numbers, rebuilt inputs, and new samples from the prior. Codebook entries are learned vectors. They are not automatically named speech sounds or objects.
 
-**Computational complexity / scalability notes:** For $`N_z`$ latent positions, $`K`$ code vectors of width $`d_z`$, exhaustive nearest-code lookup costs $`O(BN_zKd_z)`$, in addition to encoder-decoder work. Codebook storage is $`O(Kd_z)`$. A PixelCNN prior samples positions sequentially but operates on a smaller grid than pixels.
+**Strengths and limitations:** Short discrete codes make the separate sequence model's job smaller. Some codes may never get used, while a few dominate. Training also uses approximate feedback through code selection. Code-matching error and codebook perplexity, which summarizes how broadly codes are used, are diagnostics, not confidence intervals. Prior probabilities need calibration checks.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [original study](https://ar5iv.labs.arxiv.org/html/1711.00937) compresses 128-by-128 ImageNet images to a 32-by-32 index grid with 512 code choices. Image -> encoder -> nearest-code indices -> decoder produces recognizable reconstructions; a PixelCNN trained on those indices generates new image codes and decoded images. Modeling the smaller grid is the authors' rationale for allocating prior capacity to broader structure instead of pixel-level detail. The reported demonstrations establish reconstruction and sampling capability, not a standardized commercial compression saving. The nominal nine bits per index excludes model storage, prior coding overhead, and fidelity differences. The paper also demonstrates VCTK speech representations and speaker conversion; no public business KPI accompanies these research results.
+**Computational complexity / scalability notes:** Checking every codebook entry takes more work as either the codebook or input grid grows. This adds to encoder-decoder work. A PixelCNN prior still generates positions in order, but the code grid is smaller than the pixel grid.
 
-**Notable vendor implementations/libraries:** DeepMind's Sonnet research examples and common PyTorch/JAX implementations support vector quantization. VQ tokenizers in later systems may use different objectives, codebook updates, or multiple levels.
+**Optional math:** Full lookup costs $`O(BN_zKd_z)`$. Here $`B`$ is batch size, $`N_z`$ positions per input, $`K`$ codebook entries, and $`d_z`$ numbers per entry. Codebook storage is $`O(Kd_z)`$.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [original study](https://ar5iv.labs.arxiv.org/html/1711.00937) turns 128-by-128 ImageNet images into a 32-by-32 grid with 512 code choices. The encoder selects nearby codes; the decoder produces recognizable rebuilt images. A PixelCNN trained on the grids then creates new codes and images.
+
+The authors use the smaller grid to focus the prior on broader structure rather than pixel detail. These demonstrations show rebuilding and generation, not standardized commercial compression savings. The nominal nine bits per index excludes model storage, prior coding overhead, and differences in fidelity. The paper also demonstrates VCTK speech codes and speaker conversion. No public business performance measure accompanies these research results.
+
+**Notable vendor implementations/libraries:** DeepMind's Sonnet examples and common PyTorch/JAX implementations support codebook lookup. Later tokenizers may change losses, codebook updates, or the number of code levels.
 
 **Architecture diagram description:**
 
@@ -223,53 +273,63 @@ encoded training indices -> PixelCNN prior
 prior samples -----------> codebook lookup -> decoder -> generated image
 ```
 
-**Activation functions used and why:** Convolutional/residual networks use ReLU hidden nonlinearities; decoder outputs match the reconstruction likelihood. Nearest-neighbor assignment is a discrete operation, not an activation with an ordinary useful derivative.
+**Activation functions used and why:** The image-filter networks use ReLU, which keeps positive values, and shortcut connections between layers. Decoder outputs must match the chosen data-probability model. Choosing the nearest code is a discrete selection, not a smooth activation that ordinary backpropagation can follow.
 
-**Loss function(s):** Minimize $`-\log p_\theta(x\mid z_q)+\|\operatorname{sg}(z_e)-e\|^2+\beta\|z_e-\operatorname{sg}(e)\|^2`$. The terms train reconstruction, codebook placement, and encoder commitment. The index prior has its own categorical negative log-likelihood.
+**Loss function(s):** Three terms reward accurate rebuilding, move codebook entries toward encoder outputs, and keep encoder outputs near chosen entries. The separate prior learns to predict code numbers with its own probability loss.
 
-**Optimization algorithm(s):** The paper's image comparison uses Adam at $`2\times10^{-4}`$, batch 128, evaluated after 250,000 steps; no mandatory family-wide decay schedule follows. An EMA codebook update is an alternative to gradient-updated embeddings and must be identified as such.
+**Optional math:** Minimize $`-\log p_\theta(x\mid z_q)+\|\operatorname{sg}(z_e)-e\|^2+\beta\|z_e-\operatorname{sg}(e)\|^2`$. Here $`x`$ is the input, $`z_e`$ the encoder output, $`e`$ the chosen entry, and $`z_q`$ the code sent to the decoder. The decoder distribution $`p_\theta`$ has weights $`\theta`$. Squared lengths measure mismatch. $`\beta`$ weights the last term, and $`\operatorname{sg}`$ means "stop error feedback here."
 
-**Regularization techniques:** Commitment prevents encoder outputs drifting away from codebook scale. The finite codebook constrains capacity. Usage monitoring and carefully justified code resets are implementation remedies, not proof against all representation collapse.
+**Optimization algorithm(s):** The image comparison uses Adam at $`2\times10^{-4}`$ (0.0002), batch 128, and evaluation after 250,000 steps. No rate-decay schedule is required for the whole family. Updating codes with an exponential moving average, or EMA, is an alternative. EMA blends recent values with older ones rather than using gradient updates.
 
-**Backpropagation considerations:** A straight-through estimator copies decoder gradients to encoder outputs across quantization. It is biased, not an exact derivative of argmin. Stop-gradient separates codebook and commitment updates; the prior is trained on discrete targets afterward.
+**Regularization techniques:** The commitment term keeps encoder outputs close to codebook values. The finite list limits information capacity. Monitoring unused entries and carefully resetting codes may help. These fixes do not guarantee that codes avoid collapsing to the same few choices.
 
-**Parameter count / scaling behavior:** Total parameters include encoder, decoder, $`Kd_z`$ embeddings, and, when included, the prior. The prior can dominate storage even though the latent grid is compact.
+**Backpropagation considerations:** A straight-through estimator copies decoder feedback across the discrete lookup to the encoder. This is a biased approximation, not the exact derivative of choosing the nearest entry. Stopping feedback in selected loss terms separates codebook updates from encoder commitment. The prior is trained afterward on fixed code targets.
 
-**Training paradigm:** Input-derived reconstruction followed by unsupervised code-sequence modeling. Speaker-ID conditioning in the voice-conversion experiment adds explicit supervision and should not be confused with entirely label-free speech generation.
+**Parameter count / scaling behavior:** Count the encoder, decoder, codebook, and any prior separately. The prior may take most storage despite the compact grid. **Optional math:** The codebook alone has $`Kd_z`$ values, for $`K`$ entries of width $`d_z`$.
 
-**Hardware/parallelism considerations:** Codebook distance matrices can be GPU-memory intensive. Distributed EMA codebooks require synchronized counts and sums; otherwise replicas learn incompatible vocabularies. Prior sampling latency remains a separate bottleneck.
+**Training paradigm:** Input-based reconstruction comes first, followed by unsupervised code-sequence learning. The voice-conversion experiment also uses speaker identity as a condition. That is explicit supervision, not entirely label-free speech generation.
+
+**Hardware/parallelism considerations:** Comparing many vectors with all codes can use substantial GPU memory. Workers using EMA codebooks must share counts and sums, or their code lists diverge. Waiting for the prior to generate codes remains a separate speed limit.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| Autoencoder | Numerical vectors, images, document frequencies | Nonlinear compact representation | Reconstruction need not preserve task semantics | Reuters news retrieval research |
-| Denoising autoencoder | Corruptible images and sensor-like vectors | Learns dependencies by repairing corruption | Robustness depends on the chosen corruption | MNIST-variation recognition study |
-| VAE | Data with an explicit observation likelihood | Amortized probabilistic latent inference | Approximation gap and posterior collapse | Frey Face and MNIST modeling |
-| Beta-VAE | Images with repeatable generative factors | Explicit information-capacity control | Disentanglement is not guaranteed | dSprites factor-recovery experiments |
-| VQ-VAE | Images, audio, video requiring discrete tokens | Discrete compression with a learned prior | Quantization bias and codebook collapse | ImageNet tokenization and VCTK research |
+| Autoencoder | Number lists, images, word frequencies | Learns a small code for complex patterns | Rebuilding can preserve the wrong details | Research on searching Reuters news |
+| Denoising autoencoder | Images or sensor-like values that can be damaged | Learns relationships by repairing inputs | Practice with one damage type may not transfer | Recognition tests on MNIST variants |
+| VAE | Data with a chosen probability model | Quickly estimates possible codes and generates samples | Code estimates can miss possibilities or go unused | Tests on Frey Face and MNIST |
+| Beta-VAE | Images with repeatedly changing properties | Controls how much codes can remember | Separate properties are not guaranteed | Tests of known dSprites properties |
+| VQ-VAE | Images, sound, or video needing discrete codes | Learns codes and a rule for generating them | Approximate training and unused codes | ImageNet coding and VCTK speech research |
 
 ## 3.7 Adversarial generation
 
-Adversarial training learns through a discriminator rather than requiring a tractable normalized data likelihood. It can produce sharp samples quickly at inference, but introduces a moving optimization target. A discriminator score is neither a general-purpose uncertainty estimate nor a reliable quality guarantee outside its training distribution.
+A GAN learns through feedback between a creator and a checker. The **generator** creates examples. The **discriminator** checks how generated examples differ from training examples. The generator learns from that checker's feedback. It is not simply a pair of classifiers: one network makes data.
+
+This approach can create sharp-looking samples quickly without calculating a complete probability model for the data. But both networks keep changing, making training difficult. A checker's score does not guarantee quality or reliable uncertainty, especially on unfamiliar data.
 
 ### 3.7.1 Generative adversarial networks
 
-**Name:** Generative adversarial network (GAN), generic framework instantiated by the original feed-forward image models.
+**In plain English:** A GAN learns to make examples that a trained checker has trouble distinguishing from real ones. Once trained, its generator can create an image in one forward pass.
 
-**Category & sub-category:** Unsupervised generative modeling; adversarial distribution matching.
+**Name:** Generative adversarial network (GAN). This entry describes the general framework through the original image models.
 
-**Originating paper/vendor/year:** Goodfellow and colleagues, [*Generative Adversarial Nets*, NeurIPS 2014](https://arxiv.org/abs/1406.2661). Subsequent convolutional, Wasserstein, conditional, and style-based formulations change the architecture or objective.
+**Category & sub-category:** Unsupervised generation. Competing training goals help generated data resemble the training data's overall patterns.
 
-**Core mechanism:** A generator $`G(z)`$ transforms noise into synthetic observations. A discriminator $`D(x)`$ learns to distinguish training observations from generated ones. Generator updates try to make generated observations harder to distinguish. The familiar equilibrium result assumes idealized optimization and sufficient model capacity; it does not guarantee convergence of practical simultaneous neural updates.
+**Originating paper/vendor/year:** Goodfellow and colleagues, [*Generative Adversarial Nets*, NeurIPS 2014](https://arxiv.org/abs/1406.2661). Later convolutional, Wasserstein, conditional, and style-based GANs change the network design or training goal.
 
-**Inputs/outputs and typical data types:** Real images or other observations train the system; random latent vectors generate samples. Conditional variants additionally consume labels, text, or another image. Standard GANs provide samples but generally no tractable normalized likelihood or native inverse encoder.
+**Core mechanism:** Start the generator with random numbers and let it make an example. Train the discriminator to distinguish generated examples from real training examples. Then update the generator so its outputs are harder to distinguish. Repeat. A mathematical balance point exists under ideal training and sufficient capacity. That does not guarantee that real networks reach it.
 
-**Strengths and limitations:** Fast feed-forward synthesis and flexible differentiable generators are attractive when sampling matters more than likelihood. Mode collapse can omit substantial regions of the data distribution. A realistic-looking sample can still be memorized, biased, or structurally wrong. Latent randomness expresses diversity, not calibrated epistemic uncertainty.
+**Inputs/outputs and typical data types:** Real images or other observations train the system. Random number vectors produce new samples. Conditional versions also take labels, text, or another image. A standard GAN usually lacks both an easy exact data-probability calculation and an encoder that reverses generation.
 
-**Computational complexity / scalability notes:** With $`k_D`$ discriminator updates per generator update, cost includes $`k_D`$ discriminator training passes plus generator training through the discriminator. Generator sampling requires one forward pass, unlike iterative diffusion. Training state includes both networks, their activations, and both optimizers.
+**Strengths and limitations:** Generation is fast, and many network designs can serve as generators. But **mode collapse** can make outputs cover only a small part of the training data's variety. Realistic images may still be copied, biased, or structurally wrong. Different random inputs create variety, not a trustworthy measure of what the model does not know.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [2014 paper](https://ar5iv.labs.arxiv.org/html/1406.2661) trained image generators on MNIST, the Toronto Face Database, and CIFAR-10. Real image batches and noise -> alternating discriminator/generator learning -> generated images -> sample inspection and distributional evaluation demonstrate learning without predefined pixel labels. The technical attraction over latent models with difficult inference is direct differentiable sampling without a training-time latent-inference procedure. The paper reports samples and Parzen-window likelihood estimates; those estimates are not exact GAN likelihoods and are not reused here as modern benchmark rankings. No verified commercial deployment or business KPI follows from this foundational experiment.
+**Computational complexity / scalability notes:** Training pays for both networks, including their intermediate results and optimizer records. More discriminator updates mean more work. A generator update also sends feedback through the discriminator. Sampling afterward needs one generator pass, unlike diffusion's repeated passes.
 
-**Notable vendor implementations/libraries:** The authors' [research implementation](https://github.com/goodfeli/adversarial) documents the original system. PyTorch and TensorFlow support adversarial training, while research libraries provide distinct GAN variants; their results should not be attributed to generic GANs without naming the variant.
+**Optional math:** If $`k_D`$ is the number of discriminator updates per generator update, each round includes $`k_D`$ discriminator training passes, plus generator training through the discriminator.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [2014 paper](https://ar5iv.labs.arxiv.org/html/1406.2661) trained on MNIST, the Toronto Face Database, and CIFAR-10. It alternated checker and generator updates using real-image batches and random inputs. Researchers then inspected generated samples and compared data distributions. No predefined pixel-class labels were needed.
+
+The method directly trains a sampler without first solving for a hidden code for each training image. This avoids a difficult step in some hidden-variable models. The paper's Parzen-window likelihood estimates are approximate measurements built around samples, not exact GAN likelihoods. They are not presented here as modern rankings. The experiment establishes neither commercial deployment nor a business performance measure.
+
+**Notable vendor implementations/libraries:** The authors' [research implementation](https://github.com/goodfeli/adversarial) documents the original system. PyTorch and TensorFlow support GAN training. Libraries also supply later variants, whose results must retain their specific model names.
 
 **Architecture diagram description:**
 
@@ -280,41 +340,49 @@ training real image --------------------+
 generator update: differentiate through D into G, without updating D
 ```
 
-**Activation functions used and why:** The original experiments used rectifier and sigmoid units in the generator and maxout units in the discriminator. The binary discriminator probability is produced by a sigmoid or equivalent stable logistic-loss implementation. Other activations belong to specific later architectures.
+**Activation functions used and why:** The original generator uses rectifiers, which remove negative values, and sigmoids, which bound values. The discriminator uses maxout units, which choose the largest of several learned values. A sigmoid or equivalent stable loss calculation gives its real/fake probability. Later GANs may use other activations.
 
-**Loss function(s):** Original game: $`\min_G\max_D \mathbb E_x\log D(x)+\mathbb E_z\log(1-D(G(z)))`$. The paper also motivates the non-saturating generator loss $`-\mathbb E_z\log D(G(z))`$, which improves early gradient signal without being the identical minimax generator update.
+**Loss function(s):** The discriminator is rewarded for telling real from generated examples. The generator is rewarded for making that harder. The paper also proposes a generator loss that gives stronger early feedback when the checker easily wins.
 
-**Optimization algorithm(s):** Alternating minibatch stochastic gradient updates; the original algorithm used one discriminator step per generator step. Step sizes and their decay are implementation choices, not a universal GAN schedule. Adam is common in later GANs but is not necessary to define the framework.
+**Optional math:** The original game is $`\min_G\max_D \mathbb E_x\log D(x)+\mathbb E_z\log(1-D(G(z)))`$. Here $`G`$ generates from random input $`z`$, $`D`$ estimates "real," $`x`$ is real data, and $`\mathbb E`$ means average. The discriminator maximizes this score while the generator minimizes it. The alternative, non-saturating generator loss is $`-\mathbb E_z\log D(G(z))`$. It strengthens early feedback but is not the identical generator update.
 
-**Regularization techniques:** The original discriminator uses dropout. Weight penalties, spectral normalization, gradient penalties, and data augmentation are distinct later choices; a Wasserstein gradient penalty should not be silently attached to the original logistic objective.
+**Optimization algorithm(s):** The original algorithm alternates small-batch gradient updates, with one discriminator step per generator step. Learning rates and their decay are implementation choices, not a universal GAN schedule. Later GANs often use Adam, but GANs do not require it.
 
-**Backpropagation considerations:** A discriminator that becomes too confident can starve the minimax generator of gradients. Non-saturating loss helps but does not solve all rotational game dynamics. Freeze discriminator parameter updates, not the computation graph connecting its input to the generator.
+**Regularization techniques:** The original discriminator uses dropout, which temporarily removes selected units during training. Later options constrain weights, limit how strongly layers amplify signals, penalize gradients, or modify training images. A Wasserstein gradient penalty belongs to a different recipe; do not silently add it to the original loss.
 
-**Parameter count / scaling behavior:** $`p=p_G+p_D`$ during training; generation needs $`p_G`$. Greater discriminator capacity can improve feedback or overfit, so simply balancing parameter counts is not a stability theorem.
+**Backpropagation considerations:** An overly confident checker can leave the original generator loss with almost no useful feedback. The non-saturating loss helps, but updates can still circle rather than settle. During generator updates, hold discriminator weights fixed while keeping the feedback path through its calculations.
 
-**Training paradigm:** Real-versus-generated labels are constructed by the training procedure, not externally supplied semantic classes. A conditional GAN with class labels or captions adds supervised information.
+**Parameter count / scaling behavior:** Training stores generator and discriminator weights; generation stores only the generator. A larger checker may provide better feedback or simply memorize training data. Equal weight counts do not guarantee stability.
 
-**Hardware/parallelism considerations:** GPUs accelerate both networks. Distributed training must synchronize the alternating updates and preserve consistent normalization statistics; generator-only inference is substantially simpler than the full training system.
+**Optional math:** Training count is $`p=p_G+p_D`$, where $`p_G`$ and $`p_D`$ count generator and discriminator weights. Sampling requires $`p_G`$.
+
+**Training paradigm:** The training process supplies real/generated labels itself. These are not externally supplied object categories. A conditional GAN adds supervision when it uses class labels or captions.
+
+**Hardware/parallelism considerations:** GPUs speed up both networks. Multiple workers must coordinate alternating updates and normalization statistics, which rescale intermediate values. Running only the trained generator is much simpler than training both networks.
 
 ### 3.7.2 DCGAN
 
-**Name:** Deep convolutional generative adversarial network (DCGAN).
+**In plain English:** DCGAN uses learned image filters in both a GAN's creator and checker. This makes it a practical starting point for generating moderate-sized images.
 
-**Category & sub-category:** Unsupervised adversarial image generation; convolutional representation learning.
+**Name:** Deep convolutional generative adversarial network, usually shortened to DCGAN.
 
-**Originating paper/vendor/year:** Radford, Metz, and Chintala, [*Unsupervised Representation Learning with Deep Convolutional Generative Adversarial Networks*, arXiv 2015, ICLR 2016](https://arxiv.org/abs/1511.06434).
+**Category & sub-category:** Unsupervised GAN image generation. It also learns image-filter features that can be reused for recognition.
 
-**Core mechanism:** DCGAN constrains a GAN to an empirically effective convolutional design: learned strided downsampling in the discriminator, learned fractional-stride/transposed-convolution upsampling in the generator, and carefully placed batch normalization. It is an architecture-and-training recipe rather than a new likelihood. Discriminator features can subsequently support a supervised classifier.
+**Originating paper/vendor/year:** Radford, Metz, and Chintala described it in [*Unsupervised Representation Learning with Deep Convolutional Generative Adversarial Networks*, arXiv 2015, ICLR 2016](https://arxiv.org/abs/1511.06434).
 
-**Inputs/outputs and typical data types:** Training uses normalized natural images; noise vectors produce images. The original illustrated generator maps a 100-dimensional latent to a 64-by-64 RGB image. Intermediate discriminator activations are another output when used as frozen representations.
+**Core mechanism:** The discriminator shrinks image grids using learned filters that move several positions at a time. The generator enlarges grids using learned transposed-convolution filters. Carefully placed batch normalization rescales values using batch statistics. This is a tested design and training recipe, not a new data-likelihood formula. Afterward, a labeled classifier can use the checker's learned features.
 
-**Strengths and limitations:** Provides a reproducible starting point for convolutional GANs and learns spatial feature hierarchies. Transposed convolutions can create uneven-overlap artifacts; batch normalization couples examples. Stable behavior on the published datasets is not a guarantee against collapse on smaller or more diverse datasets. Neither discriminator score nor interpolation smoothness establishes uncertainty calibration.
+**Inputs/outputs and typical data types:** Training uses natural images scaled to a suitable numeric range. The illustrated generator turns a 100-dimensional random code into a 64-by-64 RGB image. The discriminator's intermediate features can also be kept fixed and reused.
 
-**Computational complexity / scalability notes:** Each layer's cost depends on spatial resolution, kernel, and channel products. Resolution growth increases activation memory even if weights are reused. The adversarial loop costs both generator and discriminator passes; extracting a representation after training needs only the discriminator backbone.
+**Strengths and limitations:** DCGAN learns small-to-large image patterns with a repeatable design. Enlarging grids with overlapping filters can create uneven artifacts. Batch normalization makes each example depend partly on its batchmates. Published stability does not guarantee diverse outputs on every dataset. Smooth changes between generated images, or high checker scores, do not establish calibrated uncertainty.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [DCGAN study](https://ar5iv.labs.arxiv.org/html/1511.06434) trained on the LSUN bedrooms collection, containing a little over three million training examples. Bedroom images scaled to $`[-1,1]`$ -> convolutional discriminator/generator training -> 64-by-64 synthetic rooms -> visual and representation evaluation formed the experiment. The authors demonstrated plausible room samples and investigated memorization rather than declaring photorealistic images alone sufficient evidence. Convolutional weight sharing is the technical advantage over a similarly sized dense GAN for spatial images. Their separate transfer experiments evaluate frozen features using labeled classifiers; those are not labels used by the bedroom generator. No hotel-design deployment or measured business saving was established.
+**Computational complexity / scalability notes:** Layer work grows with grid size, filter size, and channel counts. Larger images also need more intermediate memory, even when filters reuse the same weights. Training evaluates both networks. Extracting learned features afterward needs only the discriminator's feature layers.
 
-**Notable vendor implementations/libraries:** The authors' [DCGAN Torch code](https://github.com/soumith/dcgan.torch) and the [PyTorch DCGAN tutorial](https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html) provide implementations. Tutorial datasets, channel widths, and training budgets need not reproduce the paper.
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [DCGAN study](https://ar5iv.labs.arxiv.org/html/1511.06434) used LSUN bedrooms, with a little over three million training examples. It scaled pixels to $`[-1,1]`$, meaning minus one to one. GAN training then produced 64-by-64 synthetic rooms for visual and feature tests.
+
+The authors showed plausible rooms and checked memorization; realistic appearance alone was not treated as enough evidence. Reusing filters across an image is the advantage over a similarly sized fully connected GAN. Separate transfer tests trained labeled classifiers on frozen features. Those labels did not train the bedroom generator. No hotel-design deployment or measured business saving was established.
+
+**Notable vendor implementations/libraries:** The authors' [DCGAN Torch code](https://github.com/soumith/dcgan.torch) and [PyTorch tutorial](https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html) provide implementations. Tutorials can change datasets, channel widths, and training budgets, so they need not reproduce the paper.
 
 **Architecture diagram description:**
 
@@ -325,46 +393,52 @@ real/fake RGB -> strided conv + LeakyReLU
              -> conv + BN + LeakyReLU -> binary discriminator
 ```
 
-**Activation functions used and why:** ReLU in the generator encourages usable gradients; tanh bounds generated pixels to the training range. Discriminator LeakyReLU retains a negative-side gradient; the paper uses slope 0.2. The binary output uses a logistic probability.
+**Activation functions used and why:** Generator ReLU keeps positive signals; tanh bounds final pixels to the training range. The discriminator's LeakyReLU also passes some negative-side feedback, with slope 0.2 in the paper. A logistic output supplies the real/fake probability.
 
-**Loss function(s):** Adversarial real/fake cross-entropy with a generator objective that encourages generated images to receive the real label. This is not a reconstruction loss; there is no target image paired with each noise vector.
+**Loss function(s):** Real/fake cross-entropy trains the checker to distinguish images. The generator learns to make its images receive the real label. There is no target image paired with each random input, so this is not a reconstruction loss.
 
-**Optimization algorithm(s):** The paper uses Adam at 0.0002 with $`\beta_1=0.5`$, minibatch 128, rather than Adam's usual higher first-moment setting. No universal learning-rate decay is part of the architectural definition; this reported rate must not be generalized to every resolution.
+**Optimization algorithm(s):** The paper uses Adam at 0.0002 and minibatch 128. There is no universal rate-decay rule, and this rate need not suit every resolution.
 
-**Regularization techniques:** Batch normalization excludes the generator output and discriminator input, where the paper found it destabilizing. Normal weight initialization with standard deviation 0.02 and the constrained architecture are important recipe components, although initialization is not itself a statistical regularizer.
+**Technical detail (optional):** Its first-moment setting is $`\beta_1=0.5`$. This controls smoothing of recent update directions and is lower than Adam's usual value.
 
-**Backpropagation considerations:** Monitor discriminator domination and gradient oscillation. Batch statistics can leak real/fake batch composition; changing batch construction changes the game. Replacing transposed convolution with resize-convolution changes the architecture and artifacts.
+**Regularization techniques:** The paper leaves batch normalization out of the generator output and discriminator input because it destabilized training there. It starts weights with a bell-shaped distribution of standard deviation 0.02. That controls their initial spread. Starting weights and design restrictions matter, but initialization is not itself statistical regularization.
 
-**Parameter count / scaling behavior:** Channel multipliers determine count; the 100-dimensional latent does not specify total parameters. Generator and discriminator both contribute to training storage, but only generator weights are needed for sampling.
+**Backpropagation considerations:** Watch for a checker that wins too easily or updates that swing back and forth. Batch statistics can reveal whether a batch contains real or generated images. Changing batch construction therefore changes training. Replacing transposed filters with resizing followed by filters changes the design and its artifacts.
 
-**Training paradigm:** Image-only adversarial learning in the representative model. A downstream linear SVM introduces labeled supervision at evaluation, and a class-conditioned DCGAN is a supervised conditional variant.
+**Parameter count / scaling behavior:** Channel widths determine much of the weight count. A 100-dimensional code does not specify total model size. Training stores both networks; sampling needs only generator weights.
 
-**Hardware/parallelism considerations:** Modest-resolution DCGANs fit on a single GPU. Large batches improve batch-statistic estimates but cost memory; distributed batch normalization choices can materially change reproduction results.
+**Training paradigm:** The representative GAN learns from images alone. A later linear support vector machine uses labels to classify fixed features. A DCGAN that takes class labels during generation is a supervised conditional variant.
+
+**Hardware/parallelism considerations:** Moderate-resolution models fit on one GPU. Larger batches improve estimates of batch statistics but use more memory. Whether workers share normalization statistics can substantially change reproduced results.
 
 ### 3.7.3 StyleGAN family
 
-**Name:** StyleGAN family: StyleGAN, StyleGAN2, StyleGAN2-ADA, and StyleGAN3, with version boundaries retained.
+**In plain English:** StyleGAN creates images using controls that affect details at different sizes. Later versions change how those controls work, reduce artifacts, or help training with limited data.
 
-**Category & sub-category:** Adversarial image generation; style-controlled synthesis and alias-aware generators.
+**Name:** StyleGAN family. StyleGAN, StyleGAN2, StyleGAN2-ADA, and StyleGAN3 are distinct versions, not interchangeable names.
 
-**Originating paper/vendor/year:** NVIDIA researchers Karras and colleagues: [StyleGAN, arXiv 2018/CVPR 2019](https://arxiv.org/abs/1812.04948); [StyleGAN2, arXiv 2019/CVPR 2020](https://arxiv.org/abs/1912.04958); [adaptive discriminator augmentation, NeurIPS 2020](https://arxiv.org/abs/2006.06676); [StyleGAN3, NeurIPS 2021](https://arxiv.org/abs/2106.12423).
+**Category & sub-category:** GAN image generation with style controls. Later versions also address artifacts caused by sampling image signals on a grid.
 
-**Core mechanism:** A mapping network converts noise $`z`$ into styles $`w`$ that control synthesis at different scales.
+**Originating paper/vendor/year:** Karras and colleagues at NVIDIA developed [StyleGAN, arXiv 2018/CVPR 2019](https://arxiv.org/abs/1812.04948), [StyleGAN2, arXiv 2019/CVPR 2020](https://arxiv.org/abs/1912.04958), [adaptive discriminator augmentation, NeurIPS 2020](https://arxiv.org/abs/2006.06676), and [StyleGAN3, NeurIPS 2021](https://arxiv.org/abs/2106.12423).
 
-- Original StyleGAN uses adaptive instance normalization, injected noise, and progressive growing.
-- StyleGAN2 replaces problematic normalization with weight modulation/demodulation, changes generator structure, and introduces path-length regularization.
-- StyleGAN2-ADA adjusts discriminator augmentation to combat limited-data overfitting; it is not a different semantic conditioning signal.
-- StyleGAN3 redesigns signal processing to reduce texture sticking and aliasing. StyleGAN3-T targets translation equivariance; StyleGAN3-R additionally targets rotation equivariance. These are not interchangeable claims about every version.
+**Core mechanism:** A mapping network turns random input into style controls. Different generator layers use them to affect image structure at different sizes.
 
-**Inputs/outputs and typical data types:** Noise produces images; style mixing, latent inversion, or conditional variants provide additional controls. An inversion code is an optimization result, not necessarily the unique true cause of an input image.
+- Original StyleGAN uses adaptive instance normalization, or AdaIN, to adjust feature averages and spreads. It adds noise and grows the network progressively.
+- StyleGAN2 instead adjusts and rescales filter weights, called modulation/demodulation. It changes the generator and adds a penalty for uneven responses to style changes.
+- StyleGAN2-ADA changes how strongly training images are modified for the discriminator. This helps with limited-data overfitting; it does not add a new meaning-based input condition.
+- StyleGAN3 changes signal processing so textures move with image content rather than sticking to the grid. It reduces aliasing, or sampling artifacts. StyleGAN3-T targets consistent shifts, called translation equivariance. StyleGAN3-R also targets consistent rotations. These claims do not apply equally to every version.
 
-**Strengths and limitations:** High-quality feed-forward generation and editable intermediate styles fit image synthesis research. Training distribution coverage limits identity, pose, and demographic diversity; inversion can miss unseen content. Truncation improves some visual-quality measures by sacrificing coverage. It is not confidence filtering.
+**Inputs/outputs and typical data types:** Random inputs produce images. Mixing styles, searching for a code that rebuilds an image, or adding conditions provides more control. A code found by this search, called inversion, is not necessarily the image's unique true cause.
 
-**Computational complexity / scalability notes:** Mapping cost is usually smaller than high-resolution convolutional synthesis. Modulated convolutions still depend on channel products and spatial size; filtered nonlinearities in StyleGAN3 add work. Lazy regularization avoids computing expensive penalties every iteration but changes effective optimizer scheduling.
+**Strengths and limitations:** Fast generation and editable styles are useful in image research. Training data limits the range of identities, poses, and demographic groups. Inversion may miss unfamiliar content. Truncation favors a narrower range of codes to improve some visual-quality measures. It sacrifices variety; it does not filter by trustworthy confidence.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** NVIDIA introduced FFHQ, 70,000 aligned 1024-by-1024 face images, in the [original StyleGAN study](https://ar5iv.labs.arxiv.org/html/1812.04948). Faces -> adversarial training -> controlled styles and synthetic portraits -> evaluation of image quality and latent behavior demonstrate the method. StyleGAN2 investigates visible artifacts and reconstruction/inversion; [StyleGAN3](https://ar5iv.labs.arxiv.org/html/2106.12423) demonstrates more coherent transformations without texture sticking. These are documented research outcomes, not a claim that a specific film studio chose the model or reduced animation costs. Controllable scale-dependent synthesis is the technical fit relative to DCGAN; no audited production business KPI is asserted.
+**Computational complexity / scalability notes:** Mapping random inputs to styles usually costs less than building the high-resolution image. Generator work grows with image size and channel counts. StyleGAN3's filtering adds work. Computing expensive penalties only occasionally saves time, but this "lazy regularization" changes effective optimizer settings.
 
-**Notable vendor implementations/libraries:** NVIDIA's official [StyleGAN2-ADA PyTorch](https://github.com/NVlabs/stylegan2-ada-pytorch) and [StyleGAN3](https://github.com/NVlabs/stylegan3) repositories. Check checkpoint, dataset, license, and configuration rather than relying on the family name.
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** NVIDIA introduced FFHQ in the [original StyleGAN study](https://ar5iv.labs.arxiv.org/html/1812.04948). It has 70,000 aligned 1024-by-1024 face images, with faces placed in similar positions. GAN training learns styles and creates portraits. Researchers evaluate image quality and how code changes affect outputs.
+
+StyleGAN2 studies visible artifacts and rebuilding images through inversion. [StyleGAN3](https://ar5iv.labs.arxiv.org/html/2106.12423) shows more consistent transformations without texture sticking. Compared with DCGAN, the useful difference is control at different image scales. These are research findings, not evidence of a film studio's adoption or reduced animation costs. No audited production business measure is asserted.
+
+**Notable vendor implementations/libraries:** NVIDIA publishes [StyleGAN2-ADA PyTorch](https://github.com/NVlabs/stylegan2-ada-pytorch) and [StyleGAN3](https://github.com/NVlabs/stylegan3). Check the saved model, dataset, license, and settings rather than relying on the family name.
 
 **Architecture diagram description:**
 
@@ -377,41 +451,47 @@ learned input / version-specific Fourier input
        StyleGAN3: alias-aware filtering and nonlinearities
 ```
 
-**Activation functions used and why:** LeakyReLU is central to the mapping/synthesis implementations. StyleGAN3 filters nonlinear operations to suppress newly introduced high frequencies. Original AdaIN and StyleGAN2 demodulation must not be described as identical normalization.
+**Activation functions used and why:** LeakyReLU allows some feedback through negative values in mapping and image-building layers. StyleGAN3 filters around nonlinear operations to suppress newly created high-frequency detail that would cause artifacts. Original AdaIN and StyleGAN2 demodulation rescale different things; they are not identical normalization.
 
-**Loss function(s):** A representative StyleGAN2 recipe uses non-saturating logistic GAN loss, discriminator R1 input-gradient regularization, and generator path-length regularization. Penalty choices and strengths differ by version and configuration.
+**Loss function(s):** A representative StyleGAN2 recipe uses the non-saturating real/fake GAN loss. Its R1 penalty limits the checker's sensitivity to changes in real inputs. Its path-length penalty encourages more even image changes as styles change. Versions and settings differ in which penalties they use and how strongly.
 
-**Optimization algorithm(s):** The [official StyleGAN2-style configuration](https://github.com/NVlabs/stylegan2-ada-pytorch/blob/main/train.py) uses Adam with $`(\beta_1,\beta_2)=(0,0.99)`$ and base rate 0.002. Lazy-regularization scheduling adjusts effective optimizer settings; this is not a universal rate for all StyleGAN versions.
+**Optimization algorithm(s):** The [official StyleGAN2-style configuration](https://github.com/NVlabs/stylegan2-ada-pytorch/blob/main/train.py) uses Adam at base rate 0.002. Occasional penalty calculations adjust effective optimizer settings. This rate is not universal across StyleGAN versions.
 
-**Regularization techniques:** Style mixing, R1, path-length penalties, and EMA weights have distinct roles. ADA controls augmentation probability from discriminator behavior; it does not simply augment until every training image is unrecognizable.
+**Technical detail (optional):** Its smoothing settings are $`(\beta_1,\beta_2)=(0,0.99)`$. These betas control averages of updates and squared updates.
 
-**Backpropagation considerations:** R1 and path-length penalties require derivatives of derivatives and additional memory. Numerical conditioning of modulation/demodulation matters. StyleGAN3 removes per-pixel stochastic noise that conflicts with its equivariance goals.
+**Regularization techniques:** Mixing styles, limiting checker sensitivity, smoothing style responses, and averaging weights over time serve different purposes. ADA uses discriminator behavior to set the chance of modifying images. It does not keep increasing damage until every image becomes unrecognizable.
 
-**Parameter count / scaling behavior:** Resolution, channel caps, mapping depth, and version determine the count. Keep generator, discriminator, and optional inversion encoder counts separate; a resolution label alone is insufficient.
+**Backpropagation considerations:** R1 and path-length penalties require tracking how gradients themselves change, which uses extra memory. Filter scaling and rescaling must stay numerically stable. StyleGAN3 removes random per-pixel noise because it conflicts with consistently shifting or rotating image content.
 
-**Training paradigm:** Primarily unconditional image-distribution learning in the cited FFHQ work; labeled conditional variants are separate. Portrait identity must not be treated as ground truth supplied by an unconditional generator.
+**Parameter count / scaling behavior:** Resolution, maximum channel widths, mapping depth, and version determine size. Count generator, discriminator, and any inversion encoder separately. An image-resolution label alone does not tell you the weight count.
 
-**Hardware/parallelism considerations:** The original paper reports training on eight V100 GPUs. Later implementations use fused/custom GPU kernels and mixed precision. Reproducible distributed runs must preserve augmentation, EMA, precision, and regularization intervals.
+**Training paradigm:** The cited FFHQ work mainly learns to generate images without labels as conditions. Labeled conditional versions are separate. A generated portrait's apparent identity is not supplied ground truth.
+
+**Hardware/parallelism considerations:** The original paper reports eight V100 GPUs for training. Later code combines operations in specialized GPU routines and mixes numeric precision levels. Reproducing runs requires matching image modifications, weight averaging, precision, and how often penalties are calculated.
 
 ### 3.7.4 CycleGAN
 
-**Name:** Cycle-consistent generative adversarial network (CycleGAN).
+**In plain English:** CycleGAN learns to change images from one collection's style to another without matched before-and-after pairs. It checks that changing an image back can recover the original.
 
-**Category & sub-category:** Unpaired image-to-image translation; adversarial learning with reconstruction consistency.
+**Name:** Cycle-consistent generative adversarial network, or CycleGAN.
 
-**Originating paper/vendor/year:** Zhu, Park, Isola, and Efros, [*Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks*, ICCV 2017](https://arxiv.org/abs/1703.10593).
+**Category & sub-category:** Unpaired image translation. It combines GAN feedback with a round-trip rebuilding check.
 
-**Core mechanism:** Learn $`G:X\rightarrow Y`$ and $`F:Y\rightarrow X`$, each with a discriminator, while encouraging $`F(G(x))\approx x`$ and $`G(F(y))\approx y`$. Marginal adversarial matching encourages plausible target-domain images; cycle consistency discourages arbitrary mappings that discard all source content. It does not identify the unique semantically correct translation.
+**Originating paper/vendor/year:** Zhu, Park, Isola, and Efros presented [*Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks*, ICCV 2017](https://arxiv.org/abs/1703.10593).
 
-**Inputs/outputs and typical data types:** Separate image collections from two domains enter; translated images leave. Domain membership is known, but individual images need not be aligned pairs. Photographs, paintings, seasons, and semantic maps have different information-preservation requirements.
+**Core mechanism:** Train one generator to change collection X into collection Y, and another to go back. Each direction has a checker for realistic-looking output. A round-trip penalty encourages the two changes together to recover the starting image. This discourages throwing away all input content. It does not guarantee the uniquely correct meaning-preserving translation.
 
-**Strengths and limitations:** Useful when aligned examples are scarce and a roughly content-preserving relationship exists. Cycle consistency can fail for many-to-one mappings, permit hidden information channels, or preserve the wrong semantics. A deterministic generator cannot express every plausible translation; cycle residual is not a calibrated uncertainty estimate.
+**Inputs/outputs and typical data types:** Inputs are two separate image collections; outputs are translated images. The system knows each image's collection, but does not need matched pairs. Photos, paintings, seasons, and maps of scene categories require different kinds of information to survive.
 
-**Computational complexity / scalability notes:** A cycle uses two generator passes, and training includes both directions and both discriminators. Cost is a constant multiple of the corresponding convolutional networks, with large activation memory for reconstructed cycles. One-direction deployment needs only one generator.
+**Strengths and limitations:** It helps when matched examples are scarce and content should mostly survive translation. Round-trip checks struggle when many inputs should share one output. They can also allow hidden information or preserve the wrong meaning. A fixed output cannot represent every plausible translation. Small round-trip error is not a verified uncertainty estimate.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** In the [Cityscapes evaluation](https://ar5iv.labs.arxiv.org/html/1703.10593), the authors train translation between street photographs and semantic-label maps without using their available pair alignment. Label map -> generator -> synthetic street image -> pretrained FCN segmentation -> comparison with the input map measures whether generated imagery preserves recognizable scene categories. The reported evaluation and ablations support the combined adversarial/cycle objective over its incomplete variants. The technical reason to use CycleGAN rather than paired pix2pix is the absence of alignment during training; when reliable pairs exist, discarding them is not inherently advantageous. Domain labels and human-created segmentation maps still carry supervision. This is not an autonomous-driving deployment or a verified safety/business KPI.
+**Computational complexity / scalability notes:** A round trip uses two generator passes. Training includes both directions and both discriminators, with extra memory for round-trip intermediate results. Work is a constant multiple of the corresponding image-filter networks. Using only one translation direction afterward requires one generator.
 
-**Notable vendor implementations/libraries:** The authors' [PyTorch CycleGAN and pix2pix repository](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix) distinguishes the unpaired and paired methods. Third-party image filters may change the loss or generators.
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** In the [Cityscapes evaluation](https://ar5iv.labs.arxiv.org/html/1703.10593), researchers translated between street photos and maps of scene-category labels. They ignored the available matching between individual maps and photos. A generator turned a label map into a street image. A pretrained fully convolutional network, or FCN, then labeled its pixels. Comparing those labels with the input map checked whether scene categories remained recognizable.
+
+Tests that removed parts of the method supported combining GAN and round-trip losses. CycleGAN suits missing pair alignment; paired pix2pix uses aligned examples. Discarding reliable pairs is not inherently better. Collection labels and human-created scene maps still supply supervision. This was not an autonomous-driving deployment or a verified safety or business measure.
+
+**Notable vendor implementations/libraries:** The authors' [PyTorch repository](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix) distinguishes unpaired CycleGAN from paired pix2pix. Other image filters may change the generators or losses.
 
 **Architecture diagram description:**
 
@@ -424,54 +504,68 @@ y in Y -> F -> fake X -> G -> reconstructed Y
                 D_X             cycle L1 to y
 ```
 
-**Activation functions used and why:** The representative residual generators use ReLU internally and tanh outputs; PatchGAN discriminators use LeakyReLU. Instance normalization supports small-batch image translation without global batch statistics.
+**Activation functions used and why:** The generators use shortcut connections, ReLU hidden units, and bounded tanh outputs. PatchGAN checkers judge image regions and use LeakyReLU, preserving some negative-side feedback. Instance normalization rescales each image's features without needing statistics from a large batch.
 
-**Loss function(s):** Practical training uses least-squares adversarial losses, plus $`\lambda_{\rm cyc}(\|F(G(x))-x\|_1+\|G(F(y))-y\|_1)`$. Optional identity loss discourages unnecessary changes when a generator receives an image already in its output domain.
+**Loss function(s):** Practical training uses squared real/fake errors plus round-trip rebuilding error. An optional identity loss discourages changes when an input already belongs to the desired collection.
 
-**Optimization algorithm(s):** The paper uses Adam, batch size one, and learning rate 0.0002. It holds the rate for 100 epochs, then linearly decays it to zero over 100 more. This schedule is distinct from a diffusion noise schedule.
+**Optional math:** The round-trip penalty is $`\lambda_{\rm cyc}(\|F(G(x))-x\|_1+\|G(F(y))-y\|_1)`$. Here $`x,y`$ are images from the two collections. $`G`$ translates X to Y, and $`F`$ translates Y to X. Each $`\|\cdot\|_1`$ adds absolute pixel errors; $`\lambda_{\rm cyc}`$ sets the penalty's strength.
 
-**Regularization techniques:** Cycle consistency and optional identity penalties constrain the solution. A buffer of previously generated images reduces discriminator oscillation; resizing, cropping, and flipping provide data augmentation.
+**Optimization algorithm(s):** The paper uses Adam, batch size one, and learning rate 0.0002. The rate stays fixed for 100 epochs, then decreases evenly to zero over 100 more. This controls weight updates, not the noise process used in diffusion.
 
-**Backpropagation considerations:** Cycle loss must differentiate through both generators. Separate updates must avoid accidentally backpropagating through a stale image buffer. Gradient competition between realism and content preservation requires inspecting both terms.
+**Regularization techniques:** Round-trip and optional identity penalties restrict possible translations. Keeping some earlier generated images helps stop checker updates swinging back and forth. Resizing, cropping, and flipping provide varied training views.
 
-**Parameter count / scaling behavior:** Two generators and two discriminators contribute to training count. Residual-block number, input resolution, and channel widths matter; CycleGAN is not a fixed-parameter model.
+**Backpropagation considerations:** Round-trip feedback must pass through both generators. Stored old images should not accidentally retain old training graphs. Realism and content preservation can pull updates in different directions, so inspect both losses.
 
-**Training paradigm:** Unpaired conditional translation with known domains. It is often called unsupervised translation because pair correspondences are absent, not because domain partitioning or all source signals lack supervision.
+**Parameter count / scaling behavior:** Training includes two generators and two discriminators. The number of shortcut blocks, image resolution, and channel widths affect size. CycleGAN has no fixed weight count.
 
-**Hardware/parallelism considerations:** Batch-one training is feasible on a GPU but does not eliminate memory from cycle graphs. Multiple devices can parallelize examples or directions; retain consistent updates and avoid stale opposite-generator weights.
+**Training paradigm:** It learns conditional translation between known collections without matched image pairs. "Unsupervised translation" refers to missing pair matches, not the absence of every supervision signal.
+
+**Hardware/parallelism considerations:** Batch-one training fits on a GPU, but round-trip graphs still need memory. Multiple devices can process examples or directions. Their updates must stay consistent, without using outdated weights from the opposite generator.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| GAN, generic | Data admitting a differentiable sampler | Direct feed-forward generation | Unstable game and missing modes | MNIST, Toronto Face Database, CIFAR-10 research |
-| DCGAN | Moderate-resolution natural images | Convolutional synthesis and reusable features | Artifacts and batch-sensitive stability | LSUN bedroom-generation study |
-| StyleGAN family | High-quality curated image domains | Style control; later alias-aware synthesis | Distribution bias and version-dependent behavior | FFHQ generation and transformation studies |
-| CycleGAN | Two unpaired image domains | Translation without aligned examples | Cycle consistency does not ensure semantic truth | Cityscapes labels/photos research |
+| GAN, generic | Data a network can generate and learn through | Creates samples in one forward pass | Unstable feedback and missing variety | Tests on MNIST, Toronto faces, and CIFAR-10 |
+| DCGAN | Moderate-resolution natural images | Uses image filters and reusable features | Visible artifacts and sensitivity to batches | Research on generating LSUN bedrooms |
+| StyleGAN family | Carefully selected image collections | Style controls; later versions reduce grid artifacts | Training-data bias and differences between versions | FFHQ portrait and transformation research |
+| CycleGAN | Two collections without matched images | Translates without before-and-after pairs | A successful round trip can still change meaning | Cityscapes photo and label-map tests |
 
 ## 3.8 Diffusion and image-generation families
 
-Diffusion learns to reverse a known corruption process. The denoiser can operate on pixels, compressed latents, or embeddings and can be a U-Net or a Transformer. The broader image-generation grouping also includes **DALL-E 1, which is autoregressive rather than a diffusion model**. DALL-E versions are separate entries because a product-family name does not establish architectural continuity.
+Diffusion training adds known random noise to examples and learns how to reverse that damage. Generation starts with fresh noise and repeatedly uses learned steps to build a sample. This is **not ordinary sharpening of a blurry photograph**. The model must learn patterns from data to generate missing structure.
 
-Noise schedules determine the corruption process; learning-rate schedules determine optimization; inference schedulers determine numerical sampling. These are three different choices. Guidance and candidate reranking also change the sampled distribution and evaluation budget.
+The network can work on pixels, compact image codes, or other feature vectors. It may use a U-Net, which shrinks and expands image grids with shortcuts, or a Transformer, which mixes information across sequence items. This section also includes **DALL-E 1, an autoregressive model, not diffusion**. It generates image codes one after another. DALL-E versions get separate entries because a shared product name does not imply the same design.
+
+A noise schedule controls training-image damage. A learning-rate schedule controls weight updates. A sampling scheduler controls the numerical steps used to create an output. These are separate choices. Guidance steers generation toward a condition, such as text. Ranking several candidates selects among outputs. Both change the result distribution and the work needed for evaluation.
 
 ### 3.8.1 Denoising diffusion probabilistic models
 
-**Name:** Denoising diffusion probabilistic model (DDPM), specifically the Ho, Jain, and Abbeel formulation.
+**In plain English:** A DDPM learns to reverse different amounts of random noise added to images. It then starts from noise and builds a new image through many small steps.
 
-**Category & sub-category:** Unsupervised generative modeling; discrete-time denoising diffusion.
+**Name:** Denoising diffusion probabilistic model (DDPM). This entry uses Ho, Jain, and Abbeel's version.
 
-**Originating paper/vendor/year:** Ho, Jain, and Abbeel, [*Denoising Diffusion Probabilistic Models*, NeurIPS 2020](https://arxiv.org/abs/2006.11239), building on earlier diffusion-based generative modeling rather than originating the entire diffusion idea.
+**Category & sub-category:** Unsupervised generation through a fixed sequence of noise-removal steps, called discrete-time diffusion.
 
-**Core mechanism:** Repeated Gaussian perturbation transforms data toward noise. A time-conditioned network learns parameters of the reverse transitions. With $`\bar\alpha_t`$ the cumulative signal retention, training can draw $`x_t=\sqrt{\bar\alpha_t}x_0+\sqrt{1-\bar\alpha_t}\epsilon`$ directly, without simulating all preceding forward steps.
+**Originating paper/vendor/year:** Ho, Jain, and Abbeel presented [*Denoising Diffusion Probabilistic Models*, NeurIPS 2020](https://arxiv.org/abs/2006.11239). Their work builds on earlier diffusion generation; it did not originate the whole idea.
 
-**Inputs/outputs and typical data types:** Clean images and sampled noise levels train a noise predictor. At generation time, Gaussian noise -> reverse denoising chain -> image. The original CIFAR-10 model is unconditional; supplying class labels or captions changes the objective to conditional modeling.
+**Core mechanism:** Repeatedly adding random values from a bell-shaped, or Gaussian, distribution gradually overwhelms an image. A network sees a noisy image and its noise level, then learns the reverse-step calculation. Training can create an example at any noise level directly, without running all earlier damage steps. Generation runs the learned reverse steps in sequence.
 
-**Strengths and limitations:** Stable regression-like training and broad mode coverage are advantages over adversarial games. Sampling requires many network evaluations in the original formulation. Denoising diversity is not a confidence interval about the truth of an image; generated anatomy, text, or events can be incorrect despite looking plausible.
+**Optional math:** A noisy training input is $`x_t=\sqrt{\bar\alpha_t}x_0+\sqrt{1-\bar\alpha_t}\epsilon`$. Here $`x_0`$ is a clean image, $`x_t`$ its version at step $`t`$, and $`\epsilon`$ standard Gaussian noise. $`\bar\alpha_t`$ describes how much original signal remains. The square-root factors set the signal and noise mixture.
 
-**Computational complexity / scalability notes:** A training example normally samples one time index, so its update does not cost a full $`S`$-step sampling chain. Original sampling costs approximately $`SC_f`$. Resolution, attention placement, and U-Net channels determine $`C_f`$; faster samplers change the evaluation protocol.
+**Inputs/outputs and typical data types:** Training takes clean images and randomly chosen noise levels. The network predicts noise. Generation starts from Gaussian noise and ends with an image. The original CIFAR-10 model uses no class condition. Adding labels or captions makes a different, conditional training task.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** For unconditional 32-by-32 CIFAR-10 generation, clean training image -> analytically noised image/time -> U-Net noise estimate -> learned reverse sampler produces synthetic images for distributional evaluation. The [paper](https://ar5iv.labs.arxiv.org/html/2006.11239) reports **FID 3.17** and **Inception Score 9.46 +/- 0.11**, using 50,000 generated samples. FID uses training-set reference statistics and the minimum-FID checkpoint over training; the paper separately reports test-reference FID 5.24. These distinctions preclude treating 3.17 as a held-out classification accuracy. Noise regression is the technical alternative to GAN game optimization; the simplified objective improved sample quality relative to the paper's likelihood-bound objective. No public business KPI or deployed image service is established by this benchmark.
+**Strengths and limitations:** Predicting noise is often more stable than training two competing GAN networks. It can cover a broad range of data patterns. The original sampler, however, needs many network calls. Varied generated anatomy, text, or events can still be wrong. Their variation is not a confidence interval about truth.
 
-**Notable vendor implementations/libraries:** The authors' [TensorFlow implementation](https://github.com/hojonathanho/diffusion) and Hugging Face Diffusers implement DDPM components. A scheduler implementation alone does not identify the trained denoiser or checkpoint.
+**Computational complexity / scalability notes:** Training usually chooses just one noise step per example. It does not run a whole generation chain for each update. Original sampling repeats the network many times; more steps mean roughly proportionally more work. Image size, channel widths, and attention placement affect each pass.
+
+**Optional math:** Sampling costs approximately $`SC_f`$, where $`S`$ is the number of steps and $`C_f`$ one network pass's cost. Faster samplers change the evaluation procedure and must be identified.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** On unconditional 32-by-32 CIFAR-10, a clean image is mixed with known noise. A U-Net predicts that noise at the given step. The learned reverse sampler then creates images for comparison with the dataset.
+
+The [paper](https://ar5iv.labs.arxiv.org/html/2006.11239) reports **FID 3.17** and **Inception Score 9.46 +/- 0.11** from 50,000 generated samples. FID compares real and generated image-feature distributions; lower is better. Inception Score rewards confident class predictions and class variety using a pretrained classifier. Higher is better, but it is not percent-correct accuracy.
+
+The 3.17 FID uses training-set reference statistics and the lowest-FID checkpoint selected during training. Test-reference FID is separately 5.24. Thus 3.17 is not held-out classification accuracy. Noise prediction replaces GAN competition, and the simpler loss improved sample quality over the paper's likelihood-bound loss. This benchmark establishes no deployed image service or public business benefit.
+
+**Notable vendor implementations/libraries:** The authors' [TensorFlow code](https://github.com/hojonathanho/diffusion) and Hugging Face Diffusers supply DDPM components. A scheduler alone does not identify which trained network or saved checkpoint it uses.
 
 **Architecture diagram description:**
 
@@ -482,41 +576,51 @@ x_t + time embedding -> residual U-Net with skip connections/attention
 generation: Gaussian noise -> repeated reverse updates -> image
 ```
 
-**Activation functions used and why:** The representative residual U-Net uses smooth swish nonlinearities and attention softmax; its noise-output head is unconstrained. Bounding predicted noise with tanh would alter the estimator.
+**Activation functions used and why:** The U-Net uses smooth swish units and shortcut connections. Attention softmax turns comparison scores into mixing weights. The final noise prediction is unbounded. Using tanh to restrict it would change what noise values it can predict.
 
-**Loss function(s):** Simplified training minimizes $`\mathbb E\|\epsilon-\epsilon_\theta(x_t,t)\|^2`$. The exact variational-bound terms have time-dependent weights; unweighted noise MSE is not numerically identical to optimizing that bound.
+**Loss function(s):** The simple loss compares added noise with predicted noise. Mean squared error, or MSE, averages squared prediction errors; lower is better. The full probability-bound loss weights noise levels differently, so it is not numerically the same objective.
 
-**Optimization algorithm(s):** The [official CIFAR configuration](https://github.com/hojonathanho/diffusion/blob/master/scripts/run_cifar.py) uses Adam, rate $`2\times10^{-4}`$, 5,000-step warmup, and batch 128. It specifies 1,000 forward noise levels with linearly increasing beta from 0.0001 to 0.02. This beta schedule is distinct from learning-rate warmup.
+**Optional math:** Minimize $`\mathbb E\|\epsilon-\epsilon_\theta(x_t,t)\|^2`$. Here $`\epsilon`$ is the known added noise and $`\epsilon_\theta`$ the network prediction with weights $`\theta`$. It sees noisy input $`x_t`$ at step $`t`$. $`\mathbb E`$ means average; the squared length adds squared errors across values.
 
-**Regularization techniques:** Group normalization, dropout, random horizontal flips, and EMA weights support training and evaluation. The checked CIFAR configuration uses dropout 0.1.
+**Optimization algorithm(s):** The [official CIFAR configuration](https://github.com/hojonathanho/diffusion/blob/master/scripts/run_cifar.py) uses Adam, rate $`2\times10^{-4}`$ (0.0002), 5,000-step warmup, and batch 128. Its 1,000 forward noise levels increase beta evenly from 0.0001 to 0.02. Beta controls added noise. Warmup instead gradually raises the learning rate.
 
-**Backpropagation considerations:** Differentiate a single sampled denoising loss, not an unrolled full generation trajectory. Noise-level weighting changes gradient emphasis. Gradient clipping and careful variance arithmetic help numerical stability.
+**Regularization techniques:** The recipe rescales groups of features, drops some units, randomly flips images horizontally, and averages weights over time. These support training and evaluation. The checked CIFAR dropout rate is 0.1.
 
-**Parameter count / scaling behavior:** The official CIFAR U-Net is identified as approximately 35.7 million parameters. This is not a universal DDPM count; higher-resolution conditional systems can be much larger.
+**Backpropagation considerations:** Feedback comes from one sampled noise-prediction task, not the full generation chain. Weighting noise levels changes which errors matter most. Limiting oversized gradients and carefully calculating noise variance help avoid numerical failures.
 
-**Training paradigm:** Self-supervised noise prediction on unlabeled images in the representative experiment. Conditional class/text signals remain supervision even though noise targets are synthetically constructed.
+**Parameter count / scaling behavior:** The official CIFAR U-Net has approximately 35.7 million parameters. This is not a standard DDPM size. Higher-resolution conditional models can be much larger.
 
-**Hardware/parallelism considerations:** The original implementation supports Cloud TPU training; GPU implementations are common. Data parallelism is straightforward, but sequential reverse steps constrain single-sample inference latency even with many devices.
+**Training paradigm:** The representative model predicts automatically added noise on unlabeled images, so it is self-supervised. Class labels or text remain supervision when added, even though the noise targets are synthetic.
+
+**Hardware/parallelism considerations:** The original code supports Cloud TPU training; GPU versions are common. Batches split easily across devices. Yet each reverse step waits for the previous one, limiting how quickly one image can be generated.
 
 ### 3.8.2 Score-based SDE models
 
-**Name:** Score-based generative modeling through stochastic differential equations (SDEs).
+**In plain English:** These models learn which direction a noisy example should move to become more like the training data. They use that direction repeatedly to turn noise into a new sample.
 
-**Category & sub-category:** Unsupervised generative modeling; continuous-time score matching and stochastic/ODE sampling.
+**Name:** Score-based generation through stochastic differential equations, or SDEs. An SDE describes continuous change that includes random motion.
 
-**Originating paper/vendor/year:** Song and colleagues, [*Score-Based Generative Modeling through Stochastic Differential Equations*, arXiv 2020, ICLR 2021](https://arxiv.org/abs/2011.13456).
+**Category & sub-category:** Unsupervised generation with continuously varying noise levels. Sampling can use random-motion equations or deterministic ordinary differential equations, called ODEs.
 
-**Core mechanism:** Define a forward SDE $`dx=f(x,t)dt+g(t)dw`$. Learn the time-dependent score $`\nabla_x\log p_t(x)`$, which determines the reverse-time drift. Variance-exploding, variance-preserving, and sub-variance-preserving SDEs organize different corruption families. A related probability-flow ODE has the same time marginals under an exact score, not the same individual stochastic trajectories.
+**Originating paper/vendor/year:** Song and colleagues presented [*Score-Based Generative Modeling through Stochastic Differential Equations*, arXiv 2020, ICLR 2021](https://arxiv.org/abs/2011.13456).
 
-**Inputs/outputs and typical data types:** Observations, continuous time, and Gaussian perturbations enter score training. A sampler returns images; an ODE-based density calculation can estimate log density. Conditional inverse problems additionally use observations and an appropriate conditioning procedure.
+**Core mechanism:** Specify how an example changes as continuous time adds noise. Train a network to estimate the **score** at each noise level. Here "score" means a local direction toward higher data density, not an image-quality grade. It determines how the reverse process moves. Variance-exploding, variance-preserving, and sub-variance-preserving SDEs are different rules for how signal and noise spread evolve.
 
-**Strengths and limitations:** Unifies discrete diffusion and noise-conditioned score methods and enables multiple numerical solvers. Discretization, score error, and conditioning approximations affect results. Posterior-looking samples in an inverse problem are not automatically calibrated; the measurement likelihood and score approximation must be validated.
+**Optional math:** The forward rule is $`dx=f(x,t)dt+g(t)dw`$. Here $`x`$ is the current data, $`t`$ time, $`dt`$ a small time change, and $`dx`$ the resulting data change. $`f`$ gives directed motion; $`g`$ sets the strength of random motion $`dw`$. The score is $`\nabla_x\log p_t(x)`$: the direction of change in log density $`p_t`$ at time $`t`$. A related probability-flow ODE removes random motion. With an exact score, it gives the same distribution at each time, not the same individual sample paths.
 
-**Computational complexity / scalability notes:** Training samples time and noise rather than integrating the whole SDE. Sampling cost is network evaluations times $`C_f`$, including predictor and corrector calls; adaptive ODE solvers have variable evaluation counts. Likelihood computation additionally estimates a divergence, often with Hutchinson trace probes and numerical integration.
+**Inputs/outputs and typical data types:** Training takes observations, a time value, and Gaussian noise. Sampling produces images. An ODE calculation can also estimate log density. Reconstructing an image from partial measurements needs those measurements and a suitable rule for using them as conditions.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [paper's CIFAR-10 experiments](https://ar5iv.labs.arxiv.org/html/2011.13456) train a continuous-time NCSN++ score network on perturbed images, then integrate a reverse sampler to produce images for evaluation. The **NCSN++ continuous deep, VE-SDE** model achieves **FID 2.20** under the authors' 50,000-sample protocol; the authors explicitly distinguish it from shallower and discrete-time models. The technical fit relative to a fixed discrete DDPM is access to continuous-time objectives and solver choices, not a universal guarantee of faster sampling. The paper also demonstrates inverse-problem applications, but the CIFAR result is a research benchmark, not an audited production KPI or a guaranteed calibrated reconstruction posterior.
+**Strengths and limitations:** One framework connects discrete diffusion with noise-dependent direction learning and several numerical solvers. Approximate steps, imperfect scores, and approximate conditions all cause error. Plausible alternatives to a measured image do not automatically have reliable probabilities. Both the measurement model and learned score need testing.
 
-**Notable vendor implementations/libraries:** The authors' [JAX/TensorFlow research code](https://github.com/yang-song/score_sde) and [PyTorch implementation](https://github.com/yang-song/score_sde_pytorch) expose SDE, model, and sampler choices separately.
+**Computational complexity / scalability notes:** Training chooses a time and noise draw without running the full process. Sampling work depends on all network calls, including both predictor and corrector steps. Adaptive ODE solvers can need different numbers of calls. Computing likelihood also tracks how the transformation expands or contracts space, called divergence. Hutchinson trace probes estimate this quantity using random vectors.
+
+**Optional math:** Multiply the number of network evaluations by $`C_f`$, the work for one network pass. Density calculations add divergence estimation and numerical integration.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [CIFAR-10 experiments](https://ar5iv.labs.arxiv.org/html/2011.13456) train an NCSN++ network to predict scores at continuous noise levels. A reverse sampler follows its predictions to create images. The **NCSN++ continuous deep, VE-SDE** model achieves **FID 2.20** with the authors' 50,000-sample protocol. FID compares real and generated feature distributions; lower is better. This result belongs to that deep version, not shallower or discrete-time versions.
+
+Compared with a fixed-step DDPM, the benefit is continuous-time training and a choice of solvers, not guaranteed faster generation. The paper also demonstrates reconstruction from measurements. The CIFAR score is neither an audited production measure nor proof that reconstruction probabilities are calibrated.
+
+**Notable vendor implementations/libraries:** The authors' [JAX/TensorFlow code](https://github.com/yang-song/score_sde) and [PyTorch version](https://github.com/yang-song/score_sde_pytorch) keep the noise process, network, and sampler choices separate.
 
 **Architecture diagram description:**
 
@@ -527,41 +631,51 @@ x_t + continuous-time embedding -> NCSN++ / DDPM++ score network
 noise -> reverse-SDE predictor/corrector OR probability-flow ODE -> image
 ```
 
-**Activation functions used and why:** The checked NCSN++ configuration uses swish, group normalization, and attention. Its score output is real-valued and can be scaled by the noise standard deviation; it is not a categorical softmax.
+**Activation functions used and why:** The checked NCSN++ uses smooth swish activations, rescaling within feature groups, and attention. Its output is a real-valued direction, not probabilities over categories. It can be rescaled by the noise standard deviation, which measures noise spread.
 
-**Loss function(s):** Denoising score matching minimizes $`\mathbb E[\lambda(t)\|s_\theta(x_t,t)-\nabla_{x_t}\log p(x_t\mid x_0)\|^2]`$. The tractable conditional perturbation score provides the target. Weighting affects whether the emphasis is sample quality or a likelihood-related objective.
+**Loss function(s):** Training compares the predicted direction with a target calculated from the known noise process. Weighting different noise levels changes the emphasis between sample quality and a likelihood-related goal.
 
-**Optimization algorithm(s):** The [official PyTorch CIFAR defaults](https://github.com/yang-song/score_sde_pytorch/blob/main/configs/default_cifar10_configs.py) use Adam at $`2\times10^{-4}`$, 5,000-step warmup, gradient clipping, and batch 128. These implementation defaults do not uniquely identify the best-paper deep checkpoint. SDE schedules and predictor/corrector settings are separately configurable.
+**Optional math:** Minimize $`\mathbb E[\lambda(t)\|s_\theta(x_t,t)-\nabla_{x_t}\log p(x_t\mid x_0)\|^2]`$. Here $`x_0`$ is clean data and $`x_t`$ its noisy version at time $`t`$. The network $`s_\theta`$ has weights $`\theta`$. The gradient of the known conditional noise log density supplies the target direction. $`\lambda(t)`$ weights each time; $`\mathbb E`$ averages squared mismatches.
 
-**Regularization techniques:** EMA, dropout, input flips, residual rescaling, and noise-dependent targets stabilize the representative network. A continuous noise distribution is part of the objective, not proof against memorization.
+**Optimization algorithm(s):** The [official PyTorch CIFAR defaults](https://github.com/yang-song/score_sde_pytorch/blob/main/configs/default_cifar10_configs.py) use Adam at $`2\times10^{-4}`$ (0.0002), 5,000-step warmup, gradient clipping, and batch 128. Clipping limits oversized updates. These defaults do not uniquely identify the best deep checkpoint. Noise schedules and predictor/corrector settings are separate choices.
 
-**Backpropagation considerations:** Training normally avoids differentiating through the sampling solver. Low-noise targets can have large magnitude, requiring sensible scaling. ODE likelihood is exact only in the ideal mathematical model; finite tolerances and stochastic trace estimates introduce error.
+**Regularization techniques:** The recipe averages weights over time, drops units, flips inputs, rescales shortcut paths, and adjusts targets for noise level. These support stability. A continuous range of noise levels does not prevent memorization by itself.
 
-**Parameter count / scaling behavior:** Network depth, channels, and attention set $`p`$. The cited improvement to 2.20 doubles residual blocks per resolution relative to the shallower continuous NCSN++; assigning that result to any NCSN++ is misleading.
+**Backpropagation considerations:** Training normally does not send feedback through the sampling solver. Near-clean inputs can have large score targets, so scaling matters. ODE likelihood is exact only in the ideal mathematical model. Finite solver tolerances and random trace estimates introduce calculation error.
 
-**Training paradigm:** Unconditional self-supervised score estimation in the benchmark. Label conditioning, classifier guidance, or measurement conditioning creates different information regimes.
+**Parameter count / scaling behavior:** Depth, channels, and attention determine weight count. The version achieving FID 2.20 doubles shortcut blocks per resolution compared with shallower continuous NCSN++. The improvement must not be assigned to every NCSN++ model.
 
-**Hardware/parallelism considerations:** Training parallelizes over images and times on GPUs/TPUs. Predictor-corrector sampling and divergence probes increase compute; batch-adaptive ODE evaluation can also waste work when examples require different tolerances.
+**Training paradigm:** The benchmark learns scores without external conditions, using self-supervised noise targets. Adding labels, classifier guidance, or measurements changes the information supplied to the model.
+
+**Hardware/parallelism considerations:** GPUs or TPUs can process different images and times together. Predictor/corrector calls and divergence probes add work. Batch ODE solving may waste work when some examples require finer tolerances than others.
 
 ### 3.8.3 Latent diffusion and Stable Diffusion
 
-**Name:** Latent diffusion models (LDMs), with Stable Diffusion v1.4 and SDXL 1.0 distinguished explicitly.
+**In plain English:** Latent diffusion creates images by removing noise from compact image codes rather than full pixel grids. A decoder turns the finished code into an image, often guided by text.
 
-**Category & sub-category:** Latent-space generative modeling; unconditional or text-conditioned diffusion.
+**Name:** Latent diffusion models (LDMs). Stable Diffusion v1.4 and SDXL 1.0 are treated as different versions here.
 
-**Originating paper/vendor/year:** Rombach and colleagues, [*High-Resolution Image Synthesis with Latent Diffusion Models*, arXiv 2021/CVPR 2022](https://arxiv.org/abs/2112.10752). Stable Diffusion v1 checkpoints are 2022 releases; [SDXL](https://arxiv.org/abs/2307.01952) and its 1.0 checkpoints are 2023 releases.
+**Category & sub-category:** Generation in compact-code space. Diffusion may run without conditions or use text to guide the output.
 
-**Core mechanism:** First learn a perceptually useful image autoencoder; then train a diffusion model in its compressed latent space. For text conditioning, cross-attention injects text features into denoising. Stable Diffusion v1.4 uses a frozen text Transformer from the CLIP ViT-L/14 model package. The [SDXL comparison](https://ar5iv.labs.arxiv.org/html/2307.01952) identifies OpenCLIP ViT-H conditioning for SD 2.0/2.1 and two text encoders, CLIP ViT-L plus OpenCLIP ViT-bigG, for SDXL; these checkpoints are not text-embedding-compatible substitutes.
+**Originating paper/vendor/year:** Rombach and colleagues, [*High-Resolution Image Synthesis with Latent Diffusion Models*, arXiv 2021/CVPR 2022](https://arxiv.org/abs/2112.10752). Stable Diffusion v1 saved models were released in 2022. [SDXL](https://arxiv.org/abs/2307.01952) and its 1.0 models were released in 2023.
 
-**Inputs/outputs and typical data types:** Training uses images and, for conditional checkpoints, paired text. Generation maps a prompt and random latent noise to an image; image-to-image tasks additionally encode an input image. SDXL base 1.0 can run alone or with its separately identified refiner.
+**Core mechanism:** First train an autoencoder to keep visually useful information in a smaller image code. Then train diffusion on those codes. For text guidance, cross-attention lets each image-code part use relevant text features while predicting noise.
 
-**Strengths and limitations:** Spatial compression reduces denoising cost relative to pixel diffusion. The lossy autoencoder limits fine detail, and caption quality limits instruction following. Guidance trades diversity for conditioning strength, not truthfulness; seed variation is not calibrated uncertainty about a requested scene.
+Stable Diffusion v1.4 uses the frozen text Transformer from the CLIP ViT-L/14 package. The [SDXL comparison](https://ar5iv.labs.arxiv.org/html/2307.01952) identifies OpenCLIP ViT-H conditioning for SD 2.0/2.1. SDXL uses two text encoders: CLIP ViT-L plus OpenCLIP ViT-bigG. Their text-vector formats differ, so these saved models cannot simply be swapped.
 
-**Computational complexity / scalability notes:** With downsampling factor $`f`$, the denoiser processes approximately $`HW/f^2`$ latent positions instead of $`HW`$ pixels. This is not a guaranteed $`f^2`$ end-to-end speedup because channels, attention, decoder cost, and sampling calls also change. Classifier-free guidance commonly requires both conditional and unconditional predictions.
+**Inputs/outputs and typical data types:** Training uses images and, for conditional versions, matching text. A prompt and random code noise produce an image. Image-to-image use also encodes an existing image. SDXL base 1.0 can run alone or use a separate refiner for further processing.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [Stable Diffusion v1.4 card](https://huggingface.co/CompVis/stable-diffusion-v1-4) describes training on filtered LAION image-text pairs and evaluates 10,000 COCO2017 validation prompts at 512-by-512 with 50 PLMS steps and several guidance scales. Image-caption pair -> fixed image/text encoders -> latent noise regression -> prompt-conditioned sampling produces the evaluated images. The card reports checkpoint quality/alignment comparisons and documents compositional, text-rendering, bias, and memorization limitations; no unverified curve value is transcribed here. Latent compression is the technical rationale versus pixel diffusion. Its astronaut-image example is a demonstration, not a production design-cost study; no business KPI is reported.
+**Strengths and limitations:** A smaller grid reduces noise-prediction work compared with pixels. But the lossy code can discard fine detail, and poor captions limit prompt following. Stronger guidance trades variety for stronger conditioning, not truth. Changing the random seed does not measure reliable uncertainty about the requested scene.
 
-**Notable vendor implementations/libraries:** [CompVis Stable Diffusion](https://github.com/CompVis/stable-diffusion), [Stability AI's generative-models](https://github.com/Stability-AI/generative-models), and Hugging Face Diffusers. The [SDXL base 1.0 card](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0) distinguishes base-only and base-plus-refiner operation.
+**Computational complexity / scalability notes:** Shrinking both image dimensions greatly reduces the number of positions processed. The whole system does not speed up by exactly that amount: channels, attention, decoding, and step counts also matter. Classifier-free guidance commonly runs predictions both with and without the condition.
+
+**Optional math:** With height $`H`$, width $`W`$, and downsampling factor $`f`$ per side, diffusion uses about $`HW/f^2`$ positions instead of $`HW`$. This does not guarantee an $`f^2`$ total speedup.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [Stable Diffusion v1.4 card](https://huggingface.co/CompVis/stable-diffusion-v1-4) describes filtered LAION image-text training pairs. Fixed image and text encoders prepare codes and text features. The diffusion model learns noise prediction on those codes, then generates from prompts.
+
+Evaluation uses 10,000 COCO2017 validation prompts at 512-by-512, 50 PLMS sampling steps, and several guidance scales. The card compares saved models for image quality and text matching. It also records problems with combining objects correctly, drawing text, bias, and memorization. No unverified chart value is copied here. Compact codes are the advantage over pixel diffusion. The astronaut image is a demonstration, not a study of production design costs. No business performance measure is reported.
+
+**Notable vendor implementations/libraries:** Implementations include [CompVis Stable Diffusion](https://github.com/CompVis/stable-diffusion), [Stability AI's generative-models](https://github.com/Stability-AI/generative-models), and Hugging Face Diffusers. The [SDXL base 1.0 card](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0) explains base-only use and the optional refiner.
 
 **Architecture diagram description:**
 
@@ -573,41 +687,47 @@ sampling: latent noise -> iterative denoising [optional SDXL refiner]
                       -> image decoder -> RGB
 ```
 
-**Activation functions used and why:** Representative Stable Diffusion U-Nets use SiLU/swish, group normalization, attention softmax, and gated feed-forward components. Text encoders have their own Transformer activations; identical activation choices should not be assumed across v1, v2, and SDXL.
+**Activation functions used and why:** Representative U-Nets use smooth SiLU/swish units, rescale feature groups, and use attention softmax to mix information. Gates control which values pass through some dense layers. Text encoders have their own Transformer activations. Choices need not match across v1, v2, and SDXL.
 
-**Loss function(s):** The image autoencoder combines reconstruction/perceptual objectives with appropriate latent regularization and adversarial components in the LDM formulation. The v1.4 denoiser uses latent noise-prediction MSE. Other checkpoints can change prediction parameterization; checkpoint-compatible schedulers are mandatory.
+**Loss function(s):** The LDM autoencoder combines rebuilding and visual-feature comparison losses with code restrictions and GAN feedback. The v1.4 denoiser uses mean squared error on predicted code noise. MSE averages squared errors; lower is better. Other saved models may predict different quantities, so the sampling scheduler must match the checkpoint.
 
-**Optimization algorithm(s):** The v1.4 card specifies AdamW, effective batch 2,048, and 10,000-step warmup to $`10^{-4}`$, then a constant rate. Its v1.4 continuation runs 225,000 steps at 512 resolution from v1.2. These are v1.4 provenance facts, not SDXL's recipe.
+**Optimization algorithm(s):** The v1.4 card specifies AdamW, effective batch 2,048, and 10,000-step warmup to $`10^{-4}`$ (0.0001), then a constant rate. Its v1.4 continuation starts from v1.2 and runs 225,000 steps at 512 resolution. These facts describe v1.4's training history, not SDXL's recipe.
 
-**Regularization techniques:** Autoencoder constraints, filtered data, EMA where configured, and dropped text conditioning support training. V1.4 drops conditioning on 10% of examples for classifier-free guidance. Safety filtering is a separate mitigation, not a guarantee from the loss.
+**Regularization techniques:** Training uses code restrictions, filtered data, weight averaging where configured, and omitted text conditions. V1.4 omits text on 10% of examples to learn classifier-free guidance. Safety filtering is a separate safeguard. The loss does not guarantee safe output.
 
-**Backpropagation considerations:** Freeze pretrained components when specified; otherwise their gradients change the objective and memory budget. Guidance at inference is not backpropagation training. Mixed precision requires care in attention, autoencoder decoding, and variance arithmetic.
+**Backpropagation considerations:** Keep pretrained components fixed when the recipe requires it. Updating them changes both the learning problem and memory use. Guidance during generation is not backpropagation training. Mixed numeric precision needs care in attention, image decoding, and noise-variance calculations.
 
-**Parameter count / scaling behavior:** The SDXL report lists approximately 860 million U-Net parameters for SD 1.4/1.5 and 2.6 billion for SDXL. These exclude text encoders, autoencoder, and optional refiner; they are not whole-pipeline counts.
+**Parameter count / scaling behavior:** The SDXL report lists approximately 860 million U-Net parameters for SD 1.4/1.5, compared with 2.6 billion for SDXL. These exclude text encoders, the autoencoder, and any refiner. They are not full-system counts.
 
-**Training paradigm:** Text-conditioned checkpoints use natural-language paired supervision alongside self-supervised noise targets. They must not be called caption-free unsupervised models. Image-only LDM experiments occupy a different supervision regime.
+**Training paradigm:** Text-conditioned models use paired language supervision as well as automatically created noise targets. They are not caption-free unsupervised systems. Image-only LDM experiments use a different set of teaching signals.
 
-**Hardware/parallelism considerations:** The v1.4 card reports 32-by-8 A100 GPUs and gradient accumulation. Consumer-device inference is not evidence that training required similar resources. SDXL's larger denoiser and optional second model increase inference memory and compute.
+**Hardware/parallelism considerations:** The v1.4 card reports 32-by-8 A100 GPUs and accumulated gradients across smaller batches. Running a trained model on a consumer device does not show it was trained there. SDXL's larger denoiser and optional second model increase generation work and memory.
 
 ### 3.8.4 Diffusion Transformer
 
-**Name:** Diffusion Transformer (DiT), specifically the original class-conditional latent DiT.
+**In plain English:** DiT uses a Transformer to remove noise from image-code patches. The original model takes a class label, such as an image category, rather than a written prompt.
 
-**Category & sub-category:** Diffusion generative modeling; Transformer denoising backbone.
+**Name:** Diffusion Transformer (DiT). This entry covers the original class-conditioned model operating on compact image codes.
 
-**Originating paper/vendor/year:** Peebles and Xie, [*Scalable Diffusion Models with Transformers*, arXiv 2022, ICCV 2023](https://arxiv.org/abs/2212.09748). Later multimodal diffusion Transformers are related developments, not identical checkpoints.
+**Category & sub-category:** Diffusion generation with a Transformer as the main noise-prediction network.
 
-**Core mechanism:** Patchify noisy autoencoder latents and process them with Transformer blocks instead of a U-Net. Time and class embeddings modulate adaptive layer normalization. The successful adaLN-Zero design initializes residual modulation so blocks initially behave near an identity mapping, supporting stable scaling.
+**Originating paper/vendor/year:** Peebles and Xie, [*Scalable Diffusion Models with Transformers*, arXiv 2022, ICCV 2023](https://arxiv.org/abs/2212.09748). Later Transformers that combine more input types are related designs, not these same saved models.
 
-**Inputs/outputs and typical data types:** A noisy image latent, noise step, and class label enter; the model predicts diffusion quantities that reconstruct the latent through sampling. A frozen image decoder maps the result to RGB. The original DiT is class-conditioned, not inherently a text-to-image model.
+**Core mechanism:** Divide a noisy autoencoder code into patches. A Transformer mixes information across patches instead of using a U-Net. Time and class vectors control how layers rescale their values. The successful adaLN-Zero design starts its shortcut-path controls at zero. Blocks initially change their inputs very little, which helps larger models train stably.
 
-**Strengths and limitations:** A regular Transformer design allows systematic scaling of depth, width, and token count. Smaller patches improve granularity but increase attention cost. Class-conditional sample quality is not evidence of prompt-following ability, and generated variation is not calibrated uncertainty about real-world objects.
+**Inputs/outputs and typical data types:** The inputs are a noisy image code, a noise step, and a class label. Predictions guide the reverse process toward a completed code. A fixed decoder turns it into RGB pixels. Original DiT is class-conditioned, not inherently a text-to-image system.
 
-**Computational complexity / scalability notes:** For $`T`$ latent patches, cost per denoiser pass is $`O(L(Td^2+T^2d))`$, not just attention's quadratic term. Sampling adds $`S`$ passes and possibly additional guidance evaluations. Reducing patch width changes token count and FLOPs even at nearly fixed parameter count.
+**Strengths and limitations:** Its regular blocks make it easier to study larger depth, width, and patch counts. Smaller patches provide finer detail but make attention more expensive. Good class-conditioned images do not demonstrate written-prompt following. Output variety does not give calibrated uncertainty about real objects.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** On class-conditional ImageNet at 256-by-256, image -> frozen VAE latent -> noised patches plus class -> DiT -> reverse diffusion -> decoded image tests whether a Transformer can replace a U-Net. The [paper](https://arxiv.org/html/2212.09748v2) reports **FID-50K 2.27** for **DiT-XL/2**, after seven million training steps, with classifier-free guidance scale 1.5 and 250 DDPM sampling steps, evaluated using ADM's TensorFlow suite. Unguided generation and the 400,000-step scaling experiments have different results. Architectural regularity and scaling are the technical fit versus U-Nets; the experiment is not an industrial image service or a public business KPI.
+**Computational complexity / scalability notes:** More patches mean more comparisons between patches, as well as more dense-layer work. Smaller patch width therefore increases arithmetic even if weight count barely changes. Generation repeats the network and may add guidance calls.
 
-**Notable vendor implementations/libraries:** The authors' [official PyTorch DiT repository](https://github.com/facebookresearch/DiT) provides weights ported from JAX and distributed training code. It documents small numerical differences across frameworks/precision rather than promising bitwise reproduction.
+**Optional math:** One pass costs $`O(L(Td^2+T^2d))`$. Here $`T`$ counts code patches, $`d`$ is vector width, and $`L`$ counts layers. The first term includes dense-layer work; the second includes all-pairs attention. Sampling adds $`S`$ passes, where $`S`$ counts steps, plus any extra guidance evaluations.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The ImageNet experiment tests class-conditioned generation at 256-by-256. A fixed VAE encodes an image. Noisy code patches and the class label train DiT. Repeated reverse steps produce a code that the decoder turns into an image.
+
+The [paper](https://arxiv.org/html/2212.09748v2) reports **FID-50K 2.27** for **DiT-XL/2** after seven million training steps. FID compares real and generated feature distributions; lower is better. "50K" identifies a 50,000-sample evaluation. The result uses guidance scale 1.5, 250 DDPM sampling steps, and ADM's TensorFlow evaluation suite. Unguided runs and 400,000-step scaling tests have different results. Regular blocks and predictable scaling motivate replacing the U-Net. This was not an industrial image service or a reported business benefit.
+
+**Notable vendor implementations/libraries:** The authors' [official PyTorch repository](https://github.com/facebookresearch/DiT) provides weights converted from JAX and multi-worker training code. It notes small differences across frameworks and numeric precision, rather than promising identical output bits.
 
 **Architecture diagram description:**
 
@@ -619,41 +739,47 @@ patch sequence -> repeated DiT attention/MLP blocks
 denoised latent -> fixed VAE decoder -> image
 ```
 
-**Activation functions used and why:** GELU in Transformer MLPs, softmax attention, and SiLU in conditioning embeddings provide nonlinear feature mixing. Adaptive layer normalization injects conditioning; the final prediction is real-valued.
+**Activation functions used and why:** Dense Transformer layers use smooth GELU units; attention softmax weights information from other patches. Condition vectors use SiLU. Adaptive layer normalization lets time and class information adjust feature scaling. Final predictions are real-valued, not category probabilities.
 
-**Loss function(s):** A diffusion noise-prediction objective with a learned-variance component following the referenced diffusion formulation. Classifier-free conditioning dropout trains conditional and null-condition predictions; this does not remove the supervision supplied by class labels.
+**Loss function(s):** The loss trains noise prediction and a component that learns reverse-step variance, or spread. Sometimes dropping the class condition trains both conditioned and unconditioned predictions for guidance. This does not erase the supervision supplied by class labels.
 
-**Optimization algorithm(s):** The original recipe uses AdamW at a constant $`10^{-4}`$, batch 256, **no weight decay and no learning-rate warmup**. EMA decay is 0.9999. AdamW's name must not be taken as evidence that nonzero decay was used.
+**Optimization algorithm(s):** The original recipe uses AdamW at constant $`10^{-4}`$ (0.0001), batch 256, **no weight decay and no learning-rate warmup**. Weight averaging uses EMA decay 0.9999. The name AdamW does not prove that its weight-decay option was turned on.
 
-**Regularization techniques:** Horizontal flips and EMA are reported; zero initialization and adaLN-Zero improve optimization rather than constituting proof of generalization. The paper did not require the usual strong ViT regularization recipe.
+**Regularization techniques:** The paper reports horizontal flips and moving-average weights. Zero-started controls and adaLN-Zero help training, but do not prove good behavior on unseen data. The paper did not require the usual strong set of Vision Transformer training restrictions.
 
-**Backpropagation considerations:** Random-time denoising avoids differentiating an entire sampling chain. Zero-initialized residual modulation controls early gradient flow. Long patch sequences increase attention activations; activation checkpointing trades recomputation for memory.
+**Backpropagation considerations:** Random-time noise training avoids tracking feedback through the entire sampling chain. Zero-started shortcut controls regulate early feedback. Long patch lists require more attention memory. Activation checkpointing saves memory by recomputing some intermediate results later.
 
-**Parameter count / scaling behavior:** The reported DiT-XL/2 adaLN-Zero denoiser has approximately 675 million parameters, excluding the VAE. At 256 resolution its forward work is about 118.6 GFLOPs in the paper's accounting; FLOPs and parameter counts are not interchangeable.
+**Parameter count / scaling behavior:** The reported DiT-XL/2 adaLN-Zero denoiser has approximately 675 million parameters, excluding the VAE. At 256 resolution, one forward pass uses about 118.6 GFLOPs in the paper's accounting. GFLOPs means billions of floating-point arithmetic operations. Operations and stored weights measure different things.
 
-**Training paradigm:** Supervised class-conditioned generation with synthetic noise targets. This entry sits beside unconditional diffusion for architectural comparison, not because ImageNet class conditioning is unsupervised.
+**Training paradigm:** This is supervised class-conditioned generation with synthetic noise targets. It appears beside unconditional diffusion to compare network designs. ImageNet class conditioning is not unsupervised.
 
-**Hardware/parallelism considerations:** The paper used JAX on TPU-v3 pods; the official implementation also supports GPU distributed data parallelism. A cited v3-256 configuration and later A100 reproductions are different hardware/protocol records, not generic requirements.
+**Hardware/parallelism considerations:** The paper used JAX on TPU-v3 pods. Official code also splits training batches across GPUs. The cited v3-256 setup and later A100 reproductions describe different hardware and procedures. Neither is a universal requirement.
 
 ### 3.8.5 DALL-E 1
 
-**Name:** DALL-E 1, the original discrete-VAE/autoregressive text-to-image system.
+**In plain English:** DALL-E 1 reads a caption, then chooses image codes one after another. A decoder turns those codes into pixels; this version does not use diffusion.
 
-**Category & sub-category:** Conditional image generation; discrete image tokenization plus autoregressive sequence modeling. It is not a diffusion generator.
+**Name:** DALL-E 1. The original system combines a discrete VAE image tokenizer with a next-token Transformer.
 
-**Originating paper/vendor/year:** Ramesh and colleagues, OpenAI, [*Zero-Shot Text-to-Image Generation*, ICML 2021](https://proceedings.mlr.press/v139/ramesh21a.html).
+**Category & sub-category:** Text-conditioned image generation using discrete codes. It predicts each new code from earlier ones, called autoregression, rather than diffusion.
 
-**Core mechanism:** Train a discrete VAE to convert images into a grid of categorical tokens. Freeze the tokenizer and train a decoder-only Transformer on concatenated caption and image-token streams. At inference, a caption supplies the prefix and the Transformer generates image tokens, which the discrete-VAE decoder renders.
+**Originating paper/vendor/year:** Ramesh and colleagues at OpenAI presented [*Zero-Shot Text-to-Image Generation*, ICML 2021](https://proceedings.mlr.press/v139/ramesh21a.html).
 
-**Inputs/outputs and typical data types:** Internet image-caption pairs train the system; a text prompt yields image candidates. The [paper](https://ar5iv.labs.arxiv.org/html/2102.12092) uses up to 256 BPE text tokens and 1,024 image tokens for a 32-by-32 token grid, with an 8,192-entry image vocabulary.
+**Core mechanism:** First train a discrete VAE to turn images into grids of code choices, or tokens. Keep that tokenizer fixed. Put each caption's tokens before its image tokens and train a decoder-only Transformer to predict the next token. During generation, supply the caption and let it choose image tokens in order. The image decoder renders the completed grid.
 
-**Strengths and limitations:** A shared token sequence enables broad natural-language conditioning without designing a separate task-specific generator for every class. The discrete bottleneck loses detail, and autoregressive sampling is sequential. Sampling temperature and contrastive reranking affect diversity; neither is a calibrated confidence estimate for compositional correctness.
+**Inputs/outputs and typical data types:** Internet image-caption pairs train the system. A text prompt produces image candidates. The [paper](https://ar5iv.labs.arxiv.org/html/2102.12092) uses up to 256 BPE text tokens, which are word pieces. It uses 1,024 image tokens in a 32-by-32 grid, with 8,192 possible image-code choices.
 
-**Computational complexity / scalability notes:** Tokenizer training is separate from Transformer training. The Transformer uses structured sparse image attention, so a universal dense $`T^2`$ estimate is inappropriate for its actual masks. Cached generation still proceeds one image token at a time. Generating and reranking many candidates multiplies inference cost.
+**Strengths and limitations:** A single token sequence supports many text descriptions without a separate generator for each class. But image codes lose detail, and generation proceeds sequentially. Temperature changes how adventurous token choices are. Matching-based reranking chooses preferred candidates. Neither gives a calibrated chance that the image combines requested objects correctly.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [original study](https://ar5iv.labs.arxiv.org/html/2102.12092) trained on approximately 250 million image-text pairs and evaluated text-to-image transfer on MS-COCO without training directly on its task split. Caption -> text tokens -> autoregressive image codes -> dVAE decoder -> contrastive candidate ranking gives the evaluated output. The paper reports favorable human comparisons and diverse compositional examples; its illustrated comparison chooses the best of 512 candidates using the contrastive model. That selection budget matters, so no unmatched single-sample FID or preference claim is substituted here. Its technical fit versus a class-specific GAN is broader language conditioning. Zero-shot evaluation does not mean absence of paired supervision or guaranteed absence of all source-image overlap. No public business KPI is established.
+**Computational complexity / scalability notes:** Tokenizer training is separate from Transformer training. Image attention only checks selected positions using structured masks, so it is not ordinary all-pairs attention. Saving earlier computations helps, but image tokens still arrive one at a time. Producing and ranking many candidates adds substantial work.
 
-**Notable vendor implementations/libraries:** OpenAI released the [DALL-E discrete VAE](https://github.com/openai/DALL-E), not the complete original large autoregressive model. Community implementations and later similarly named systems are not the proprietary trained checkpoint.
+**Optional math:** Dense attention's $`T^2`$ pair count, where $`T`$ counts sequence tokens, does not describe this model's actual sparse image masks.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [original study](https://ar5iv.labs.arxiv.org/html/2102.12092) trained on approximately 250 million image-text pairs. It tested MS-COCO text-to-image transfer without directly training on that task's split. Captions became tokens; the Transformer generated image codes; the discrete VAE decoded them. A contrastive model then ranked candidates by image-text matching.
+
+The paper reports favorable human comparisons and varied combinations of concepts. Its illustrated comparison picks the best of 512 candidates. That budget matters: it cannot be replaced by a claim about one unselected sample. No unmatched FID, a feature-distribution distance where lower is better, or preference score is substituted here. The advantage over a class-specific GAN is broader language control. "Zero-shot" does not mean no paired supervision or proven absence of source-image overlap. No public business performance measure is established.
+
+**Notable vendor implementations/libraries:** OpenAI released the [DALL-E discrete VAE](https://github.com/openai/DALL-E), not the complete large next-token model. Community implementations and later similarly named systems are not the original proprietary checkpoint.
 
 **Architecture diagram description:**
 
@@ -665,41 +791,47 @@ generation: caption prefix -> sampled image codes -> dVAE decoder -> image
                                                       -> optional candidate reranking
 ```
 
-**Activation functions used and why:** The [released dVAE encoder](https://github.com/openai/DALL-E/blob/master/dall_e/encoder.py) and decoder use ReLU hidden activations. Categorical softmax outputs represent image codes and next-token distributions. Gumbel-softmax supplies a differentiable tokenizer-training relaxation, distinct from nearest-code straight-through VQ-VAE training. These tokenizer details do not establish every hidden activation in the unreleased large Transformer.
+**Activation functions used and why:** The [released dVAE encoder](https://github.com/openai/DALL-E/blob/master/dall_e/encoder.py) and decoder use ReLU hidden units. Softmax turns code or next-token scores into probabilities. Gumbel-softmax makes categorical choices temporarily smooth enough for error feedback during tokenizer training. That differs from VQ-VAE's nearest-code straight-through approximation. These tokenizer facts do not reveal every activation in the unreleased Transformer.
 
-**Loss function(s):** The tokenizer optimizes a relaxed variational objective with a log-Laplace image likelihood. Stage two uses autoregressive cross-entropy, with separately normalized text and image losses weighted $`1/8`$ and $`7/8`$, respectively, in the paper.
+**Loss function(s):** The tokenizer learns to explain images through discrete codes, using a smooth approximation during training. Its pixel-probability rule is called a log-Laplace likelihood. The Transformer then uses cross-entropy to penalize incorrect next-token predictions.
 
-**Optimization algorithm(s):** Both stages use Adam with exponentially averaged iterates. The dVAE uses annealed relaxation temperature and step size; the paper identifies temperature annealing to $`1/16`$. These stage-specific schedules should not be confused with diffusion noise scheduling, which this generator does not use.
+**Technical detail (optional):** The tokenizer uses a relaxed variational objective. Stage two separately normalizes the text and image losses, then weights them $`1/8`$ and $`7/8`$, respectively. These fractions control each part's contribution.
 
-**Regularization techniques:** The discrete bottleneck, structured attention, and training-data processing constrain learning. The contrastive reranker changes output selection rather than regularizing the trained autoregressive likelihood.
+**Optimization algorithm(s):** Both stages use Adam and exponentially averaged weights. The discrete VAE gradually lowers both its code-choice relaxation temperature and step size. The paper lowers that temperature to $`1/16`$, making choices less soft. These are stage-specific learning schedules, not diffusion noise schedules.
 
-**Backpropagation considerations:** Relaxed categorical gradients train the tokenizer; Transformer training uses fixed image tokens. The paper documents per-residual-block gradient scaling and higher-precision residual paths to address low-precision underflow/overflow at large scale.
+**Regularization techniques:** A finite code grid, restricted attention, and training-data processing constrain learning. The contrastive reranker only changes which generated output is selected. It does not regularize the Transformer's trained probability model.
 
-**Parameter count / scaling behavior:** The autoregressive Transformer has 12 billion parameters and 64 self-attention layers in the reported system. Tokenizer and reranker are separate components; 12 billion is not an inventory of every serving component.
+**Backpropagation considerations:** Smooth approximate code choices let feedback train the tokenizer. Transformer training uses fixed image tokens instead. The paper rescales gradients per shortcut block and uses higher-precision shortcut paths. This addresses numbers becoming too tiny or too large during low-precision training.
 
-**Training paradigm:** Image-only tokenization followed by naturally paired image-text supervised modeling. Predicting the next token supplies a self-supervised objective over the paired sequence, but captions still provide semantic supervision.
+**Parameter count / scaling behavior:** The reported next-token Transformer has 12 billion parameters and 64 self-attention layers. Tokenizer and reranker are separate. The 12 billion figure does not count every component needed to serve outputs.
 
-**Hardware/parallelism considerations:** The paper describes parameter sharding across eight GPUs within each machine, all-gather before block computation, and reduce-scatter for gradients. Training scale and multi-candidate decoding require different resource accounting.
+**Training paradigm:** Image-only tokenizer training comes first. Learning from natural image-text pairs comes next. Predicting the next token is self-supervised within the paired sequence, but captions still supply meaning-based supervision.
+
+**Hardware/parallelism considerations:** The paper spreads weights across eight GPUs within each machine. All-gather collects needed weights before a block runs; reduce-scatter combines and redistributes gradients afterward. Training resources and the cost of generating many candidates must be counted separately.
 
 ### 3.8.6 DALL-E 2
 
-**Name:** DALL-E 2, represented by the published unCLIP generative stack.
+**In plain English:** DALL-E 2 first predicts a compact description of visual content from text. Diffusion models use that description to create an image, then enlarge it.
 
-**Category & sub-category:** Conditional image generation; CLIP-latent prior plus diffusion decoding and super-resolution.
+**Name:** DALL-E 2. This entry describes its published unCLIP generation pipeline.
 
-**Originating paper/vendor/year:** Ramesh and colleagues, OpenAI, [*Hierarchical Text-Conditional Image Generation with CLIP Latents*, 2022](https://arxiv.org/abs/2204.06125).
+**Category & sub-category:** Conditional image generation. It predicts a CLIP image-feature vector, decodes it with diffusion, and uses further diffusion models to increase resolution.
 
-**Core mechanism:** Learn a prior that predicts a CLIP image embedding from text, then a diffusion decoder that reconstructs an image conditioned on that embedding. The study compares autoregressive and diffusion priors; the decoder is diffusion-based in both cases. Two diffusion upsamplers increase image resolution. This is not DALL-E 1's discrete-image-token Transformer.
+**Originating paper/vendor/year:** Ramesh and colleagues at OpenAI described [*Hierarchical Text-Conditional Image Generation with CLIP Latents*, 2022](https://arxiv.org/abs/2204.06125).
 
-**Inputs/outputs and typical data types:** Paired captions and images train the components. Text -> image embedding -> base image -> upsampled image is the text-to-image route. Encoding an existing image supplies an alternative conditioning embedding for variations.
+**Core mechanism:** CLIP learns image-text matching and can describe an image with a number vector, or embedding. DALL-E 2 trains a prior to predict such an image vector from text. A diffusion decoder generates an image using that vector. Two further diffusion models enlarge it. The study compares autoregressive and diffusion priors, but both use a diffusion image decoder. This differs from DALL-E 1's sequential image-token Transformer.
 
-**Strengths and limitations:** CLIP embeddings provide a semantic intermediate representation and support image variations. They discard some spatial detail, and embeddings do not uniquely specify a scene. Prior and decoder errors accumulate; the spread of generated variations is not a calibrated posterior over the original image or a guarantee of textual correctness.
+**Inputs/outputs and typical data types:** Matching captions and images train the components. Text becomes an image vector, then a small image, then a larger image. Encoding an existing image instead supplies a vector for generating variations.
 
-**Computational complexity / scalability notes:** Inference cost includes prior sampling, base decoder sampling, and both upsamplers; no single network count describes it. Spatial upsamplers can have high compute despite smaller parameter counts. Guidance and candidate selection alter both cost and sample distribution.
+**Strengths and limitations:** CLIP vectors describe broad content and support image variations. They lose some spatial detail, so a vector does not uniquely identify a scene. Errors from the prior and decoder can add up. Variation among outputs is not a calibrated probability distribution over the original image or a guarantee of prompt correctness.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [unCLIP study](https://ar5iv.labs.arxiv.org/html/2204.06125) evaluates zero-shot MS-COCO caption-conditioned image generation and image variations. Caption -> prior-predicted CLIP image embedding -> 64-by-64 decoder -> 256 and 1,024 upsamplers yields an image for human/metric evaluation. The paper reports favorable zero-shot image-quality results and compares the two priors, choosing diffusion as the preferred cost/quality trade-off. That documented choice is stronger evidence than attributing a generic preference for diffusion to all commercial users. The generative stack uses the approximately 250-million-image DALL-E dataset; its CLIP encoder training uses a different data mixture. No audited public business KPI is reported, and the research recipe must not be assumed to enumerate every later production revision.
+**Computational complexity / scalability notes:** Count prior generation, base-image generation, and both enlargement stages. A smaller enlargement network may still do heavy work on a large pixel grid. Guidance and candidate selection change both computation and which outputs are likely.
 
-**Notable vendor implementations/libraries:** OpenAI operated the proprietary DALL-E 2 service. Open-source unCLIP-style implementations reproduce ideas, not the original production weights; a library interface does not establish checkpoint equivalence.
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [unCLIP study](https://ar5iv.labs.arxiv.org/html/2204.06125) tests zero-shot MS-COCO caption-to-image generation and image variations. A caption drives the prior's CLIP image vector. The decoder makes a 64-by-64 image; upsamplers enlarge it to 256 and 1,024 resolution. People and metrics then evaluate the results.
+
+The paper reports favorable zero-shot image quality and compares the two priors. It chooses diffusion for its cost/quality trade-off. That is a documented research choice, not proof of a preference among all commercial users. The generation stages use the approximately 250-million-image DALL-E dataset. CLIP encoder training uses a different mixture. No audited public business measure is reported, and this recipe does not describe every later production revision.
+
+**Notable vendor implementations/libraries:** OpenAI operated the proprietary DALL-E 2 service. Open-source unCLIP-style systems reproduce ideas, not the original production weights. Similar library interfaces do not make checkpoints equivalent.
 
 **Architecture diagram description:**
 
@@ -711,41 +843,45 @@ noise + embedding [+ text] -> diffusion decoder -> 64x64 image
                          -> diffusion upsampler -> 1024x1024
 ```
 
-**Activation functions used and why:** The published decoder inherits GLIDE's residual/attention architecture; its [U-Net implementation](https://github.com/openai/glide-text2im/blob/main/glide_text2im/unet.py) uses smooth SiLU nonlinearities and attention softmax. The diffusion prior has continuous embedding output; the AR prior requires discrete prediction heads. Undisclosed serving changes cannot be inferred from these components.
+**Activation functions used and why:** The published decoder follows GLIDE's shortcut-and-attention design. Its [U-Net code](https://github.com/openai/glide-text2im/blob/main/glide_text2im/unet.py) uses smooth SiLU units and softmax attention weights. The diffusion prior outputs continuous vector values. The autoregressive prior needs discrete-choice output layers. These components do not reveal undisclosed service changes.
 
-**Loss function(s):** The diffusion prior predicts the clean CLIP image embedding with a squared denoising objective. The base decoder uses the referenced diffusion noise/learned-variance training; upsamplers learn conditional denoising. A frozen CLIP similarity is conditioning information, not the entire generator loss.
+**Loss function(s):** The diffusion prior predicts the clean CLIP image vector, penalizing squared errors. The base decoder learns noise and reverse-step variance, or spread. Upsamplers learn to reverse noise while using a smaller image as a condition. Frozen CLIP features guide generation; CLIP similarity is not the whole generator loss.
 
-**Optimization algorithm(s):** The [paper's hyperparameter table](https://ar5iv.labs.arxiv.org/html/2204.06125) specifies Adam settings, including diffusion-prior rate $`1.1\times10^{-4}`$ and base-decoder rate $`1.2\times10^{-4}`$, with stage-specific EMA. It uses cosine noising for the prior/base/first upsampler and linear noising for the final upsampler. The table's rates do not fully specify every learning-rate transition in a commercial training run.
+**Optimization algorithm(s):** The [paper's settings table](https://ar5iv.labs.arxiv.org/html/2204.06125) specifies Adam, including diffusion-prior rate $`1.1\times10^{-4}`$ and base-decoder rate $`1.2\times10^{-4}`$. Weight averaging differs by stage. The prior, base decoder, and first upsampler use cosine-shaped noise schedules. The last upsampler uses a linear noise schedule. These describe damage, not every learning-rate change in a commercial run.
 
-**Regularization techniques:** Conditioning dropout supports guidance; image corruption improves upsampler robustness. The prior has weight decay, while dropout and EMA differ by stage. CLIP remains frozen during prior/decoder training.
+**Regularization techniques:** Occasionally removing conditions supports guidance. Damaging input images helps upsamplers handle imperfect inputs. The prior uses weight decay; dropout and moving-average settings differ by stage. CLIP weights stay fixed while the prior and decoder train.
 
-**Backpropagation considerations:** Each stage has a distinct objective; gradients do not jointly flow through a frozen CLIP encoder and the complete sampled pipeline. Numerical scaling of continuous CLIP embeddings is important. Learned variance and multiple conditioning inputs complicate mixed-precision stability.
+**Backpropagation considerations:** Each stage has its own training goal. Feedback does not run jointly through fixed CLIP weights and the full sampled pipeline. Scaling CLIP vector values matters. Predicting variance and using several conditions require care when mixing numeric precision levels.
 
-**Parameter count / scaling behavior:** The paper lists roughly 1 billion parameters for either prior, 3.5 billion for the base decoder, and 700/300 million for the upsamplers. These component counts are not a single complete DALL-E 2 service count.
+**Parameter count / scaling behavior:** The paper lists roughly 1 billion parameters for either prior and 3.5 billion for the base decoder. The upsamplers have 700/300 million. These are component counts, not a complete inventory of the DALL-E 2 service.
 
-**Training paradigm:** Naturally paired text-image supervision plus diffusion targets. CLIP pretraining and each generative stage are distinct; the larger CLIP data mixture must not be claimed as the decoder's training dataset.
+**Training paradigm:** Natural image-text pairs supply supervision alongside diffusion targets. CLIP pretraining and the generation stages are separate. The larger CLIP data mixture must not be described as the decoder's training dataset.
 
-**Hardware/parallelism considerations:** Large components motivate accelerator data/model parallelism and checkpointing. The checked paper does not provide a complete production hardware inventory; do not invent device counts or infer training cost from API pricing.
+**Hardware/parallelism considerations:** Large components benefit from splitting examples or model weights across accelerators. Recomputing saved intermediate results can trade work for memory. The checked paper does not give a full production hardware inventory. Device counts and training cost cannot be inferred from API prices.
 
 ### 3.8.7 DALL-E 3
 
-**Name:** DALL-E 3, a proprietary text-to-image system whose published research emphasizes caption quality.
+**In plain English:** DALL-E 3's published research shows how richer image descriptions can improve prompt following. Its complete image-generator design is not publicly disclosed in that report.
 
-**Category & sub-category:** Conditional image generation; descriptive recaptioning and improved prompt following. It is included in the image-generation family without asserting a disclosed low-level denoiser architecture.
+**Name:** DALL-E 3. It is a proprietary text-to-image system; the published study focuses on better training captions.
 
-**Originating paper/vendor/year:** Betker and colleagues, OpenAI with Microsoft collaborators, [*Improving Image Generation with Better Captions*, 2023](https://cdn.openai.com/papers/dall-e-3.pdf).
+**Category & sub-category:** Conditional image generation using more descriptive replacement captions. Its placement here does not imply that the report discloses a detailed noise-prediction network.
 
-**Core mechanism:** The report trains an image captioner to create more descriptive image-text training pairs and investigates their effect on text-to-image learning. It discusses text-to-image diffusion models, but explicitly does not cover DALL-E 3's complete training or implementation details. Therefore a U-Net, DiT, latent codec, layer layout, or DALL-E 2-style prior cannot be supplied as a verified DALL-E 3 architecture.
+**Originating paper/vendor/year:** Betker and colleagues at OpenAI, with Microsoft collaborators, published [*Improving Image Generation with Better Captions*, 2023](https://cdn.openai.com/papers/dall-e-3.pdf).
 
-**Inputs/outputs and typical data types:** Training uses images with original or generated descriptions; generation takes a text request and returns images. Prompt expansion is a separate possible language-model stage, not proof that the image generator itself is an autoregressive language model.
+**Core mechanism:** Train a captioning system to write richer descriptions of images. Use those descriptions as training pairs and test whether generation follows text better. The report discusses text-to-image diffusion, but explicitly leaves out DALL-E 3's full training and implementation. It does not verify a U-Net, DiT, image-code system, layer layout, or DALL-E 2-style prior for the full generator.
 
-**Strengths and limitations:** Detailed captions can expose object attributes and relationships omitted by noisy alt-text. Captioners can also hallucinate, omit information, and impose stylistic biases. Better prompt following is not image factuality or correctness on every prompt. Candidate variation and any safety decision are not calibrated user-facing probabilities of correctness.
+**Inputs/outputs and typical data types:** Images have original or generated descriptions during training. A text request produces images. A language model may separately expand the request before generation. That does not prove the image generator itself predicts language tokens in sequence.
 
-**Computational complexity / scalability notes:** Dataset recaptioning adds offline image-encoding and language-generation work. Actual generator inference/training FLOPs cannot be calculated from the published report because its full architecture and recipe are absent. Any numerical cost estimate would require additional disclosed assumptions, not a borrowed DALL-E 2 parameter count.
+**Strengths and limitations:** Detailed captions can reveal object properties and relationships missing from messy web descriptions. Captioners can also invent details, omit information, or favor certain styles. Better prompt following does not guarantee factual images or success on every request. Output variety and safety decisions are not calibrated probabilities of correctness.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [report](https://cdn.openai.com/papers/dall-e-3.pdf) studies instruction following using DrawBench, COCO-derived captions, and compositional evaluation. Image plus noisy caption -> descriptive captioning -> text-to-image training -> generated images -> human and automated evaluation tests whether richer pairing improves adherence. It reports improved prompt-following behavior and favorable comparisons while retaining limitations. The [official evaluation repository](https://github.com/openai/dalle3-eval-samples) releases four images per DrawBench prompt and distinguishes original from expanded prompts. Those are benchmark samples, not curated product demonstrations; the repository explicitly makes that distinction. The method fit is better supervision rather than an asserted undisclosed architectural advantage. No public audited business KPI is provided.
+**Computational complexity / scalability notes:** Writing new dataset captions adds work before image-generator training: images must be encoded and descriptions generated. The report lacks enough architecture and recipe details to calculate generator training or sampling operations, often measured as FLOPs. Numerical estimates need further disclosed assumptions. Borrowing DALL-E 2's weight count would not supply them.
 
-**Notable vendor implementations/libraries:** OpenAI's proprietary DALL-E 3 interfaces and [official evaluation artifacts](https://github.com/openai/dalle3-eval-samples). Evaluation samples are not model weights or a reproducible training implementation. Service availability and product routing can change independently of this historical model description.
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [report](https://cdn.openai.com/papers/dall-e-3.pdf) studies DrawBench, COCO-derived captions, and tests of combining requested concepts correctly. It replaces noisy captions with richer descriptions, trains image generation, and evaluates outputs with people and automated measures. It reports improved prompt following and favorable comparisons, while retaining limitations.
+
+The [official evaluation repository](https://github.com/openai/dalle3-eval-samples) releases four images per DrawBench prompt. It distinguishes original from expanded prompts and explicitly calls these benchmark samples, not curated product demonstrations. Better supervision is the supported explanation, not an invented advantage from unknown network internals. No public audited business performance measure is provided.
+
+**Notable vendor implementations/libraries:** OpenAI supplies proprietary DALL-E 3 interfaces and [official evaluation artifacts](https://github.com/openai/dalle3-eval-samples). Samples are not model weights or enough code to reproduce training. Service availability and which model a product uses can change independently of this historical description.
 
 **Architecture diagram description:**
 
@@ -759,55 +895,63 @@ text request -> [optional prompt expansion] -> proprietary image generator -> im
 No verified internal U-Net/DiT/codec/prior diagram is publicly supplied here.
 ```
 
-**Activation functions used and why:** Full generator activation and normalization choices are not publicly disclosed in the cited report. The captioner's language objective uses token probabilities, but that does not establish hidden activations throughout DALL-E 3. Assigning GELU, SiLU, or a particular normalization to undisclosed blocks would be invention.
+**Activation functions used and why:** The full generator's activation and normalization choices are not publicly disclosed in the cited report. The captioner predicts word-piece probabilities. This does not reveal the image generator's hidden units. Naming GELU, SiLU, or a particular rescaling method for unknown blocks would invent details.
 
-**Loss function(s):** The report describes image-conditioned language likelihood and joint contrastive/language pretraining for its captioner. Its exact final image-generator loss, noise-prediction parameterization, auxiliary penalties, and weights are not sufficiently disclosed to write a verified complete objective.
+**Loss function(s):** The captioner learns to predict language from images. Its pretraining combines image-text matching with language prediction: matching rewards correct pairs over wrong ones. The exact final image-generator loss is not sufficiently disclosed. Neither are its noise target, extra penalties, or their weights, so a complete verified formula cannot be given.
 
-**Optimization algorithm(s):** DALL-E 3 generator optimizer, learning-rate schedule, gradient-clipping thresholds, and detailed noise/sampling schedules are not publicly specified by this report. DALL-E 2's Adam table is not evidence for them.
+**Optimization algorithm(s):** The report does not publicly specify the generator's optimizer, learning-rate schedule, gradient limits, or detailed noise and sampling schedules. DALL-E 2's Adam settings do not establish DALL-E 3's settings.
 
-**Regularization techniques:** Mixing original and synthetic captions addresses captioner-induced distributional regularities. The paper's caption ablations include 95% synthetic-caption conditions; that experimental fraction should not be promoted into a fully disclosed final production recipe. Exact weight decay, dropout, and normalization remain undisclosed.
+**Regularization techniques:** Mixing original and generated captions helps address repeated patterns introduced by the captioner. Tests of caption mixtures include **95% synthetic-caption conditions**. That experimental fraction is not a fully disclosed final production recipe. Exact weight decay, dropout, and normalization remain undisclosed.
 
-**Backpropagation considerations:** Offline generated captions are discrete training data, not evidence of end-to-end gradients through a sampled captioner into the image generator. The report does not establish final-generator gradient estimators, precision handling, or distributed synchronization.
+**Backpropagation considerations:** Captions generated beforehand are fixed text training data. They do not show that error feedback runs through caption generation and image generation together. The report does not establish the final generator's gradient method, numeric precision handling, or coordination across workers.
 
-**Parameter count / scaling behavior:** Not publicly disclosed for the full DALL-E 3 generator in this source. Resolution, output quality, or API latency cannot reliably identify parameter count, expert count, or active compute.
+**Parameter count / scaling behavior:** The full DALL-E 3 generator's parameter count is **not publicly disclosed** in this source. Resolution, output quality, and API response time do not reliably reveal weight count, number of expert subnetworks, or computation actually used.
 
-**Training paradigm:** Conditional, naturally paired and synthetically enriched language supervision. Caption generation does not erase supervision; the captioner itself has a training history. Public evaluation and prompt expansion are separate from the unknown full image-training recipe.
+**Training paradigm:** Natural image-text pairs and generated descriptions supply language supervision. Generated captions do not erase that supervision; the captioner also learned from earlier data. Public tests and prompt expansion are separate from the unknown complete image-training recipe.
 
-**Hardware/parallelism considerations:** Exact production training accelerators, fleet size, sharding, and utilization are undisclosed. Large-scale captioning/generation generally benefits from accelerators, but that engineering observation is not a sourced DALL-E 3 hardware specification.
+**Hardware/parallelism considerations:** Exact training accelerators, fleet size, division of weights across devices, and utilization are undisclosed. Large captioning and generation jobs generally benefit from accelerators. That general observation is not a sourced DALL-E 3 hardware specification.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| DDPM | Images and other continuously corrupted data | Simple denoising training | Original iterative sampling is slow | Unconditional CIFAR-10 generation |
-| Score-based SDE models | Continuous data and modeled inverse problems | Unified stochastic/ODE formulation | Solver and score approximation errors | NCSN++ continuous deep on CIFAR-10 |
-| Latent diffusion / Stable Diffusion | Images with optional text/image conditions | Denoising in a compressed spatial space | Lossy codec and checkpoint-specific behavior | Stable Diffusion v1.4 COCO2017 evaluation |
-| DiT | Latent image patches with conditions | Systematic Transformer scaling | Token-count cost and supervised class conditioning | DiT-XL/2 ImageNet generation |
-| DALL-E 1 | Paired images and natural-language captions | Autoregressive image-token generation | Sequential decoding and tokenizer loss | Zero-shot MS-COCO text-to-image research |
-| DALL-E 2 | Paired images/text; semantic image embeddings | Prior plus diffusion decoding and variations | Multi-stage error and compute | unCLIP caption/image-variation evaluation |
-| DALL-E 3 | Images with descriptive paired captions | Improved prompt following through caption quality | Proprietary internal recipe and residual errors | DrawBench and compositional evaluation |
+| DDPM | Images and data with continuously valued noise | Learns by predicting known added noise | Original generation takes many steps | CIFAR-10 generation without class conditions |
+| Score-based SDE models | Continuous data; reconstruction from measurements | Offers several continuous-time sampling rules | Imperfect directions and numerical steps cause error | Deep continuous NCSN++ tests on CIFAR-10 |
+| Latent diffusion / Stable Diffusion | Images, optionally paired with text or image conditions | Predicts noise on smaller code grids | Lost code detail and version differences | COCO2017 tests of Stable Diffusion v1.4 |
+| DiT | Conditioned patches of image codes | Regular blocks make scaling easier to study | Many patches cost more; original model uses class labels | ImageNet tests of DiT-XL/2 |
+| DALL-E 1 | Matching images and captions | Generates image codes from a text prefix | Sequential code choices and lost detail | MS-COCO zero-shot generation tests |
+| DALL-E 2 | Matching images/text and image-feature vectors | Generates through CLIP vectors and supports variations | Several stages add errors and work | unCLIP caption and image-variation tests |
+| DALL-E 3 | Images paired with detailed descriptions | Richer captions improve prompt following | Unknown full recipe and remaining mistakes | DrawBench and concept-combination tests |
 
 ## 3.9 Flows and autoregression
 
-Normalizing flows use invertibility and change of variables to evaluate a continuous density. Autoregressive models factor a joint probability into conditionals. Both permit likelihood-based training, but have different sampling costs. A continuous density evaluated on dequantized pixels is not automatically an exact discrete image probability, and high likelihood alone is not a reliable out-of-distribution detector.
+Flows transform data through steps that can each be undone. By tracking how these steps stretch or shrink values, they can calculate a continuous probability density. Density describes how probability is spread across ranges; it is not itself the probability of one exact value.
+
+Autoregressive models instead predict each new value using earlier values. Both approaches train by making observed data more likely, but generation costs differ. Image pixels often receive small added noise, called dequantization, before continuous modeling. A density at those noisy values is not automatically an exact probability for the original discrete image. High likelihood alone also does not reliably identify whether data is familiar or appropriate.
 
 ### 3.9.1 RealNVP
 
-**Name:** Real-valued non-volume-preserving transformation model (RealNVP).
+**In plain English:** RealNVP learns reversible steps between data and a simpler random code. It can both encode an example and run the steps backward to generate a new one.
 
-**Category & sub-category:** Unsupervised density estimation; neural normalizing flows with affine coupling.
+**Name:** Real-valued non-volume-preserving transformation model, or RealNVP. Its transformations can stretch or shrink the space of values.
 
-**Originating paper/vendor/year:** Dinh, Sohl-Dickstein, and Bengio, [*Density Estimation using Real NVP*, arXiv 2016, ICLR 2017](https://arxiv.org/abs/1605.08803), extending earlier additive-coupling flow ideas.
+**Category & sub-category:** Unsupervised density estimation using normalizing flows. Its coupling steps scale and shift one part of the data using another part.
 
-**Core mechanism:** Split an input into two parts. Keep one unchanged and transform the other using scale and translation predicted from the first: $`y_a=x_a,\ y_b=x_b\odot\exp s(x_a)+t(x_a)`$. The Jacobian is triangular, so its log determinant is the sum of predicted log scales. Alternating masks and a multiscale design let all coordinates eventually interact.
+**Originating paper/vendor/year:** Dinh, Sohl-Dickstein, and Bengio presented [*Density Estimation using Real NVP*, arXiv 2016, ICLR 2017](https://arxiv.org/abs/1605.08803). It extends earlier flows that used additive coupling.
 
-**Inputs/outputs and typical data types:** Continuous vectors or suitably preprocessed/dequantized images enter. Outputs are latent values, continuous log densities, and generated observations obtained by reversing the transformations. The internal scale/translation networks need not themselves be invertible.
+**Core mechanism:** Split the input into two parts. Keep one part unchanged. Use it to predict how to scale and shift the other. Because the first part remains available, the second change can be undone. Repeated layers swap which values they hold fixed and work at several scales. This lets all values eventually influence one another.
 
-**Strengths and limitations:** Exact latent inversion and tractable continuous-density evaluation distinguish it from GANs and approximate-posterior VAEs. The coupling structure limits flexibility per layer, often requiring many layers. Likelihood can reward low-level statistics unrelated to semantic typicality; it is not an automatic calibrated anomaly probability.
+**Optional math:** A layer uses $`y_a=x_a,\ y_b=x_b\odot\exp s(x_a)+t(x_a)`$. Here $`x_a,x_b`$ are input parts, $`y_a,y_b`$ output parts, and $`s,t`$ learned log-scale and shift functions. The symbol $`\odot`$ means coordinate-by-coordinate multiplication. The Jacobian records how outputs change with inputs. Its triangular structure makes its log determinant, the total log stretch, a sum of predicted log scales.
 
-**Computational complexity / scalability notes:** Coupling-network evaluations dominate cost; the determinant calculation is linear in transformed dimensions rather than cubic in full input dimension. Layers remain sequential, but each layer transforms many coordinates in parallel. Full dense Jacobian materialization is unnecessary.
+**Inputs/outputs and typical data types:** Inputs are continuous number lists or images with suitable preprocessing and added noise. Outputs include codes, continuous log densities, and generated data from reverse steps. The internal networks predicting scale and shift need not be reversible themselves.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [RealNVP paper](https://ar5iv.labs.arxiv.org/html/1605.08803) studies CIFAR-10, downsampled ImageNet, LSUN, and CelebA density modeling. Image -> preprocessing and invertible coupling layers -> Gaussian latent and accumulated log determinant -> likelihood evaluation or inverse sampling tests a model that supports both encoding and generation. It reports **3.49 bits/dimension on CIFAR-10's test set** under its image-likelihood protocol, worse than the listed PixelRNN 3.00 despite parallelizable synthesis. Thus its technical fit is tractability and fast inverse sampling, not winning every likelihood benchmark. Continuous preprocessing/dequantization conventions must be retained when interpreting the number. No deployed compression service or commercial saving is established.
+**Strengths and limitations:** The model provides exact mathematical inversion and manageable continuous-density calculations, unlike ordinary GANs or approximate-code VAEs. Each coupling layer is restricted, so many layers may be needed. High likelihood can reward superficial statistics rather than meaningful familiarity. It is not automatically a calibrated chance of an anomaly.
 
-**Notable vendor implementations/libraries:** TensorFlow Probability bijectors and Pyro coupling transforms provide RealNVP-style building blocks. A generic affine-coupling distribution is not necessarily the original paper's complete multiscale network.
+**Computational complexity / scalability notes:** Most work is in the scale-and-shift networks. The stretch calculation grows directly with transformed values, rather than with the cube of total input size. There is no need to build the whole Jacobian matrix. Layers run in order, but each handles many values in parallel.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [paper](https://ar5iv.labs.arxiv.org/html/1605.08803) models CIFAR-10, downsampled ImageNet, LSUN, and CelebA. Preprocessing and reversible layers map an image to Gaussian codes while tracking total stretch. This supports both likelihood evaluation and reverse generation.
+
+It reports **3.49 bits/dimension on CIFAR-10's test set**, compared with PixelRNN's listed 3.00. Bits/dimension is a likelihood-based coding measure per pixel-channel value; lower is better. The number depends on the paper's continuous preprocessing and dequantization rules. It must not be read as an exact discrete-image probability. RealNVP offers manageable density calculations and fast reverse sampling, not the best result on every likelihood test. This is not a measured compression-service rate or a commercial saving.
+
+**Notable vendor implementations/libraries:** TensorFlow Probability's reversible transformations, called bijectors, and Pyro coupling layers provide RealNVP-style parts. A generic scale-and-shift flow need not match the paper's full multiscale network.
 
 **Architecture diagram description:**
 
@@ -819,41 +963,49 @@ x_a -> neural s,t -> scale/shift x_b -> concatenate
 sampling: prior z -> inverse coupling blocks -> x
 ```
 
-**Activation functions used and why:** A conventional neural instantiation uses ReLU residual subnetworks for scale/translation; those subnetworks need not be invertible. The coupling transform uses an exponential positive scale, often with controlled log-scale for stability, and an unbounded translation. Rectification occurs inside the parameter networks, not as a noninvertible replacement for the overall data transformation.
+**Activation functions used and why:** A typical scale-and-shift network uses ReLU and shortcut paths. These internal networks need not be reversible. The full coupling step uses an exponential to keep scales positive and leaves shifts unbounded. Limiting log-scale values helps stability. ReLU belongs inside the prediction network, not as a replacement for the reversible data step.
 
-**Loss function(s):** Negative change-of-variables log likelihood: $`-\log p_Z(f_\theta(x))-\log|\det J_{f_\theta}(x)|`$, including any preprocessing Jacobian. Uniform dequantization supplies a bound-related objective for discrete pixels rather than making their probability equal to a point density.
+**Loss function(s):** Make observed data likely by combining the code's density with the stretch of all transformations. Include preprocessing changes too. Adding uniform noise to discrete pixels gives a bound-related training objective. It does not turn point density into the exact pixel probability.
 
-**Optimization algorithm(s):** The paper uses Adam with its stated default hyperparameters; it does not prescribe a universal learning-rate-decay schedule. A reproduction must record the actual optimizer settings and stopping rule rather than infer them from the flow equations.
+**Optional math:** Minimize $`-\log p_Z(f_\theta(x))-\log|\det J_{f_\theta}(x)|`$. Here $`x`$ is the input and $`f_\theta`$ the flow with weights $`\theta`$. The code prior has density $`p_Z`$. The Jacobian $`J`$ describes local stretching; the absolute determinant measures its size. Its log corrects the code density for that change.
 
-**Regularization techniques:** The original method uses residual subnetworks, normalization, and an L2 penalty on weight-scale parameters. Invertible normalization outside the subnetworks must contribute its own log determinant; otherwise the reported density is wrong.
+**Optimization algorithm(s):** The paper uses Adam with its stated default settings. It does not require one rate-decay schedule. Reproductions must record optimizer settings and when training stops; these cannot be read from the flow equation alone.
 
-**Backpropagation considerations:** Differentiate both prior density and log determinant. Excessive log scales cause overflow or ill-conditioned inversion. Running-statistic normalization must be used consistently at evaluation; batch-dependent transformations require careful density interpretation.
+**Regularization techniques:** The original method uses shortcut subnetworks, normalization, and an L2 penalty, which penalizes squared weight-scale values. Reversible normalization outside those subnetworks also stretches data. Its log determinant must be included or the calculated density is wrong.
 
-**Parameter count / scaling behavior:** Coupling subnetworks and multiscale depth determine $`p`$; invertibility does not mean few parameters. Alternating masks increase expressivity without requiring every subnetwork to be a square invertible matrix.
+**Backpropagation considerations:** Feedback must include both prior density and stretch terms. Extreme log scales can overflow or make reversal numerically unstable. Running normalization statistics must be used consistently during evaluation. Transformations depending on batchmates require special care when interpreting density.
 
-**Training paradigm:** Unsupervised maximum-likelihood learning for the representative image model. Conditioning scale/translation on labels yields a supervised conditional flow.
+**Parameter count / scaling behavior:** Coupling-network size and the number of scales and layers determine weight count. Reversibility does not imply a small model. Alternating which values are held fixed adds flexibility without requiring every internal network to be an invertible square matrix.
 
-**Hardware/parallelism considerations:** GPUs parallelize coupling-network convolutions across positions and examples. Reversible computation can reduce activation storage, but numerical reversibility and recomputation cost must be checked rather than assuming memory is automatically constant.
+**Training paradigm:** The representative image model learns without labels by increasing training-data likelihood. Using labels to choose scales and shifts creates a supervised conditional flow.
+
+**Hardware/parallelism considerations:** GPUs process coupling filters across image positions and examples. Reversing calculations can save intermediate memory, but adds work and numerical risk. Memory does not automatically stay constant just because equations are reversible.
 
 ### 3.9.2 Glow
 
-**Name:** Glow, a generative flow with invertible one-by-one convolutions.
+**In plain English:** Glow learns reversible image transformations and how to mix image channels at each step. It can map an image to a code, then reverse that route to generate or modify images.
 
-**Category & sub-category:** Unsupervised density estimation; multiscale neural normalizing flows.
+**Name:** Glow. It adds learned, reversible one-by-one image-channel mixing to a generative flow.
 
-**Originating paper/vendor/year:** Kingma and Dhariwal, OpenAI, [*Glow: Generative Flow with Invertible 1x1 Convolutions*, NeurIPS 2018](https://arxiv.org/abs/1807.03039).
+**Category & sub-category:** Unsupervised density estimation with reversible neural transformations at several image scales.
 
-**Core mechanism:** Each flow step combines activation normalization, learned invertible channel mixing, and affine coupling. The one-by-one convolution replaces a fixed channel permutation with a learned invertible matrix. Squeeze and split operations build a multiscale latent representation, retaining exact mathematical inversion of the modeled continuous transformation.
+**Originating paper/vendor/year:** Kingma and Dhariwal at OpenAI presented [*Glow: Generative Flow with Invertible 1x1 Convolutions*, NeurIPS 2018](https://arxiv.org/abs/1807.03039).
 
-**Inputs/outputs and typical data types:** Images become multiscale latents and log densities; sampled latents become images. Latent interpolation or manipulation is possible because an image can be mapped directly to its corresponding latent under the flow.
+**Core mechanism:** Each step first rescales features, then reversibly mixes channels at each position, then applies a scale-and-shift coupling step. Instead of always swapping channels in a fixed order, Glow learns a mixing matrix it can undo. Rearranging grids and splitting off some code values builds several scales. The modeled continuous transformation remains mathematically reversible.
 
-**Strengths and limitations:** Learned channel mixing increases expressivity while retaining tractable density and parallel per-layer synthesis. Training can be memory-intensive, and excellent density need not mean excellent perceptual semantics. Low-temperature latent sampling favors visual quality but no longer samples the original fitted distribution; it is not uncertainty calibration.
+**Inputs/outputs and typical data types:** An image becomes code values at several scales, plus a log density. Sampled codes become images. Direct encoding also allows gradual code changes or movement between image codes, followed by decoding.
 
-**Computational complexity / scalability notes:** Applying an invertible channel matrix at $`HW`$ positions costs $`O(HWc^2)`$. Its naive determinant is $`O(c^3)`$, whereas an LU parameterization makes the log-determinant sum $`O(c)`$; it does **not** make the matrix application $`O(c)`$. Coupling convolutions and multiscale depth add their own cost.
+**Strengths and limitations:** Learned mixing makes each layer more flexible while preserving manageable density calculations. Values within a layer can still be processed together. Training may need much memory, and strong likelihood need not mean meaningful-looking images. Low-temperature sampling narrows code choices to favor visual quality. It changes the fitted distribution rather than calibrating uncertainty.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [Glow paper](https://ar5iv.labs.arxiv.org/html/1807.03039) reports **3.35 bits/dimension on CIFAR-10**, compared with RealNVP's reported 3.49 in its benchmark table. Image -> ActNorm/channel mixing/coupling -> latent and density -> inverse sample evaluates likelihood and generation together. The technical rationale versus fixed permutations is learnable mixing; versus a GAN, it is a tractable density and direct inversion. Its separate CelebA-HQ experiment uses 256-resolution, **five-bit** images for visual quality and latent manipulation. Those faces must not be used to claim the same eight-bit likelihood/compression result as CIFAR-10. These are research results, not audited production benefits.
+**Computational complexity / scalability notes:** Channel mixing work grows with image area and roughly the square of channel count. A special matrix form makes the stretch calculation cheap, but not the mixing itself. Coupling filters and additional scales also add work.
 
-**Notable vendor implementations/libraries:** The [official OpenAI Glow repository](https://github.com/openai/glow) supplies the TensorFlow implementation. Flow libraries can reproduce individual operations, but different dequantization, bit depth, and coupling settings change the model.
+**Optional math:** With height $`H`$, width $`W`$, and $`c`$ channels, mixing costs $`O(HWc^2)`$. A naive determinant costs $`O(c^3)`$. Storing the matrix as lower and upper triangular factors, called LU, reduces its log-determinant sum to $`O(c)`$. It does **not** reduce matrix application to $`O(c)`$.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [Glow paper](https://ar5iv.labs.arxiv.org/html/1807.03039) reports **3.35 bits/dimension on CIFAR-10**, versus RealNVP's listed 3.49. This is a likelihood-based coding measure per pixel-channel value; lower is better. Its interpretation depends on the specified pixel-noise and preprocessing rules. Images pass through normalization, channel mixing, and coupling to produce codes and densities. Reversing those steps generates images.
+
+Learned mixing improves on fixed channel swaps. Compared with a GAN, the appeal is manageable density calculation and direct reversal. A separate CelebA-HQ visual-quality and code-editing experiment uses 256-resolution, **five-bit** images. Those faces do not establish the same eight-bit likelihood or compression result as CIFAR-10. These are research results, not audited production benefits.
+
+**Notable vendor implementations/libraries:** OpenAI's [official Glow repository](https://github.com/openai/glow) supplies TensorFlow code. Other flow libraries may reproduce individual steps. Different added pixel noise, bit depth, or coupling settings change the model.
 
 **Architecture diagram description:**
 
@@ -864,41 +1016,45 @@ all latent portions + prior log densities -> total image log density
 sampling reverses every step
 ```
 
-**Activation functions used and why:** The checked coupling subnetworks use ReLU; the implementation's affine scale uses a shifted sigmoid for controlled positive scale. ActNorm is a trainable affine transformation initialized from data, not batch normalization recomputed on every minibatch.
+**Activation functions used and why:** The checked coupling networks use ReLU. A shifted sigmoid keeps the scale positive and controlled. ActNorm learns a scale and shift for each channel, starting from data statistics. Unlike batch normalization, it does not recalculate those statistics for every minibatch.
 
-**Loss function(s):** Exact continuous change-of-variables negative log likelihood, including ActNorm, channel-mixing, and coupling determinants and the multiscale prior. Quantized images still require the paper/implementation's preprocessing and noise convention.
+**Loss function(s):** The loss is negative continuous log likelihood; it rewards higher density for observed data. Count the stretch from ActNorm, channel mixing, and coupling, plus the prior at every scale. The continuous formula is exact, but discrete images still require the specified preprocessing and added-noise rules.
 
-**Optimization algorithm(s):** The [official training defaults](https://github.com/openai/glow/blob/master/train.py) use **Adamax**, learning rate 0.001, with linear warmup over ten epochs. Adam is also an implementation option. These checked defaults should not be casually reported as mandatory Adam for every Glow run.
+**Optimization algorithm(s):** The [official training defaults](https://github.com/openai/glow/blob/master/train.py) use **Adamax** at learning rate 0.001. Warmup raises the rate evenly over ten epochs. Adam is also an option in the code. Neither the defaults nor every Glow run should be casually described as mandatory Adam.
 
-**Regularization techniques:** Data-dependent ActNorm initialization and zero-initialized final coupling convolutions improve early conditioning. Dequantization prevents fitting pathological point densities on a discrete lattice. Sampling-temperature reduction is an inference choice, not training regularization.
+**Regularization techniques:** Data-based ActNorm starting values and zero-started final coupling filters make early training easier. Adding noise to discrete pixels prevents the model from fitting extreme density spikes only at allowed pixel values. Lower sampling temperature changes generation, not training regularization.
 
-**Backpropagation considerations:** All determinant contributions must remain in the gradient graph. Invertible matrices can become poorly conditioned; LU parameterization helps determinant computation but does not guarantee numerical conditioning. Mixed-precision log determinants deserve care.
+**Backpropagation considerations:** Keep all stretch terms in the feedback path. A reversible matrix can still amplify tiny numeric errors badly. LU makes determinants easier to calculate but does not prevent that instability. Log determinants require care when numeric precision varies.
 
-**Parameter count / scaling behavior:** Flow levels, steps per level, and coupling-network width determine size. A one-by-one mixing matrix contributes $`c^2`$ parameters, in addition to the usually larger coupling networks; there is no single family-wide Glow count.
+**Parameter count / scaling behavior:** The number of scales, steps per scale, and coupling-network width determine size. Coupling networks usually hold more weights than channel mixing. **Optional math:** A mixing matrix for $`c`$ channels adds $`c^2`$ parameters. There is no fixed count for all Glow models.
 
-**Training paradigm:** Unsupervised likelihood fitting in the cited benchmarks. Attribute-oriented latent manipulations may use labeled analyses or selected examples and should not be confused with an entirely unsupervised downstream task.
+**Training paradigm:** The cited likelihood tests train without labels. Studying edits to specific image attributes may use labeled analysis or selected examples. Such later uses are not necessarily unsupervised.
 
-**Hardware/parallelism considerations:** The official implementation supports distributed accelerator training and gradient checkpointing. Invertibility enables recomputation strategies, but storing or reconstructing multiscale activations remains an engineering trade-off.
+**Hardware/parallelism considerations:** Official code supports several accelerators and checkpointing that recomputes intermediate results to save memory. Reversibility offers further recomputation options. Storing versus rebuilding results across scales still involves trade-offs in time, memory, and accuracy.
 
 ### 3.9.3 PixelCNN
 
-**Name:** PixelCNN, distinguishing the original masked-convolution model from Gated PixelCNN.
+**In plain English:** PixelCNN creates an image by predicting pixel values in order. It uses learned filters that cannot peek at values the model has not generated yet.
 
-**Category & sub-category:** Autoregressive generative modeling; categorical image likelihood.
+**Name:** PixelCNN. The original masked-filter model and Gated PixelCNN are different versions.
 
-**Originating paper/vendor/year:** Van den Oord, Kalchbrenner, and Kavukcuoglu introduced PixelCNN in [*Pixel Recurrent Neural Networks*, ICML 2016](https://arxiv.org/abs/1601.06759). Van den Oord and colleagues introduced the gated/conditional extension in [*Conditional Image Generation with PixelCNN Decoders*, NeurIPS 2016](https://arxiv.org/abs/1606.05328).
+**Category & sub-category:** Autoregressive generation. It assigns probabilities to discrete image intensities using earlier pixel and color values.
 
-**Core mechanism:** Factorize the image probability into an ordered product of pixel/channel conditionals. Masks block future positions and disallowed same-pixel channels. During training the entire known image supplies context, permitting parallel convolutions. During generation each newly sampled value becomes context for later values. Gated PixelCNN separates vertical and horizontal streams to address the original receptive-field blind spot.
+**Originating paper/vendor/year:** Van den Oord, Kalchbrenner, and Kavukcuoglu introduced PixelCNN in [*Pixel Recurrent Neural Networks*, ICML 2016](https://arxiv.org/abs/1601.06759). Van den Oord and colleagues added the gated/conditional version in [*Conditional Image Generation with PixelCNN Decoders*, NeurIPS 2016](https://arxiv.org/abs/1606.05328).
 
-**Inputs/outputs and typical data types:** Discrete image intensities, optionally with class or embedding conditions, enter. Outputs are categorical distributions over the next intensity and, by iterative sampling, images. An image density can be evaluated directly by summing conditional log probabilities.
+**Core mechanism:** Choose an order for pixel and color values. Predict each value from the earlier ones. A mask is a rule blocking forbidden connections, not random damage to the image. It prevents future pixels and disallowed same-pixel colors from revealing the answer. Training can process a known image in parallel while obeying these rules. Generation must choose each new value before proceeding. Gated PixelCNN uses separate vertical and horizontal paths to reach earlier pixels missed by the original filters.
 
-**Strengths and limitations:** Avoids latent-posterior approximations and models multimodal pixel conditionals. Sampling remains sequential even though training convolutions are parallel. Finite receptive fields can miss global structure. A confident next-pixel prediction is not confidence that the overall scene is semantically correct or in distribution.
+**Inputs/outputs and typical data types:** Inputs are discrete image intensities, sometimes with a class label or feature-vector condition. Outputs give probabilities for the next intensity. Repeating the choice builds an image. Adding all conditional log probabilities gives the image's log probability directly.
 
-**Computational complexity / scalability notes:** A teacher-forced batch costs one masked-network pass over the full grid, approximately the sum of convolutional costs. Naively rerunning the full grid for each sampled channel is expensive; cached implementations reduce redundant work but not the causal ordering. PixelCNN is not a recurrent network merely because decoding is sequential.
+**Strengths and limitations:** The model can assign probability to several possible next values without approximating a hidden-code distribution. Generation remains sequential despite parallel training. Limited context can miss the overall scene. A confident next-pixel choice does not prove that the whole image makes sense or resembles familiar data.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [Gated PixelCNN study](https://ar5iv.labs.arxiv.org/html/1606.05328) evaluates CIFAR-10 discrete image likelihood. Known pixels -> masked vertical/horizontal convolutions -> conditional 256-way probabilities -> accumulated test negative log likelihood or sequential samples is the worked pipeline. It reports **3.03 bits/dimension**, versus 3.14 for the earlier PixelCNN and 3.00 for PixelRNN in the comparison table. The technical fit is parallel convolutional training with near-PixelRNN likelihood, not faster fully parallel generation. Conditional ImageNet experiments additionally provide class labels. No commercial compression rate, deployment latency, or business KPI is asserted from these benchmark likelihoods.
+**Computational complexity / scalability notes:** Training supplies known earlier values, called teacher forcing. One masked-network pass covers the whole grid, with work equal to its filter calculations. Repeating a full-grid pass for every generated value is costly. Caching saves repeated work but cannot remove the required order. Sequential decoding alone does not make PixelCNN a recurrent network.
 
-**Notable vendor implementations/libraries:** PixelCNN-style research code and TensorFlow Probability distributions support autoregressive image models. PixelCNN++, which changes the likelihood and architecture, must not inherit the original/gated model's results merely because the names are similar.
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [Gated PixelCNN study](https://ar5iv.labs.arxiv.org/html/1606.05328) tests CIFAR-10 image probabilities. Known pixels pass through masked vertical and horizontal filters. Each predicted intensity has 256 choices. Adding test-image negative log probabilities gives the likelihood measure; choosing values in sequence instead generates an image.
+
+The paper reports **3.03 bits/dimension**, versus 3.14 for earlier PixelCNN and 3.00 for PixelRNN. This is average negative log probability per image value, measured in bits; lower is better. The advantage is parallel filter training with likelihood near PixelRNN, not fully parallel generation. Conditional ImageNet experiments also use class labels. These numbers do not establish a commercial compression rate, deployed response time, or business benefit.
+
+**Notable vendor implementations/libraries:** Research code and TensorFlow Probability support PixelCNN-style image models. PixelCNN++ changes both network design and likelihood. Similar names do not justify assigning it the original or gated model's results.
 
 **Architecture diagram description:**
 
@@ -910,41 +1066,49 @@ gated variant: vertical stream -> horizontal stream -> gated residual heads
 sampling: fill pixels/channels in causal order
 ```
 
-**Activation functions used and why:** Original PixelCNN uses ReLU layers and categorical softmax outputs; Gated PixelCNN uses a tanh filter multiplied by a sigmoid gate. Binary MNIST can use Bernoulli/sigmoid outputs rather than 256 intensity classes.
+**Activation functions used and why:** Original PixelCNN uses ReLU hidden layers and softmax probabilities over intensities. Gated PixelCNN multiplies a bounded tanh signal by a sigmoid gate that controls how much passes. Binary MNIST can use a single probability for each binary pixel instead of 256 intensity categories.
 
-**Loss function(s):** Exact autoregressive negative log likelihood $`-\sum_i\log p_\theta(x_i\mid x_{<i})`$, optionally conditioned on $`c`$. In the cited categorical model, this is discrete cross-entropy, not a Gaussian reconstruction proxy.
+**Loss function(s):** Penalize assigning low probability to each observed next value. Summing these penalties gives exact autoregressive negative log likelihood. In this categorical model, it is discrete cross-entropy, not an approximate squared rebuilding error.
 
-**Optimization algorithm(s):** The original PixelRNN/PixelCNN paper uses RMSProp, with manually selected dataset-specific learning-rate schedules. It does not give one universal schedule for all later gated/conditional implementations.
+**Optional math:** The loss is $`-\sum_i\log p_\theta(x_i\mid x_{<i})`$. Here $`i`$ is position in the chosen order, $`x_i`$ its value, and $`x_{<i}`$ all allowed earlier values. $`p_\theta`$ is the probability model with weights $`\theta`$. A supplied condition $`c`$ can be added to every prediction.
 
-**Regularization techniques:** Causal masks constrain the probability factorization rather than randomly dropping units. The original experiments use small batches for smaller datasets and no image augmentation beyond input scaling/centering. Residual connections aid optimization.
+**Optimization algorithm(s):** The original PixelRNN/PixelCNN paper uses RMSProp, which adapts update sizes using recent squared gradients. It manually selects learning-rate schedules for each dataset. These are not one universal schedule for all later gated or conditional implementations.
 
-**Backpropagation considerations:** Incorrect masks leak the target and invalidate likelihood, often yielding deceptively good training loss. Teacher forcing avoids differentiating through categorical sampling; test-time exposure to model-generated context can still reveal accumulated errors.
+**Regularization techniques:** Masks enforce prediction order; they do not randomly drop units. Original experiments use small batches on smaller datasets. They do not modify images beyond scaling and centering values. Shortcut connections make the network easier to train.
 
-**Parameter count / scaling behavior:** Layer count, hidden channels, and output alphabet size determine parameters. The original architecture describes fifteen convolutional layers; the larger gated ImageNet configuration differs. Per-position output probabilities also create substantial activation storage.
+**Backpropagation considerations:** A wrong mask can expose the answer and produce misleadingly low loss. Teacher forcing uses known context, avoiding feedback through sampled categories. At generation time, the model sees its own earlier choices instead. Their mistakes can accumulate.
 
-**Training paradigm:** Self-supervised next-pixel prediction in unconditional models. Gated class-conditioned generation is supervised conditional modeling; image-embedding conditioning inherits the embedding model's supervision.
+**Parameter count / scaling behavior:** Layer count, channel width, and the number of output choices determine weight count. The original model describes fifteen image-filter layers. The larger gated ImageNet setup differs. Keeping probabilities at every position also takes substantial intermediate memory.
 
-**Hardware/parallelism considerations:** Training is GPU-friendly and data parallel. The gated paper reports distributed GPU experiments, but sequence-dependent image sampling remains latency-bound; more GPUs mainly help generate more independent images.
+**Training paradigm:** Unconditional models use self-supervised next-pixel prediction. Gated class-conditioned models use labels. When a feature vector supplies the condition, its own training history determines what supervision it carries.
+
+**Hardware/parallelism considerations:** GPUs train the image filters efficiently and can split batches across devices. The gated paper reports multi-GPU experiments. Sequential generation still limits the speed of one image; more GPUs mainly create more independent images at once.
 
 ### 3.9.4 WaveNet
 
-**Name:** WaveNet, specifically the original autoregressive dilated-convolution waveform model; later production revisions are identified separately.
+**In plain English:** WaveNet builds sound by predicting the next tiny audio sample from earlier ones. The original research model and the faster version used in Google Assistant are not the same system.
 
-**Category & sub-category:** Autoregressive audio generation; raw-waveform density modeling and conditional speech synthesis.
+**Name:** WaveNet. This entry explains the original sequential waveform model and identifies later production revisions separately.
 
-**Originating paper/vendor/year:** Van den Oord and colleagues, DeepMind, [*WaveNet: A Generative Model for Raw Audio*, 2016](https://arxiv.org/abs/1609.03499).
+**Category & sub-category:** Autoregressive raw-audio generation. It can model sound alone or use conditions to synthesize speech.
 
-**Core mechanism:** Dilated causal convolutions predict the distribution of the next audio sample from previous samples. Increasing dilation expands temporal receptive fields without equally deep stacks of adjacent-sample convolutions. Local linguistic/acoustic conditions or global speaker identity can control the waveform. Unconditional audio modeling and text-conditioned speech have different supervision.
+**Originating paper/vendor/year:** Van den Oord and colleagues at DeepMind published [*WaveNet: A Generative Model for Raw Audio*, 2016](https://arxiv.org/abs/1609.03499).
 
-**Inputs/outputs and typical data types:** Training takes waveform sequences and optional aligned linguistic/acoustic features. Outputs are next-sample probabilities and synthesized audio. The original commonly described head quantizes audio with eight-bit mu-law companding and predicts 256 categories.
+**Core mechanism:** Predict a probability distribution for the next sound sample using only earlier samples. Causal filters block future sound. Dilated filters leave gaps between the earlier positions they inspect, reaching farther back without equally many extra layers. Language features, acoustic features, or speaker identity can guide predictions. Sound-only learning and text-conditioned speech use different supervision.
 
-**Strengths and limitations:** Direct waveform modeling avoids some assumptions of hand-designed vocoders and allows rich local structure. Autoregressive generation at audio sample rates is expensive. Quantization, receptive field, and conditioning quality matter; a likely waveform continuation is not calibrated confidence that spoken content is correct.
+**Inputs/outputs and typical data types:** Training uses waveform sequences, optionally with aligned language or acoustic features. Outputs are next-sample probabilities and generated sound. The original commonly described output uses eight-bit mu-law companding, which rescales sound amplitude before dividing it into 256 categories.
 
-**Computational complexity / scalability notes:** Teacher-forced training costs approximately $`O(BT\sum_l k_lc_l^2)`$ for sequence length $`T`$ and same-width causal layers. Cached inference removes repeated history computation but still emits samples in sequence. Dilation expands receptive field without increasing kernel parameter count.
+**Strengths and limitations:** Learning the waveform directly avoids some restrictions of hand-designed sound-synthesis components, called vocoders. It can capture rich short-range structure. But audio requires many sequential samples, making generation expensive. Amplitude categories, available history, and condition quality all matter. A likely sound continuation does not give calibrated confidence that its spoken claim is correct.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Sourced application.** DeepMind's [October 4, 2017 announcement](https://deepmind.google/blog/wavenet-launches-in-the-google-assistant/) states that an **updated WaveNet** generated Google Assistant's US English and Japanese voices; it explicitly calls the original model too computationally intensive for consumer products. Requested response text -> linguistic/acoustic conditioning -> waveform generator -> audio delivered by Assistant is the application pipeline. Direct learned waveform synthesis addresses naturalness limitations of concatenative/parametric alternatives; the announcement documents the adoption, not a public cost-saving KPI. Separately, the [2016 research paper](https://ar5iv.labs.arxiv.org/html/1609.03499) reports English five-point listener MOS 4.21 for its linguistic-plus-F0 WaveNet versus 3.86 for its HMM-driven concatenative baseline. Those are original research-condition scores, not measurements of the updated 2017 production system.
+**Computational complexity / scalability notes:** Training supplies known earlier samples, called teacher forcing, and processes many positions together. More audio positions and wider filters add work. Cached generation avoids recalculating old history, but still emits samples in order. Increasing filter gaps expands history without adding filter weights.
 
-**Notable vendor implementations/libraries:** DeepMind/Google's research and documented Assistant application; community WaveNet implementations. Distilled/parallel WaveNet and later neural vocoders are distinct architectures or training procedures, not automatically the original sampler.
+**Optional math:** Training costs about $`O(BT\sum_l k_lc_l^2)`$ for same-width causal layers. Here $`B`$ is batch size, $`T`$ sequence length, $`k_l`$ filter length in layer $`l`$, and $`c_l`$ its channel width.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Sourced application.** DeepMind's [October 4, 2017 announcement](https://deepmind.google/blog/wavenet-launches-in-the-google-assistant/) says an **updated WaveNet** generated Google Assistant's US English and Japanese voices. It explicitly describes the original model as too expensive computationally for consumer products. Requested response text supplied language and acoustic conditions; a waveform generator produced Assistant's audio. Direct learned sound generation addresses naturalness limits in methods that join recorded speech or use hand-designed speech parameters. The announcement documents adoption, not measured cost savings.
+
+Separately, the [2016 paper](https://ar5iv.labs.arxiv.org/html/1609.03499) reports English five-point listener **MOS 4.21**, versus **3.86** for its baseline. MOS is mean opinion score: an average listener rating, with higher better on this scale. The research WaveNet used language features plus F0, the fundamental frequency associated with pitch. The HMM-driven concatenative baseline used a hidden Markov model to choose and join recorded speech. These are original research-condition scores, not measurements of the updated 2017 production system.
+
+**Notable vendor implementations/libraries:** DeepMind/Google provide research and the documented Assistant application; community implementations also exist. Distilled or parallel WaveNet and later learned vocoders change the design or training. They are not automatically the original sequential sampler.
 
 **Architecture diagram description:**
 
@@ -956,56 +1120,68 @@ past mu-law audio -> causal convolution
 summed skip outputs -> ReLU / pointwise layers -> 256-way next-sample softmax
 ```
 
-**Activation functions used and why:** Tanh/sigmoid gating selects content and its transmission; residual and skip paths preserve gradients across dilation stacks. ReLU output processing and softmax produce categorical sample probabilities in the original formulation.
+**Activation functions used and why:** A tanh signal carries content; a sigmoid gate controls how much passes through. Residual and skip paths carry information and error feedback around layers. ReLU processing and final softmax convert combined outputs into probabilities for the original sample categories.
 
-**Loss function(s):** Autoregressive cross-entropy $`-\sum_t\log p_\theta(x_t\mid x_{<t},c)`$. The quantized waveform target is not a spectrogram-MSE objective. Later continuous-output and distillation variants require their own losses.
+**Loss function(s):** Cross-entropy penalizes assigning low probability to each observed next sound category. This predicts waveform values, not a sound-frequency chart using mean squared error. Later continuous-output or teacher-student distillation versions need their own losses.
 
-**Optimization algorithm(s):** End-to-end stochastic gradient optimization trains the neural likelihood. A complete original optimizer/learning-rate schedule is not specified in the checked research report, and the production announcement does not disclose one. Adam with warmup/decay would be a proposed implementation choice, not a verified Google recipe.
+**Optional math:** The loss is $`-\sum_t\log p_\theta(x_t\mid x_{<t},c)`$. Here $`x_t`$ is the sample at time $`t`$, $`x_{<t}`$ earlier samples, and $`c`$ any supplied condition. The probability model has weights $`\theta`$. The sum adds next-sample penalties across the sequence.
 
-**Regularization techniques:** Causality, finite receptive fields, and conditioning structure constrain learning; residual connections stabilize optimization. Do not infer a particular dropout or weight-decay value from the production product name.
+**Optimization algorithm(s):** Gradient updates train the whole probability model. The checked research report does not specify a complete original optimizer and learning-rate schedule. The production announcement does not disclose one either. Adam with warmup and decay would be a proposed recipe, not verified Google settings.
 
-**Backpropagation considerations:** Training parallelizes over known targets with teacher forcing; gradients do not traverse sampled categorical outputs. Clip unstable gradients where validated. Check conditioning alignment and receptive-field padding carefully to avoid future-audio leakage.
+**Regularization techniques:** Past-only access, limited history, and specified conditions restrict what the model can learn. Shortcut connections improve training stability. The product name does not establish a particular dropout or weight-decay value.
 
-**Parameter count / scaling behavior:** Residual channels, dilation cycles, conditioning networks, and output heads determine count. Higher audio sample rates increase sequence work without necessarily changing weights. Production model counts are not disclosed by the cited announcement.
+**Backpropagation considerations:** Training processes known target samples in parallel; feedback does not pass through random categorical choices. Limit unstable gradients where tests justify it. Carefully align conditions and pad the available history so future sound cannot leak into a prediction.
 
-**Training paradigm:** Self-supervised next-sample prediction for unconditioned audio; paired linguistic/acoustic supervision for TTS. Its placement here reflects the autoregressive mechanism, not a claim that Assistant speech synthesis is unsupervised.
+**Parameter count / scaling behavior:** Channel widths, repeated dilation patterns, condition networks, and output layers determine size. Higher audio sample rates add more sequence work without necessarily adding weights. The production announcement does not disclose model counts.
 
-**Hardware/parallelism considerations:** GPUs efficiently train convolutional sequences; cached autoregressive inference still has strict latency constraints. The documented production revision was engineered to overcome prototype speed limits; its complete hardware and parallelization recipe is not established here.
+**Training paradigm:** Sound-only next-sample prediction is self-supervised. Text-to-speech, or TTS, uses paired language/acoustic supervision. WaveNet appears here because of its sequential prediction mechanism, not because Assistant speech synthesis is unsupervised.
+
+**Hardware/parallelism considerations:** GPUs train these filter sequences efficiently. Even cached original generation must meet strict sample-by-sample timing limits. The documented production update addressed prototype speed limits, but its full hardware and parallelization recipe is not established here.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| RealNVP | Continuous vectors and dequantized images | Tractable density and exact latent inversion | Coupling constraints and semantic likelihood failures | CIFAR-10 likelihood benchmark |
-| Glow | Multiscale natural images | Learned invertible channel mixing | Memory cost and precision-sensitive inversion | CIFAR-10 and five-bit CelebA-HQ research |
-| PixelCNN | Discrete image intensities | Explicit autoregressive pixel probability | Sequential sampling despite parallel training | Gated PixelCNN CIFAR-10 evaluation |
-| WaveNet | Raw audio with optional aligned conditions | Direct learned waveform synthesis | High-rate sequential inference in original model | Updated WaveNet in Google Assistant, 2017 |
+| RealNVP | Continuous values; images with added small noise | Calculates density and reverses codes directly | Restricted layers; likelihood can miss meaning | CIFAR-10 test-likelihood research |
+| Glow | Natural images at several scales | Learns reversible channel mixing | High memory use and numerical reversal errors | CIFAR-10 and five-bit face-image tests |
+| PixelCNN | Discrete pixel intensities | Gives probabilities for each next pixel value | Generation stays sequential | CIFAR-10 tests of Gated PixelCNN |
+| WaveNet | Raw sound, optionally with aligned conditions | Learns sound samples directly | Original model must produce samples in sequence | 2017 Assistant voices used an updated WaveNet |
 
 ## 3.10 Representation pretraining
 
-These methods train representations rather than necessarily producing new observations. The pretext objective, feature extractor, projection head, and downstream evaluator are separate objects. Linear probing freezes the encoder and trains a labeled linear classifier; fine-tuning updates the encoder; nearest-neighbor evaluation uses a labeled reference set. Their scores are not interchangeable.
+These methods learn useful number-based descriptions, or representations, rather than necessarily creating new data. A practice task teaches a feature extractor. A projection head is a small extra network that prepares features for that task. A later evaluator measures how useful the retained features are. These parts do different jobs.
 
-Comparisons below retain the paper's backbone and training regime. A 200-epoch ResNet-50 contrastive model, a 1,000-epoch wider network, and a fine-tuned ViT-H are not controlled comparisons of losses alone. CLIP is included by an explicit cross-modal editorial convention and uses genuine paired language supervision.
+**Contrastive matching** rewards related views or pairs for receiving similar vectors, compared with mismatched pairs. Some methods match two modified views of the same image. CLIP matches an image with its caption. Other methods below learn without explicit mismatches, or rebuild hidden image patches.
 
-The final two entries cover foundational static word embeddings. Word2Vec and GloVe are shallow log-linear/log-bilinear models: using the neural-field template for their trainable embedding realizations does not imply deep hidden layers. They provide a useful contrast with the contextual token representations in [foundation models](06-foundation-models.md).
+Evaluation procedures also differ. **Linear probing** keeps the encoder fixed and trains a labeled classifier using weighted sums of features. **Fine-tuning** updates the encoder too. **Nearest-neighbor evaluation** compares features with a reference set that has labels. Their scores cannot be treated as the same test.
+
+The comparisons retain each paper's main network and training budget. A 200-epoch ResNet-50, a wider 1,000-epoch network, and a fine-tuned ViT-H do not isolate the effect of the loss alone. CLIP appears here because it learns image-and-language representations. It uses genuine paired language supervision.
+
+The last two entries cover **static word vectors**: each known word has one learned number list, regardless of its sentence. Word2Vec and GloVe are shallow models with linear or two-vector scoring rules, not deep hidden networks. They use the neural field template because their vectors are trainable. Compare them with the sentence-dependent token representations in [foundation models](06-foundation-models.md).
 
 ### 3.10.1 SimCLR
 
-**Name:** Simple Framework for Contrastive Learning of Visual Representations (SimCLR), original 2020 formulation.
+**In plain English:** SimCLR learns that two changed views of the same image should still match. It keeps the resulting image features for later tasks such as classification.
 
-**Category & sub-category:** Self-supervised visual representation learning; augmentation-based contrastive pretraining.
+**Name:** Simple Framework for Contrastive Learning of Visual Representations (SimCLR). This entry covers the original 2020 version.
 
-**Originating paper/vendor/year:** Chen, Kornblith, Norouzi, and Hinton, Google Research, [*A Simple Framework for Contrastive Learning of Visual Representations*, ICML 2020](https://arxiv.org/abs/2002.05709).
+**Category & sub-category:** Self-supervised image-feature learning. It practices matching modified image views before learning a later task.
 
-**Core mechanism:** Create two independently augmented views of each image. Encode each view and pass its representation through a nonlinear projection head. A contrastive loss pulls the two views together relative to other images in the batch. The representation before the projection head is normally retained for downstream tasks; the space best suited to the pretext loss is not necessarily the best downstream feature space.
+**Originating paper/vendor/year:** Chen, Kornblith, Norouzi, and Hinton at Google Research presented [*A Simple Framework for Contrastive Learning of Visual Representations*, ICML 2020](https://arxiv.org/abs/2002.05709).
 
-**Inputs/outputs and typical data types:** Unlabeled images enter pretraining. Outputs are normalized projection vectors during training and encoder features for transfer. Downstream classifiers need labels or another explicitly specified decision mechanism.
+**Core mechanism:** Make two independently modified views of each image, for example through cropping and color changes. One shared encoder describes both views. A small projection network then prepares their vectors for comparison. Training brings matching views closer relative to other images in the batch. Later tasks normally use the encoder features before projection. Features best for the matching exercise are not necessarily best for a new task.
 
-**Strengths and limitations:** Conceptually simple and benefits from effective augmentations and scale. Large batches can be expensive, and different images of the same semantic category become false negatives. Aggressive crops may remove the very feature a downstream task requires. Contrastive softmax probability measures a within-batch matching task, not calibrated class uncertainty.
+**Inputs/outputs and typical data types:** Unlabeled images enter pretraining. Training outputs are projection vectors scaled to equal length. Later outputs are encoder features. A classifier still needs labels or another stated rule for making decisions.
 
-**Computational complexity / scalability notes:** Two views double encoder work relative to one-view training. Pairwise similarities over $`2B`$ projected vectors of width $`d_z`$ cost $`O(B^2d_z)`$; naive similarity storage is $`O(B^2)`$, in addition to network activations. Distributed implementations shard or gather embeddings.
+**Strengths and limitations:** The idea is simple and benefits from suitable image changes and larger training scale. Big batches cost memory. Different images of the same category are treated as mismatches, called false negatives. Severe crops may remove important details. Matching probabilities describe the batch exercise, not calibrated uncertainty over real-world classes.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** In the [ImageNet study](https://ar5iv.labs.arxiv.org/html/2002.05709), training images without class labels -> paired augmentations -> encoder/projector contrastive training -> frozen encoder -> labeled linear classifier produces validation predictions. The reported linear-evaluation top-1 accuracy is **69.3% for ResNet-50** and **76.5% for a four-times-width ResNet-50**, in the long-training results; the headline 76.5% is not the ordinary-width model. The paper distinguishes 100-epoch ablations from 1,000-epoch high-performance training. The technical reason to prefer this over reconstruction pretraining is learning augmentation-invariant semantic features without a pixel decoder. These are benchmark results, not production visual-inspection savings or a public business KPI.
+**Computational complexity / scalability notes:** Two views double encoder work compared with one view. Comparing every projection with the others grows roughly with the square of batch size. Holding all comparison scores also takes memory. Workers may gather vectors together or divide the comparisons among devices.
 
-**Notable vendor implementations/libraries:** Google's [official SimCLR repository](https://github.com/google-research/simclr). Later SimCLRv2 checkpoints and semi-supervised distillation stages are different recipes.
+**Optional math:** For batch size $`B`$, there are $`2B`$ view vectors. If each has width $`d_z`$, pair comparisons cost $`O(B^2d_z)`$. A full similarity table uses $`O(B^2)`$ memory, in addition to network intermediate results.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [ImageNet study](https://ar5iv.labs.arxiv.org/html/2002.05709) pretrains on images without class labels. Modified pairs train the encoder and projector. The encoder is then frozen, and a labeled linear classifier predicts ImageNet validation classes.
+
+In the long-training results, top-1 accuracy is **69.3% for ResNet-50** and **76.5% for a four-times-width ResNet-50**. Top-1 means the percentage whose first-choice class is correct. The headline 76.5% is not the ordinary-width network. The paper separates 100-epoch component tests from 1,000-epoch high-performance training. Unlike reconstruction, matching can teach features that ignore chosen image changes without a pixel decoder. These benchmarks do not establish production inspection savings or a public business measure.
+
+**Notable vendor implementations/libraries:** Google provides the [official SimCLR repository](https://github.com/google-research/simclr). Later SimCLRv2 models and semi-supervised teacher-student training stages use different recipes.
 
 **Architecture diagram description:**
 
@@ -1016,41 +1192,49 @@ z_A,z_B + other batch projections -> normalized contrastive loss
 after pretraining: retain f; discard g; train/evaluate downstream head on h
 ```
 
-**Activation functions used and why:** The representative ResNet uses ReLU; the two-layer projection MLP has a ReLU hidden layer. L2 normalization turns dot products into cosine similarity; temperature-scaled softmax defines the contrastive classification task.
+**Activation functions used and why:** The ResNet uses ReLU, as does the hidden layer of the two-layer projection network. L2 normalization gives vectors unit length, so their dot product measures directional, or cosine, similarity. A temperature setting controls how sharply softmax favors the best matching view.
 
-**Loss function(s):** NT-Xent for paired views $`i,j`$: $`-\log[\exp(\operatorname{sim}(z_i,z_j)/\tau)/\sum_{k\ne i}\exp(\operatorname{sim}(z_i,z_k)/\tau)]`$, averaged across both directions and all images. The denominator includes the positive and excludes the anchor itself.
+**Loss function(s):** The loss rewards the other view of the same image over competing views. Each view takes a turn as the query. The method averages over both directions and all images. This loss is called NT-Xent.
 
-**Optimization algorithm(s):** The reported large-batch recipe uses LARS, base rate $`0.3B/256`$, ten-epoch warmup, cosine decay, and weight decay $`10^{-6}`$. At batch 4,096 this yields rate 4.8; it is not an Adam learning rate. Evaluation-head training uses a separate procedure.
+**Optional math:** For matched views $`i,j`$, use $`-\log[\exp(\operatorname{sim}(z_i,z_j)/\tau)/\sum_{k\ne i}\exp(\operatorname{sim}(z_i,z_k)/\tau)]`$. Here $`z_i,z_j,z_k`$ are projected view vectors, $`\operatorname{sim}`$ is cosine similarity, and $`\tau`$ is temperature. The denominator includes the correct match but excludes query $`i`$ itself. The ratio is the matching probability the loss tries to increase.
 
-**Regularization techniques:** Random resized crops, flipping, color distortion, grayscale, and Gaussian blur define useful invariances. Batch normalization and weight decay matter; projection-head removal after training is an architectural transfer choice.
+**Optimization algorithm(s):** The large-batch recipe uses LARS, which adapts update sizes by layer. It uses ten-epoch warmup, cosine-shaped decay, and weight decay $`10^{-6}`$. **Optional math:** Base rate is $`0.3B/256`$, where $`B`$ is batch size. Batch 4,096 gives rate 4.8; this is not an Adam rate. The evaluation classifier has its own training procedure.
 
-**Backpropagation considerations:** Both positive branches receive gradients through shared weights; other views contribute negative terms. Distributed gathering must preserve intended gradients, and synchronized normalization avoids exploiting device-local statistics as shortcuts.
+**Regularization techniques:** Resized crops, flips, color changes, grayscale, and Gaussian blur teach which differences to ignore. Batch normalization and weight decay also matter. Removing the projector afterward changes which features a later task receives; it is not another image modification.
 
-**Parameter count / scaling behavior:** The paper rounds the ResNet-50 feature extractor to 24 million parameters and the four-times-width extractor to 375 million, excluding the temporary projection head. Width multiplication increases convolutional parameters approximately quadratically.
+**Backpropagation considerations:** Both matching views send feedback through the same encoder weights. Other views contribute mismatch penalties. Gathering vectors across devices must preserve that feedback. Shared normalization statistics help avoid shortcuts based on which device handled an image.
 
-**Training paradigm:** Image-only self-supervised contrastive pretraining, followed by supervised linear probing or fine-tuning. The labels used to report accuracy are not part of the pretraining loss.
+**Parameter count / scaling behavior:** The paper rounds the ResNet-50 feature extractor to 24 million parameters. The four-times-width extractor is 375 million. Both exclude the temporary projector. Image-filter weights grow approximately with the square of a width multiplier.
 
-**Hardware/parallelism considerations:** TPU/GPU distributed training accommodates large effective batches. Global embedding communication, similarity matrices, augmentation throughput, and synchronized normalization can become bottlenecks independent of encoder FLOPs.
+**Training paradigm:** Image-only contrastive pretraining is self-supervised. Labeled linear probing or fine-tuning comes later. Labels used to report accuracy do not enter the pretraining loss.
+
+**Hardware/parallelism considerations:** Several TPUs or GPUs can support large batches. Exchanging vectors, storing comparisons, preparing modified images, and sharing normalization statistics may limit speed separately from encoder arithmetic.
 
 ### 3.10.2 MoCo
 
-**Name:** Momentum Contrast (MoCo), with the original ResNet-based MoCo v1 recipe as reference.
+**In plain English:** MoCo learns image matching while keeping a queue of earlier image descriptions to compare against. This gives it many comparison examples without requiring one enormous current batch.
 
-**Category & sub-category:** Self-supervised contrastive representation learning; momentum encoder and queued dictionary.
+**Name:** Momentum Contrast (MoCo). The reference here is the original ResNet-based MoCo v1.
 
-**Originating paper/vendor/year:** He, Fan, Wu, Xie, and Girshick, [*Momentum Contrast for Unsupervised Visual Representation Learning*, arXiv 2019, CVPR 2020](https://arxiv.org/abs/1911.05722). Later MoCo v2/v3 recipes change important components and should not inherit the v1 benchmark.
+**Category & sub-category:** Self-supervised matching of image features. It uses a slowly changing encoder and a queue of earlier comparison vectors.
 
-**Core mechanism:** Train a query encoder against keys produced by a slowly updated momentum encoder. Store previous key embeddings in a queue, allowing a large negative dictionary without requiring an equivalently large current minibatch. EMA updates keep old and new keys reasonably consistent as the representation evolves.
+**Originating paper/vendor/year:** He, Fan, Wu, Xie, and Girshick presented [*Momentum Contrast for Unsupervised Visual Representation Learning*, arXiv 2019, CVPR 2020](https://arxiv.org/abs/1911.05722). MoCo v2/v3 change important components. They should not inherit v1's benchmark result.
 
-**Inputs/outputs and typical data types:** Augmented images enter the query and key encoders. A contrastive embedding supports pretraining; the query backbone supplies features for downstream classification, detection, or segmentation.
+**Core mechanism:** An actively trained encoder produces a query vector. A second encoder produces comparison vectors called keys. It changes slowly by averaging the active encoder's weights over time, an EMA update. A queue stores older keys as mismatches, removing the oldest as new keys arrive. Slow changes keep older and newer keys reasonably comparable without storing a huge batch of images.
 
-**Strengths and limitations:** Decouples dictionary size from current batch size and supports strong transfer. Old keys are stale, and a large queue can contain false negatives. Momentum smoothing is a representation-stability device, not a statistical ensemble that automatically provides uncertainty estimates.
+**Inputs/outputs and typical data types:** Modified views enter the query and key encoders. Matching vectors train the system. The query encoder's main network then supplies features for classification, object detection, or pixel labeling.
 
-**Computational complexity / scalability notes:** For queue length $`K`$ and embedding width $`d_z`$, comparisons cost $`O(BKd_z)`$ and stored keys cost $`O(Kd_z)`$. Only the online encoder needs ordinary gradient/optimizer state; the key encoder still needs weights and forward computation. The queue avoids storing full image activations from past batches.
+**Strengths and limitations:** The queue can be large even when the current batch is modest. Learned features can transfer well to other tasks. But old keys become outdated, and some supposed mismatches may depict similar things. Slow weight averaging stabilizes features; it is not an uncertainty-estimating ensemble by itself.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [original MoCo study](https://ar5iv.labs.arxiv.org/html/1911.05722) pretrains on ImageNet-1M without labels, then evaluates frozen features with a supervised linear classifier. Image -> two augmentations -> query/current positive key plus queued negatives -> trained encoder -> classifier -> ImageNet validation label is the pipeline. The ResNet-50 model reports **60.6% top-1** under this protocol after 200 pretraining epochs. That should not be compared causally with SimCLR's 1,000-epoch figures as if only the loss differed. The paper also evaluates transfer to detection tasks. The documented design motivation is a large, consistent dictionary without huge current batches; no public business KPI follows from the benchmarks.
+**Computational complexity / scalability notes:** Comparisons grow with batch size, queue length, and vector width. Only the active encoder needs ordinary gradient and optimizer records. The key encoder still uses weight storage and forward computation. The queue stores vectors, not all earlier images' intermediate training results.
 
-**Notable vendor implementations/libraries:** Meta/Facebook Research's [official MoCo repository](https://github.com/facebookresearch/moco), which distinguishes recipes and checkpoints. Library defaults may implement v2 rather than v1.
+**Optional math:** Comparisons cost $`O(BKd_z)`$, with batch size $`B`$, queue length $`K`$, and vector width $`d_z`$. Key storage is $`O(Kd_z)`$.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [original study](https://ar5iv.labs.arxiv.org/html/1911.05722) pretrains on ImageNet-1M without labels. Two views produce a query and its matching current key. Queued keys supply mismatches. After training, a labeled linear classifier uses the frozen encoder to predict ImageNet validation labels.
+
+The ResNet-50 model reaches **60.6% top-1** after 200 pretraining epochs. Top-1 is the percentage of correct first-choice classes. This is not a controlled comparison with SimCLR's 1,000-epoch results where only the loss changed. The paper also tests transfer to detection. The stated design goal is many consistent comparisons without huge current batches. These benchmarks report no public business benefit.
+
+**Notable vendor implementations/libraries:** Meta/Facebook Research's [official MoCo repository](https://github.com/facebookresearch/moco) distinguishes versions and saved models. Library defaults may implement v2 rather than v1.
 
 **Architecture diagram description:**
 
@@ -1062,41 +1246,49 @@ previous key embeddings -> FIFO queue -> negatives --+
 online weights -- EMA update, no backprop --> key encoder
 ```
 
-**Activation functions used and why:** The original ResNet backbone uses ReLU; projected features are L2-normalized before dot products. A temperature-scaled softmax selects the positive key among alternatives. Later nonlinear projection heads are not inherent to v1.
+**Activation functions used and why:** The original ResNet uses ReLU. Projected vectors are scaled to unit length before dot-product comparison. Temperature-scaled softmax rewards the matching key among alternatives. Nonlinear projectors added in later recipes are not automatically part of v1.
 
-**Loss function(s):** $`-\log[\exp(q\cdot k^+/\tau)/(\exp(q\cdot k^+/\tau)+\sum_{k^-}\exp(q\cdot k^-/\tau))]`$. Queue entries are treated as fixed keys during an update rather than differentiated through their entire historical computation.
+**Loss function(s):** The loss rewards matching the query with its companion view rather than queued alternatives. Old keys stay fixed during this update. Training does not trace feedback through their entire history. This comparison loss is called InfoNCE.
 
-**Optimization algorithm(s):** Original ImageNet training uses SGD with momentum 0.9, batch 256, initial learning rate 0.03, and tenfold reductions at epochs 120 and 160 of 200. The key encoder uses an EMA update, not a second gradient optimizer.
+**Optional math:** Use $`-\log[\exp(q\cdot k^+/\tau)/(\exp(q\cdot k^+/\tau)+\sum_{k^-}\exp(q\cdot k^-/\tau))]`$. Here $`q`$ is the query, $`k^+`$ its matching key, and $`k^-`$ queued alternatives. Dot products compare directions. Temperature $`\tau`$ controls how sharply the ratio favors the closest key.
 
-**Regularization techniques:** Image augmentations and weight decay regularize learning. The original shuffled-batch-normalization procedure reduces shortcuts from shared batch statistics. Queue consistency and representation invariance serve different purposes.
+**Optimization algorithm(s):** Original ImageNet training uses SGD with momentum 0.9, batch 256, and initial rate 0.03. It divides the rate by ten at epochs 120 and 160 of 200. Momentum smooths update directions. The key encoder uses weight averaging, not a second gradient optimizer.
 
-**Backpropagation considerations:** Stop gradients to keys and queued features. Accidentally retaining their graphs defeats the memory benefit and changes the algorithm. The momentum coefficient trades responsiveness against compatibility with stale keys.
+**Regularization techniques:** Image changes and weight decay help limit overfitting. Shuffling examples before batch normalization reduces shortcuts from shared batch statistics. Keeping keys comparable and learning to ignore selected image changes solve different problems.
 
-**Parameter count / scaling behavior:** The paper reports roughly 24 million parameters for the ResNet-50 feature extractor. Two weight copies are needed during training, plus the queue and projection parameters; the deployment encoder is not doubled.
+**Backpropagation considerations:** Stop error feedback into keys and queued vectors. Keeping their old computation graphs wastes memory and changes the method. The key encoder's averaging coefficient trades quick adaptation against consistency with older keys.
 
-**Training paradigm:** Image-only contrastive pretraining. Linear classification and object-detection fine-tuning add labels afterward. An Instagram-pretrained model and an ImageNet-pretrained model have different provenance even with the same architecture.
+**Parameter count / scaling behavior:** The paper reports roughly 24 million parameters for the ResNet-50 feature extractor. Training needs two weight copies, projection weights, and the queue. The encoder used afterward is not doubled.
 
-**Hardware/parallelism considerations:** The original ImageNet recipe uses eight GPUs. Queue updates, positive-key ordering, and normalization shuffling must stay consistent across ranks; distributed throughput is not only a matter of increasing queue size.
+**Training paradigm:** Pretraining uses images without labels. Linear classification and object-detection fine-tuning add labels later. An Instagram-trained encoder and an ImageNet-trained encoder have different data histories even with identical network designs.
+
+**Hardware/parallelism considerations:** The original ImageNet recipe uses eight GPUs. Workers must agree on queue updates, matching-key order, and normalization shuffling. Increasing queue size alone does not ensure faster distributed training.
 
 ### 3.10.3 BYOL
 
-**Name:** Bootstrap Your Own Latent (BYOL).
+**In plain English:** BYOL learns by predicting how a slowly changing copy of itself describes another view of the same image. It does not need a list of deliberately mismatched images.
 
-**Category & sub-category:** Self-supervised representation learning; negative-free bootstrap prediction.
+**Name:** Bootstrap Your Own Latent, usually shortened to BYOL.
 
-**Originating paper/vendor/year:** Grill and colleagues, DeepMind, [*Bootstrap Your Own Latent: A New Approach to Self-Supervised Learning*, NeurIPS 2020](https://arxiv.org/abs/2006.07733).
+**Category & sub-category:** Self-supervised image-feature prediction without explicit negative, or mismatched, examples.
 
-**Core mechanism:** An online network predicts the projected representation of another augmented view, supplied by an EMA target network. A predictor exists only on the online branch; gradients do not update the target directly. The two roles are swapped to construct a symmetric objective. No explicit negative examples are needed.
+**Originating paper/vendor/year:** Grill and colleagues at DeepMind presented [*Bootstrap Your Own Latent: A New Approach to Self-Supervised Learning*, NeurIPS 2020](https://arxiv.org/abs/2006.07733).
 
-**Inputs/outputs and typical data types:** Two augmentations of an unlabeled image enter. Projection/prediction vectors train the system; a backbone representation is retained for downstream tasks. Target features are learned signals, not externally supplied semantic labels.
+**Core mechanism:** Make two views of one image. The active network encodes one view, projects its features, and predicts the other view's projected features. A target network supplies those features. It follows a moving average of active-network weights rather than ordinary gradient updates. Only the active side has a predictor. Swap the views and repeat the comparison. No explicit mismatches are required.
 
-**Strengths and limitations:** Avoids maintaining a negative dictionary and can be more robust to some augmentation changes than contrastive baselines. Constant-output collapse remains a possible solution to naive feature regression; success depends on the interaction of asymmetry, target dynamics, normalization, and optimization. "Bootstrap" here does not mean statistical resampling and supplies no confidence interval.
+**Inputs/outputs and typical data types:** Inputs are two modified views of an unlabeled image. Projection and prediction vectors train the system. The main encoder's features are retained for later tasks. Target vectors are learned teaching signals, not human-supplied image-category labels.
 
-**Computational complexity / scalability notes:** There are two online views with gradients and target forward passes, plus projector/predictor overhead. There is no all-pairs $`B^2`$ negative-similarity matrix. EMA updates cost $`O(p)`$; target weights consume memory even though they do not require optimizer moments.
+**Strengths and limitations:** BYOL avoids a negative-example queue and can tolerate some image-modification changes better than contrastive baselines. But a naive predictor could output the same vector for every image. Avoiding this collapse depends on unequal branch designs, target updates, normalization, and optimization together. "Bootstrap" here does not mean statistical resampling or provide a confidence interval.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [BYOL ImageNet experiments](https://ar5iv.labs.arxiv.org/html/2006.07733) use image-only pretraining followed by supervised linear evaluation. Images -> augmented views -> online predictions and moving targets -> frozen encoder -> linear classifier yields **74.3% top-1 for ResNet-50** in the 1,000-epoch setting. The headline 79.6% uses a larger ResNet and is not assigned to ResNet-50 here. The technical fit relative to SimCLR/MoCo is avoiding explicit negatives rather than assuming all other images are dissimilar. Transfer experiments support feature usefulness, but no public business KPI or production deployment is established by these scores.
+**Computational complexity / scalability notes:** Both views need active-network forward and backward work, plus target forward passes and small projector/predictor networks. There is no all-pairs negative-comparison table. Target weights still use memory, although they do not need optimizer moment records.
 
-**Notable vendor implementations/libraries:** DeepMind's [official BYOL research implementation](https://github.com/google-deepmind/deepmind-research/tree/master/byol) provides models and recipes. Negative-free methods sharing an EMA teacher are not automatically BYOL.
+**Optional math:** BYOL avoids a $`B^2`$ negative-similarity matrix for batch size $`B`$. Its weight-averaging update costs $`O(p)`$, where $`p`$ counts averaged weights.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [ImageNet experiments](https://ar5iv.labs.arxiv.org/html/2006.07733) pretrain from images alone. Modified views train active predictions against moving targets. A labeled linear classifier then uses the frozen encoder.
+
+The 1,000-epoch setting reaches **74.3% top-1 for ResNet-50**. Top-1 measures the percentage of correct first-choice classes. The headline 79.6% uses a larger ResNet, not ResNet-50. Unlike SimCLR/MoCo, BYOL avoids explicitly treating other images as dissimilar. Transfer tests support useful features, but these scores establish no production deployment or public business measure.
+
+**Notable vendor implementations/libraries:** DeepMind's [official BYOL implementation](https://github.com/google-deepmind/deepmind-research/tree/master/byol) supplies models and recipes. Not every negative-free method with a moving-average teacher is BYOL.
 
 **Architecture diagram description:**
 
@@ -1107,41 +1299,49 @@ prediction/target -> squared-distance loss; repeat with views swapped
 online encoder/projector weights -- EMA --> target weights
 ```
 
-**Activation functions used and why:** The ResNet uses ReLU; MLP projector and predictor use hidden nonlinearities and batch normalization. Output vectors are L2-normalized for comparison. The loss does not require semantic-class softmax probabilities.
+**Activation functions used and why:** The ResNet uses ReLU. Dense projector and predictor networks use nonlinear hidden units and batch normalization. Final vectors are scaled to unit length for comparison. The loss does not need softmax probabilities for named image classes.
 
-**Loss function(s):** Squared distance between normalized prediction and stop-gradient normalized target, equivalent to $`2-2`$ cosine similarity for each direction. There is no explicit contrastive denominator over negatives.
+**Loss function(s):** Minimize squared distance between equal-length prediction and target vectors in both view directions. The target does not receive gradient updates. There is no denominator comparing against negative examples.
 
-**Optimization algorithm(s):** The original large-batch recipe uses LARS with base rate $`0.2B/256`$, ten-epoch warmup, cosine decay over 1,000 epochs, and weight decay $`1.5\times10^{-6}`$. Target EMA momentum rises from 0.996 toward one with a cosine schedule.
+**Optional math:** For unit-length vectors, squared distance equals $`2-2s`$, where $`s`$ is their cosine similarity. Reducing this distance increases their directional agreement.
 
-**Regularization techniques:** Crops, flips, color transformations, blur/solarization, normalization, and small weight decay work together. A slow teacher and predictor asymmetry are algorithmic components, not independently proven universal anti-collapse guarantees.
+**Optimization algorithm(s):** The large-batch recipe uses LARS with ten-epoch warmup, cosine decay over 1,000 epochs, and weight decay $`1.5\times10^{-6}`$. Target averaging momentum rises from 0.996 toward one along a cosine schedule, making updates slower. **Optional math:** Base rate is $`0.2B/256`$, with batch size $`B`$.
 
-**Backpropagation considerations:** Stop gradients on the target branch but retain online encoder/projector/predictor gradients. Monitor representation variance and downstream probes; declining feature-regression loss alone could indicate collapse rather than learning.
+**Regularization techniques:** Cropping, flips, color changes, blur, and solarization, which reverses some bright pixel values, work with normalization and small weight decay. The slow target and one-sided predictor are parts of the method. Neither alone is a universal guarantee against collapse.
 
-**Parameter count / scaling behavior:** The backbone determines deployment size; projectors, predictor, and target copies add training parameters/state. A larger teacher is not required: the target ordinarily matches the online encoder/projector architecture.
+**Backpropagation considerations:** Stop gradients on the target side, while retaining them through the active encoder, projector, and predictor. Check whether features still vary across images and help later tasks. Falling matching loss alone could mean that all outputs collapsed to the same vector.
 
-**Training paradigm:** Image-only self-supervised feature prediction, with labeled downstream evaluation. The EMA teacher is derived from the learner, not a separately human-labeled pretrained teacher.
+**Parameter count / scaling behavior:** The main encoder determines size after training. Projectors, predictor, and target copies add training storage. The target usually matches the active encoder/projector design; a larger teacher is not required.
 
-**Hardware/parallelism considerations:** The paper's large configuration uses batch 4,096 across 512 TPU-v3 cores. Smaller-batch configurations are also described; the large reported resource budget is not a minimal requirement. Synchronizing normalization/EMA matters for reproduction.
+**Training paradigm:** Image-only feature prediction is self-supervised. Later evaluation uses labels. The moving-average teacher comes from the learner itself, not a separate teacher pretrained on human labels.
+
+**Hardware/parallelism considerations:** The paper's large setup uses batch 4,096 across 512 TPU-v3 cores. It also describes smaller batches. The largest reported setup is not a minimum requirement. Reproduction needs consistent normalization and weight averaging across workers.
 
 ### 3.10.4 DINO
 
-**Name:** DINO, the original self-distillation-with-no-labels method, not an unspecified later DINO-branded model.
+**In plain English:** DINO teaches a network to describe different crops of an image consistently. A slowly updated teacher supplies the targets, without human image labels during pretraining.
 
-**Category & sub-category:** Self-supervised vision representation learning; momentum-teacher distribution matching.
+**Name:** DINO, the original "self-distillation with no labels" method. Later models sharing the DINO name are not assumed here.
 
-**Originating paper/vendor/year:** Caron and colleagues, [*Emerging Properties in Self-Supervised Vision Transformers*, ICCV 2021](https://arxiv.org/abs/2104.14294).
+**Category & sub-category:** Self-supervised image-feature learning. A student matches the output distribution of a teacher updated by weight averaging.
 
-**Core mechanism:** A student matches the probability-like output distribution of an EMA teacher across different image crops. Centering and sharpening the teacher's output help avoid two opposing collapse modes: one dominant dimension and a uniform output for everything. The method supports convolutional backbones and Vision Transformers; the cited visual properties particularly concern ViTs.
+**Originating paper/vendor/year:** Caron and colleagues presented [*Emerging Properties in Self-Supervised Vision Transformers*, ICCV 2021](https://arxiv.org/abs/2104.14294).
 
-**Inputs/outputs and typical data types:** Unlabeled images produce large global and smaller local views. Training outputs are distributions over a learned projection space, not human semantic classes. Encoder vectors and patch features support classification, retrieval, and exploratory object-discovery analyses.
+**Core mechanism:** Make several crops of an image. The student learns to match the teacher's distribution over learned code positions when viewing a different crop. The teacher slowly follows a moving average of student weights. Centering removes running average output scores; sharpening makes preferred choices stand out. Together they help avoid always choosing one position or giving everything equal weight. DINO supports image-filter networks and Vision Transformers, or ViTs. The cited visual findings especially concern ViTs.
 
-**Strengths and limitations:** Learns useful patch/global structure without negative pairs or human labels during pretraining. Attention visualizations can expose foreground structure but are not guaranteed object masks or explanations. Teacher entropy and attention weights are not calibrated semantic uncertainty.
+**Inputs/outputs and typical data types:** Unlabeled images produce large global crops and smaller local crops. Training distributions describe learned codes, not named human classes. Whole-image vectors and patch features support classification, search, and exploratory studies of object discovery.
 
-**Computational complexity / scalability notes:** Cost includes student encoding of multiple crops and teacher encoding of global crops. ViT computation follows $`O(L(Td^2+T^2d))`$ per crop. Halving patch width roughly quadruples $`T`$, making the dense-attention term roughly sixteen times larger at fixed resolution, not implying a sixteenfold total runtime.
+**Strengths and limitations:** DINO can learn useful image and patch patterns without negative pairs or pretraining labels. Attention plots may highlight foreground structure. They are not guaranteed object boundaries or explanations. Neither attention weights nor the spread of teacher outputs gives calibrated uncertainty about meaning.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [DINO study](https://ar5iv.labs.arxiv.org/html/2104.14294) trains on ImageNet images without labels. Image -> multicrop teacher/student learning -> frozen ViT-S/16 features -> labeled linear classifier or labeled nearest-neighbor reference set yields validation predictions. For ViT-S/16, the table reports **77.0% linear top-1** and **74.5% k-nearest-neighbor top-1**; these are different evaluation procedures. Retrieval and patch-attention results further examine representation structure. The technical fit versus pixel reconstruction is learning cross-view agreement at feature level. The paper does not establish a production segmentation system or business KPI, and nearest-neighbor evaluation is not label-free merely because it avoids training a classifier.
+**Computational complexity / scalability notes:** The student processes several crops; the teacher processes global crops. Smaller patches create longer sequences and much more all-pairs attention work. Halving patch width roughly quadruples patch count and makes the dense-attention term roughly sixteen times larger at fixed resolution. Total runtime does not necessarily rise sixteenfold.
 
-**Notable vendor implementations/libraries:** Meta/Facebook Research's [official DINO implementation](https://github.com/facebookresearch/dino). DINOv2, detection models also called DINO, and third-party checkpoints require separate provenance and should not inherit these results.
+**Optional math:** ViT work per crop is $`O(L(Td^2+T^2d))`$, with $`L`$ layers, $`T`$ patches, and vector width $`d`$. Only part of the cost grows with $`T^2`$.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [DINO study](https://ar5iv.labs.arxiv.org/html/2104.14294) trains on ImageNet images without labels. Multiple crops drive teacher-student learning. A frozen ViT-S/16 then supplies features for two labeled tests: a linear classifier and a nearest-neighbor reference set.
+
+ViT-S/16 reaches **77.0% linear top-1** and **74.5% k-nearest-neighbor top-1**. Both report the percentage of correct first-choice classes, but use different decision procedures. Nearest-neighbor testing still uses reference labels despite not training a classifier. Search and patch-attention tests also study the features. The aim is agreement between views, rather than pixel rebuilding. These findings establish no production pixel-labeling system or public business measure.
+
+**Notable vendor implementations/libraries:** Meta/Facebook Research provides the [official DINO code](https://github.com/facebookresearch/dino). DINOv2, object-detection models called DINO, and other saved models have separate histories. They must not inherit these results.
 
 **Architecture diagram description:**
 
@@ -1152,41 +1352,49 @@ different-view distributions -> cross-entropy
 student weights -- EMA --> teacher; teacher targets use stop-gradient
 ```
 
-**Activation functions used and why:** The ViT backbone uses GELU and attention softmax with layer normalization. Temperature-controlled softmax normalizes projected outputs; centering subtracts running teacher-logit statistics before sharpening. These outputs are learned codes, not named class probabilities.
+**Activation functions used and why:** ViT uses smooth GELU units, softmax attention weights, and layer normalization to rescale values. Another temperature-controlled softmax converts projection scores into distributions. Centering subtracts running teacher-score averages before sharpening. The outputs are probabilities over learned code positions, not named classes.
 
-**Loss function(s):** Cross-entropy $`-\sum_k P_{\rm teacher}^{(k)}\log P_{\rm student}^{(k)}`$ between different views, with a stopped teacher target. Centering and teacher/student temperatures affect the target distribution and gradient sharpness.
+**Loss function(s):** Cross-entropy rewards the student's agreement with the teacher across different views. Teacher targets stay fixed during the student's update. Centering and the two temperature settings affect what target is learned and how strongly errors drive updates.
 
-**Optimization algorithm(s):** The paper uses AdamW, base rate $`0.0005B/256`$, ten-epoch warmup, and cosine decay. Weight decay rises from 0.04 to 0.4; teacher EMA momentum rises from 0.996 toward one. Teacher-temperature warmup is yet another distinct schedule.
+**Optional math:** The loss is $`-\sum_k P_{\rm teacher}^{(k)}\log P_{\rm student}^{(k)}`$. Here $`k`$ indexes learned output positions. Each $`P`$ gives the teacher's or student's probability at that position for its image view. The sum penalizes student probabilities that disagree with the teacher.
 
-**Regularization techniques:** Multi-crop augmentation, color transforms, blur/solarization, and weight decay work with teacher centering/sharpening. EMA is not a substitute for all regularization, and collapse prevention depends on the full recipe.
+**Optimization algorithm(s):** The paper uses AdamW with ten-epoch warmup and cosine learning-rate decay. Weight decay rises from 0.04 to 0.4. Teacher averaging momentum rises from 0.996 toward one. Teacher-temperature warmup is a separate schedule. **Optional math:** Base rate is $`0.0005B/256`$, where $`B`$ is batch size.
 
-**Backpropagation considerations:** Teacher outputs are detached; only the student receives ordinary gradient updates. Synchronize center statistics across devices. Excessive sharpening or an incorrectly updated center can create degenerate targets even when loss decreases.
+**Regularization techniques:** Several crops, color changes, blur, solarization, and weight decay work alongside centering and sharpening. Solarization reverses some bright pixel values. Weight averaging does not replace these other choices. Avoiding constant or useless outputs depends on the full recipe.
 
-**Parameter count / scaling behavior:** The paper rounds the ViT-S feature extractor to 21 million parameters, excluding its training projection head. Patch size strongly changes compute at nearly unchanged backbone weight count; the teacher adds another stored copy.
+**Backpropagation considerations:** Only the student receives ordinary gradient updates; teacher outputs are detached from that feedback. Devices must share center statistics consistently. Excessive sharpening or a wrongly updated center can create useless targets even while the loss falls.
 
-**Training paradigm:** Image-only self-distillation with no human labels in pretraining. Labeled linear/k-NN evaluation and downstream fine-tuning remain separate, explicitly supervised procedures.
+**Parameter count / scaling behavior:** The paper rounds the ViT-S feature extractor to 21 million parameters, excluding the training projector. Changing patch size can greatly change computation with nearly unchanged main-network weights. The teacher requires another stored copy.
 
-**Hardware/parallelism considerations:** The reported ViT-S/16 recipe uses batch 1,024 over 16 GPUs. Crop-size heterogeneity complicates batching; distributed center and teacher updates must preserve their intended global statistics.
+**Training paradigm:** Pretraining uses images alone, with no human labels. Labeled linear or k-nearest-neighbor tests and later fine-tuning are separate supervised procedures.
+
+**Hardware/parallelism considerations:** The reported ViT-S/16 recipe uses batch 1,024 across 16 GPUs. Differently sized crops complicate batching. Center and teacher updates across workers must preserve the intended global averages.
 
 ### 3.10.5 Masked autoencoders
 
-**Name:** Masked autoencoder (MAE), specifically the asymmetric Vision Transformer formulation.
+**In plain English:** MAE hides many image patches and learns to rebuild them from the visible pieces. Its expensive encoder sees only visible patches, saving pretraining work.
 
-**Category & sub-category:** Self-supervised vision representation learning; high-ratio masked reconstruction.
+**Name:** Masked autoencoder (MAE). This entry uses the Vision Transformer version with a large encoder and smaller decoder.
 
-**Originating paper/vendor/year:** He, Chen, Xie, Li, Dollar, and Girshick, [*Masked Autoencoders Are Scalable Vision Learners*, arXiv 2021, CVPR 2022](https://arxiv.org/abs/2111.06377).
+**Category & sub-category:** Self-supervised image-feature learning by rebuilding a high fraction of hidden patches.
 
-**Core mechanism:** Remove a large random subset of image patches before the expensive encoder. A smaller decoder receives encoded visible patches plus mask tokens and reconstructs pixels. Placing mask tokens only in the decoder avoids wasting full encoder computation on invisible input. The encoder is retained for downstream recognition; the decoder is normally discarded.
+**Originating paper/vendor/year:** He, Chen, Xie, Li, Dollar, and Girshick presented [*Masked Autoencoders Are Scalable Vision Learners*, arXiv 2021, CVPR 2022](https://arxiv.org/abs/2111.06377).
 
-**Inputs/outputs and typical data types:** Images become patch sequences with random masks. Training outputs are reconstructed patches; deployment outputs are encoder features or predictions from a task-specific head. Standard inference for recognition uses the full image rather than perpetually masking 75%.
+**Core mechanism:** Divide an image into patches and randomly remove many before encoding. The encoder processes only visible patches. A smaller decoder gets their encoded features plus placeholders, called mask tokens, showing where pieces are missing. It predicts pixel values to rebuild the image. Putting placeholders only in the decoder avoids expensive encoder work on invisible patches. Later recognition normally keeps the encoder and discards the decoder.
 
-**Strengths and limitations:** A simple pixel target supports high-capacity vision pretraining without negative pairs or paired captions. Reconstruction can emphasize low-level details, and good reconstructions alone do not validate semantic features. Squared-error reconstructions are point predictions; plausible alternative completions are not represented by a calibrated posterior.
+**Inputs/outputs and typical data types:** Images become randomly masked patch sequences. Training predicts rebuilt patches. Later use produces encoder features or task-specific predictions. Standard recognition sees the full image, rather than continuing to hide 75% of it.
 
-**Computational complexity / scalability notes:** If visible fraction is $`v`$, encoder projections/MLPs scale with $`vT`$ and dense attention with $`(vT)^2`$; the lightweight decoder still processes the full patch sequence. Thus 75% masking does not imply a universal sixteenfold training speedup. Larger downstream resolutions restore full-token encoder cost.
+**Strengths and limitations:** Simple pixel targets can train large vision encoders without mismatched pairs or captions. But rebuilding may focus on small visual details rather than meaning. Good reconstruction alone does not validate useful recognition features. Squared-error outputs are single estimates, not calibrated probabilities for every plausible completion.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [MAE study](https://ar5iv.labs.arxiv.org/html/2111.06377) pretrains on ImageNet-1K images, typically masking 75% of patches. Image -> visible-only ViT encoder -> decoder reconstruction -> discard decoder -> labeled end-to-end fine-tuning produces classification predictions. The paper reports **87.8% top-1 for ViT-H at 448-pixel evaluation resolution**; its ViT-H 224-resolution result is 86.9%. These are **fine-tuned results**, not frozen linear probes or accuracy of the reconstruction task. The technical fit versus a conventional full-token denoising autoencoder is asymmetric compute allocation. The study also evaluates transfer tasks, but no deployed recognition service or public business KPI is established.
+**Computational complexity / scalability notes:** Removing patches reduces both encoder dense-layer work and the more expensive all-pairs attention work. The smaller decoder still processes the full patch list. Thus 75% masking does not guarantee sixteenfold faster training. Later full-image tasks restore the encoder's full patch cost, especially at larger resolutions.
 
-**Notable vendor implementations/libraries:** Meta/Facebook Research's [official MAE repository](https://github.com/facebookresearch/mae), plus compatible Vision Transformer libraries. Masked image methods predicting discrete tokenizer codes have different targets and are not automatically MAE.
+**Optional math:** Let $`T`$ count all patches and $`v`$ be the visible fraction. Encoder projections and dense layers scale with $`vT`$, while dense attention scales with $`(vT)^2`$. These savings do not cover every part of training.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [MAE study](https://ar5iv.labs.arxiv.org/html/2111.06377) pretrains on ImageNet-1K, typically hiding 75% of patches. Visible-only encoding and decoder rebuilding teach image features. Researchers discard the decoder, then use labels to fine-tune the encoder and classifier together.
+
+The paper reports **87.8% top-1 for ViT-H at 448-pixel evaluation resolution**. Its ViT-H result at 224 resolution is 86.9%. Top-1 is the percentage of correct first-choice image classes. These are **fine-tuned results**, not frozen-feature tests or reconstruction accuracy. The advantage over a full-patch denoising autoencoder is spending most work on visible content. Transfer tasks are also studied, but no deployed recognition service or public business measure is established.
+
+**Notable vendor implementations/libraries:** Meta/Facebook Research supplies the [official MAE repository](https://github.com/facebookresearch/mae); compatible ViT libraries also exist. Methods that predict discrete image codes instead of pixels use different targets. They are not automatically MAE.
 
 **Architecture diagram description:**
 
@@ -1197,41 +1405,47 @@ encoded visible patches + mask tokens + positions -> small decoder
 after pretraining: full image -> encoder -> downstream head; decoder discarded
 ```
 
-**Activation functions used and why:** Standard ViT GELU MLPs, attention softmax, and layer normalization appear in encoder/decoder blocks. A linear reconstruction head emits real-valued pixels; it need not use categorical softmax.
+**Activation functions used and why:** Encoder and decoder blocks use ViT's smooth GELU units, softmax attention weights, and layer normalization. A linear final layer predicts real-valued pixels. It does not need softmax probabilities over categories.
 
-**Loss function(s):** Mean squared error on **masked patches only**, with the paper also studying normalized per-patch pixel targets. This is not the same loss as reconstructing all patches equally or predicting a discrete codebook.
+**Loss function(s):** Mean squared error averages squared pixel mistakes on **masked patches only**; lower is better. The paper also tests targets rescaled separately within each patch. This differs from scoring every patch equally or predicting entries in a discrete codebook.
 
-**Optimization algorithm(s):** The paper's pretraining table uses AdamW, base rate $`1.5\times10^{-4}`$ scaled by batch/256, batch 4,096, 40-epoch warmup, cosine decay, weight decay 0.05, and betas (0.9, 0.95). Supervised fine-tuning has different schedules and regularization.
+**Optimization algorithm(s):** The pretraining table uses AdamW, batch 4,096, 40-epoch warmup, cosine decay, weight decay 0.05, and betas (0.9, 0.95). Betas control smoothing of update directions and squared updates. **Optional math:** Base rate $`1.5\times10^{-4}`$ is multiplied by batch size divided by 256. Labeled fine-tuning uses different schedules and restrictions.
 
-**Regularization techniques:** High-ratio random masking is central; pretraining augmentation is comparatively simple. Mixup, CutMix, label smoothing, and stronger stochastic-depth choices belong to specified fine-tuning recipes, not automatically to the masked reconstruction stage.
+**Regularization techniques:** Hiding many random patches is central; other pretraining image changes are fairly simple. Some fine-tuning recipes use Mixup to blend examples or CutMix to swap image regions. Label smoothing softens targets; stochastic depth randomly skips blocks, with stronger settings in some fine-tuning recipes. These choices are not automatically part of reconstruction pretraining.
 
-**Backpropagation considerations:** Gradients pass through the decoder into visible-patch encoder features. There are no encoder activations for removed tokens. Target normalization, patch order restoration, and masked-loss indexing are correctness-critical.
+**Backpropagation considerations:** Feedback passes through the decoder to encoded visible patches. Removed patches have no encoder intermediate results. Correct training depends on target rescaling, restoring patch order, and applying loss only at the right masked positions.
 
-**Parameter count / scaling behavior:** ViT-B/L/H choices set encoder size; the lightweight decoder adds training-only parameters. Increasing resolution expands tokens and positional representations far more than the main shared Transformer weight matrices.
+**Parameter count / scaling behavior:** Choosing ViT-B, ViT-L, or ViT-H sets encoder size. The small decoder adds training-only weights. Larger image resolution increases patch and position information far more than the main shared Transformer weight matrices.
 
-**Training paradigm:** Image-only self-supervised reconstruction, followed by explicitly labeled probing or fine-tuning. The headline recognition number therefore measures a two-stage learning pipeline.
+**Training paradigm:** Image-only reconstruction is self-supervised. Labeled probing or fine-tuning follows. The headline recognition score therefore measures a two-stage pipeline, not label-free classification.
 
-**Hardware/parallelism considerations:** Accelerator data parallelism and activation checkpointing support large encoders. Visible-only encoding reduces pretraining memory; high-resolution full-image fine-tuning may nevertheless become the memory bottleneck.
+**Hardware/parallelism considerations:** Splitting batches across accelerators and recomputing intermediate results can support large encoders. Visible-only encoding saves pretraining memory. Full-image fine-tuning at high resolution may still be the most memory-demanding stage.
 
 ### 3.10.6 CLIP
 
-**Name:** Contrastive Language-Image Pretraining (CLIP), specifically OpenAI's original 2021 dual-encoder family.
+**In plain English:** CLIP learns which images and written descriptions match. It can then search images with text or choose among class descriptions, without training a new fixed classifier for each list.
 
-**Category & sub-category:** Cross-modal representation pretraining with **natural language supervision**, preserving the original paper's characterization. Editorial placement here highlights representation transfer, not an absence of supervision. Noisy web pairing can justify a weak-supervision description, but captions still provide semantic training information. See [supervised contrastive learning and Siamese networks](02-supervised-neural.md) for related objectives and architectures.
+**Name:** Contrastive Language-Image Pretraining (CLIP). This entry covers OpenAI's original 2021 family with separate image and text encoders.
 
-**Originating paper/vendor/year:** Radford and colleagues, OpenAI, [*Learning Transferable Visual Models From Natural Language Supervision*, ICML 2021](https://arxiv.org/abs/2103.00020).
+**Category & sub-category:** Image-and-language representation learning with **natural language supervision**, as the original paper states. CLIP is here because its features transfer to new tasks, not because it lacks supervision. Noisy web pairs may be called weak supervision, but captions still teach meaning. See [supervised contrastive learning and Siamese networks](02-supervised-neural.md) for related methods.
 
-**Core mechanism:** Train an image encoder and text encoder to match corresponding image-caption pairs against mismatched pairs in a batch. After pretraining, encode candidate class descriptions or search queries and compare them with image embeddings. The text encoder makes the classification vocabulary changeable without training a new fixed class head.
+**Originating paper/vendor/year:** Radford and colleagues at OpenAI presented [*Learning Transferable Visual Models From Natural Language Supervision*, ICML 2021](https://arxiv.org/abs/2103.00020).
 
-**Inputs/outputs and typical data types:** Paired images and natural-language text train the model. Outputs are aligned embeddings, similarity scores, retrieval rankings, or zero-shot class selections. The original family uses modified ResNets or ViTs for images and a text Transformer; image and text encoders are not weight-tied Siamese twins.
+**Core mechanism:** Encode every image and caption in a batch as number vectors. Reward correct pairs for matching more closely than incorrect pairs. After training, encode search text or candidate class descriptions and compare them with image vectors. Changing the descriptions changes the available class choices without training another fixed output classifier.
 
-**Strengths and limitations:** Enables flexible cross-modal retrieval and prompt-defined classification. Caption noise, cultural bias, shortcut text, duplicate pairs, and class-description wording affect predictions. A contrastive score or softmax over a chosen candidate list is not calibrated open-world confidence; changing the candidate list changes the apparent probability.
+**Inputs/outputs and typical data types:** Matching images and natural-language text train the model. Outputs include comparable vectors, match scores, search rankings, and zero-shot class choices. Original image encoders are modified ResNets or ViTs; text uses a Transformer. **There is no weight tying between the image and text encoders:** each learns its own weights. They are not identical-weight Siamese twins.
 
-**Computational complexity / scalability notes:** Encoder cost depends on image backbone and text length. With batch $`B`$, pairwise cross-modal similarity costs $`O(B^2d_z)`$, although it can be sharded. At retrieval time, text/image embeddings can be precomputed and indexed; scoring millions of candidates is a separate retrieval-system cost.
+**Strengths and limitations:** Text can define flexible search queries and classes. Caption errors, cultural bias, text shortcuts, duplicate pairs, and prompt wording all affect predictions. A match score or softmax over selected candidates is not calibrated confidence across every possible real-world answer. Changing the candidate list changes the apparent probabilities.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [CLIP paper](https://ar5iv.labs.arxiv.org/html/2103.00020) trains on 400 million internet image-text pairs and tests transfer to numerous datasets. Image-caption pairs -> contrastive dual encoders -> ImageNet class-name prompt templates -> text/image similarities -> selected class yields zero-shot validation predictions. The best **ViT-L/14@336px** model reports **76.2% ImageNet top-1**, using the paper's prompt-based zero-shot evaluation, not a supervised ImageNet linear head. "Zero-shot" means no task-specific labeled training for that classifier, not no image-text supervision or provably no web-data overlap. The appendix also evaluates Flickr30k/MS-COCO retrieval with prompted descriptions; retrieval direction and candidate set differ from classification. The technical fit versus a fixed supervised classifier is a language-defined vocabulary. No enterprise-search cost saving or public business KPI is asserted.
+**Computational complexity / scalability notes:** Encoder work depends on image network and text length. Comparing every image with every caption grows with the square of batch size. Workers can divide that work. For later search, vectors can be computed and indexed beforehand. Searching millions of candidates still has its own system costs.
 
-**Notable vendor implementations/libraries:** OpenAI's [official CLIP code and weights](https://github.com/openai/CLIP); Hugging Face Transformers provides compatible model classes. OpenCLIP and other reproductions use different data, architectures, licenses, or recipes and require their own checkpoint provenance.
+**Optional math:** Pair comparisons cost $`O(B^2d_z)`$, where $`B`$ is batch size and $`d_z`$ the shared vector width. This does not include encoder computation.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [paper](https://ar5iv.labs.arxiv.org/html/2103.00020) trains CLIP on 400 million internet image-text pairs, then tests transfer to many datasets. ImageNet class names are placed in prompt templates. Their text vectors are compared with each validation image vector to choose a class.
+
+The best **ViT-L/14@336px** reports **76.2% ImageNet top-1**, the percentage of correct first-choice classes. This uses prompted zero-shot testing, not a supervised ImageNet linear classifier. Zero-shot means no task-specific labeled training for that classifier. It does not mean no image-text supervision or proven absence of web-data overlap. The appendix also tests Flickr30k/MS-COCO search with prompted descriptions. Search direction and candidate sets differ from classification. Language-defined choices are the advantage over a fixed supervised classifier. No enterprise-search savings or public business measure is asserted.
+
+**Notable vendor implementations/libraries:** OpenAI releases [official CLIP code and weights](https://github.com/openai/CLIP). Hugging Face Transformers offers compatible model classes. OpenCLIP and other reproductions may change data, design, licenses, or recipes, so each saved model needs its own history.
 
 **Architecture diagram description:**
 
@@ -1242,46 +1456,54 @@ all image/text dot products in batch -> learned logit scale -> symmetric CE
 zero-shot: image embedding vs embeddings of candidate-class descriptions
 ```
 
-**Activation functions used and why:** Modified ResNet encoders use rectified convolutional nonlinearities; ViT/text Transformer implementations use GELU-family MLP activations and attention softmax. Final L2 normalization and a learned inverse temperature control cross-modal similarity, not semantic truth probabilities.
+**Activation functions used and why:** Modified ResNets use rectifying image-filter activations. ViT and text Transformers use smooth GELU-family units and softmax attention. Final vectors are scaled to unit length. A learned inverse temperature controls how sharply match scores differ, not the probability that an interpretation is true.
 
-**Loss function(s):** Average image-to-text and text-to-image cross-entropy over the batch's matching-pair indices. This is contrastive pairing supervision, not caption-generation likelihood and not a supervised class-label loss. False negatives arise when more than one batch caption accurately describes an image.
+**Loss function(s):** For each image, reward selecting its paired caption. For each caption, reward selecting its paired image. Average cross-entropy across both directions. This learns pair matching, not caption generation or named-class prediction. Other captions may also describe an image correctly, creating false negatives.
 
-**Optimization algorithm(s):** The paper uses Adam with decoupled weight decay, cosine learning-rate decay, and architecture-specific hyperparameters over 32 epochs. The strongest ViT-L/14 gets an additional epoch at 336 resolution. The paper initializes the learned temperature at an equivalent 0.07 and reports bounding logit scaling to avoid instability.
+**Optimization algorithm(s):** The paper uses Adam with weight decay applied separately from gradient adaptation. It uses cosine learning-rate decay and network-specific settings over 32 epochs. The strongest ViT-L/14 receives an additional epoch at 336 resolution. Temperature starts at an equivalent 0.07. The paper reports bounding score scaling to prevent unstable, overly sharp choices.
 
-**Regularization techniques:** Weight decay excludes certain gains/biases; image preprocessing and broad paired data support transfer. Prompt ensembling is an evaluation technique, not a replacement for training regularization or a universally optimal user prompt.
+**Regularization techniques:** Weight decay excludes selected scale and bias values. Image preprocessing and broad paired data support transfer. Combining predictions from several prompt templates is an evaluation technique. It is neither training regularization nor a universally best user prompt.
 
-**Backpropagation considerations:** Both encoders receive contrastive gradients. Distributed similarity calculations must preserve intended gradients to both modalities. Large logit scales can make softmax numerically sharp; mixed-precision statistics and gradient checkpointing require care.
+**Backpropagation considerations:** Both encoders receive feedback from matching errors. Distributed comparisons must preserve that feedback to both images and text. Very large raw-score scales make softmax concentrate sharply and can cause numeric problems. Mixed-precision statistics and recomputed intermediates require care.
 
-**Parameter count / scaling behavior:** Count depends on the chosen image and text encoders plus projections, not the CLIP name. ViT-L/14@336px is a resolution-specific model, not equivalent to every ViT-L/14 benchmark. Batch similarity cost can grow quadratically without any increase in model parameters.
+**Parameter count / scaling behavior:** Count the chosen image encoder, text encoder, and projection layers. The CLIP name alone does not specify size. ViT-L/14@336px is resolution-specific, not equivalent to every ViT-L/14 result. Batch comparisons can grow quadratically without adding any model weights.
 
-**Training paradigm:** **Natural language supervision** in the original paper's terminology. Matching targets are constructed from existing image-text pairs, so a broad use of "self-supervised" can describe the pair-prediction objective. That does not make the images semantically unsupervised: human-authored captions and their pairing supply information. "Weakly supervised" emphasizes noisy web associations and the lack of curated task-specific class labels, not zero supervision. Zero-shot prompting, labeled linear probing, and fine-tuning are distinct downstream regimes.
+**Training paradigm:** The original paper calls this **natural language supervision**. Existing pairs automatically supply matching targets, so some broad definitions also call the practice task self-supervised. Yet human-written captions and their pairing teach image meaning. "Weakly supervised" highlights noisy web pairings and missing curated task-specific class labels; it does not mean zero supervision. Zero-shot prompting, labeled linear probing, and fine-tuning are separate later procedures.
 
-**Hardware/parallelism considerations:** The paper uses batch 32,768, mixed precision, checkpointing, and sharded similarities. It reports the largest ViT training on 256 V100 GPUs and the largest ResNet on 592; these are historical training configurations, not deployment requirements.
+**Hardware/parallelism considerations:** The paper uses batch 32,768, mixed precision, recomputation checkpoints, and comparison work divided across devices. The largest ViT trains on 256 V100 GPUs; the largest ResNet uses 592. These are historical training setups, not requirements for using a trained model.
 
 ### 3.10.7 Word2Vec
 
-**Name:** Word2Vec family: continuous bag-of-words (CBOW) and continuous skip-gram, with output-training variants distinguished.
+**In plain English:** Word2Vec learns a number list for each word by predicting words found nearby. Related words can get useful shared patterns, but each word keeps the same list in every sentence.
 
-**Category & sub-category:** Self-supervised language representation pretraining; shallow predictive, log-linear word embeddings.
+**Name:** Word2Vec includes continuous bag-of-words (CBOW) and continuous skip-gram. Different ways to train their output predictions are separate choices.
 
-**Originating paper/vendor/year:** Mikolov, Chen, Corrado, and Dean, Google, [*Efficient Estimation of Word Representations in Vector Space*, 2013](https://ar5iv.labs.arxiv.org/html/1301.3781). Mikolov and colleagues' [*Distributed Representations of Words and Phrases and their Compositionality*, NeurIPS 2013](https://ar5iv.labs.arxiv.org/html/1310.4546) develops negative sampling, subsampling, and phrase modeling. These works did not invent all distributed word representations.
+**Category & sub-category:** Self-supervised word-feature learning. These shallow models predict from learned word vectors without a deep hidden network.
 
-**Core mechanism:** Learn input and output embedding tables from nearby words in running text.
+**Originating paper/vendor/year:** Mikolov, Chen, Corrado, and Dean at Google wrote [*Efficient Estimation of Word Representations in Vector Space*, 2013](https://ar5iv.labs.arxiv.org/html/1301.3781). Mikolov and colleagues' [*Distributed Representations of Words and Phrases and their Compositionality*, NeurIPS 2013](https://ar5iv.labs.arxiv.org/html/1310.4546) adds negative sampling, frequent-word subsampling, and phrase modeling. These papers did not invent all number-based word representations.
 
-- **CBOW:** Aggregate surrounding-word vectors without preserving their order and predict the center word. One prediction shares evidence from several context positions.
-- **Skip-gram:** Use the center word to predict nearby context words, creating multiple prediction pairs per center.
+**Core mechanism:** Read nearby words in running text and learn two lookup tables: input vectors and output vectors.
 
-Both avoid the expensive nonlinear hidden layer of earlier neural language models. Hierarchical softmax and negative sampling change output training; they are not synonyms for CBOW and skip-gram.
+- **CBOW:** Add or average surrounding-word vectors, ignoring their order, to predict the center word. Several neighbors support one prediction.
+- **Skip-gram:** Use a center word to predict its neighbors, creating several training pairs.
 
-**Inputs/outputs and typical data types:** Tokenized text produces context/target examples; learned static vectors support nearest-neighbor search or downstream NLP features. A word receives the same vector across contexts. Unseen tokens and polysemy need additional handling; subword models and contextual Transformers are different methods.
+Neither needs the costly nonlinear hidden layer used in earlier neural language models. Output training can check the whole vocabulary, use a tree of choices called hierarchical softmax, or distinguish observed pairs from sampled noise words. That last method is negative sampling. These choices are not synonyms for CBOW and skip-gram.
 
-**Strengths and limitations:** Efficient semantic sharing replaces unrelated one-hot coordinates with reusable dense features. Window size, frequency, corpus bias, and tokenization determine what is learned. Analogy offsets need not encode universal relationships. Cosine similarity and negative-sampling probabilities are not calibrated semantic confidence or word-sense uncertainty.
+**Inputs/outputs and typical data types:** Text split into tokens supplies neighboring-word prediction examples. Outputs are static word vectors for similarity search or later language tasks. A word has the same vector in every context, even with several meanings. Unknown words need extra handling. Word-piece models and sentence-aware Transformers are different methods.
 
-**Computational complexity / scalability notes:** With vocabulary $`V`$, dimension $`d`$, and $`K`$ negatives, skip-gram negative sampling costs $`O((K+1)d)`$ per observed pair, multiplied by the number of context pairs. Full softmax costs $`O(Vd)`$; hierarchical softmax costs $`O(hd)`$ for tree-path length $`h`$, typically logarithmic on average. CBOW additionally aggregates its context vectors.
+**Strengths and limitations:** Learned vectors share information between words instead of treating each as an unrelated slot. Context-window size, word frequency, text bias, and token splitting affect the result. Vector differences do not represent universal relationships. Cosine similarity and negative-sampling scores are not calibrated confidence about meaning or word sense.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [2013 architecture comparison](https://ar5iv.labs.arxiv.org/html/1301.3781) trains 640-dimensional vectors on 320 million words from LDC corpora with an 82,000-word vocabulary. Text windows -> CBOW or skip-gram -> vectors -> cosine search for $`v_b-v_a+v_c`$ -> predicted analogy answer evaluates linguistic relationships. Under its Semantic-Syntactic Word Relationship protocol, skip-gram achieves **55% semantic accuracy versus CBOW's 24%**, while CBOW achieves **64% syntactic accuracy versus skip-gram's 59%**. These are matched-corpus research comparisons, not downstream classification accuracy or universal model rankings. Their technical fit relative to a full neural language model is cheaper representation learning without an expensive hidden network. No public business KPI is reported.
+**Computational complexity / scalability notes:** Full-vocabulary prediction checks every word. Negative sampling checks the observed pair and a limited number of sampled alternatives, making each pair cheaper. A tree follows only the decisions leading to a word. Skip-gram repeats work for each neighbor; CBOW also combines context vectors.
 
-**Notable vendor implementations/libraries:** The [author-hosted Word2Vec C implementation](https://github.com/tmikolov/word2vec) and [Gensim Word2Vec](https://radimrehurek.com/gensim/models/word2vec.html). Library defaults, negative counts, and released Google News vectors must not be assumed to reproduce the 640-dimensional comparison.
+**Optional math:** Let $`V`$ be vocabulary size, $`d`$ vector length, and $`K`$ sampled negatives. Skip-gram negative sampling costs $`O((K+1)d)`$ per observed pair. Full softmax costs $`O(Vd)`$. Hierarchical softmax costs $`O(hd)`$, where $`h`$ is tree-path length, typically growing logarithmically on average with vocabulary size.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [2013 comparison](https://ar5iv.labs.arxiv.org/html/1301.3781) trains 640-dimensional vectors on 320 million words from LDC corpora, with an 82,000-word vocabulary. Text windows train CBOW or skip-gram. Analogy tests apply the vector change between two words to a third, then search for the nearest answer by direction.
+
+Under the Semantic-Syntactic Word Relationship protocol, skip-gram gets **55% semantic accuracy versus CBOW's 24%**. CBOW gets **64% syntactic accuracy versus skip-gram's 59%**. Semantic questions test meaning relationships; syntactic questions test grammar relationships. These percentages score analogy answers on matched training text, not a later classifier or a universal ranking. Avoiding an expensive hidden network makes representation learning cheaper than a full neural language model. No public business performance measure is reported.
+
+**Optional math:** The analogy query is $`v_b-v_a+v_c`$, where $`v_a,v_b,v_c`$ are vectors for three given words. It applies the change from word $`a`$ to word $`b`$ to word $`c`$.
+
+**Notable vendor implementations/libraries:** The [author-hosted C implementation](https://github.com/tmikolov/word2vec) and [Gensim Word2Vec](https://radimrehurek.com/gensim/models/word2vec.html) provide implementations. Defaults, negative counts, and released Google News vectors need not reproduce the 640-dimensional comparison.
 
 **Architecture diagram description:**
 
@@ -1292,41 +1514,51 @@ output choice: full softmax OR binary tree decisions OR positive/negative logits
 after training: retain word vectors -> similarity search / downstream model
 ```
 
-**Activation functions used and why:** The projection is linear; no hidden ReLU/tanh is required. Full softmax normalizes vocabulary scores. Hierarchical softmax uses sigmoid tree decisions; negative sampling uses sigmoid positive-versus-noise scores, not a normalized language-model distribution.
+**Activation functions used and why:** Projection is linear; it needs no hidden ReLU or tanh layer. Full softmax turns vocabulary scores into probabilities that sum to one. Tree prediction uses sigmoid decisions. Negative sampling uses sigmoid observed-versus-noise scores, not a full normalized word-probability distribution.
 
-**Loss function(s):** CBOW minimizes center-word conditional cross-entropy; skip-gram sums context-word prediction losses. Skip-gram negative sampling instead minimizes $`-\log\sigma(u_c^\top v_w)-\sum_{j=1}^{K}\log\sigma(-u_{n_j}^\top v_w)`$. Sampling negatives from smoothed unigram frequencies, raised to $`3/4`$ in the paper, estimates this binary objective; it is not an unbiased estimator of full-softmax cross-entropy.
+**Loss function(s):** CBOW penalizes wrong center-word predictions. Skip-gram adds prediction losses for neighboring words. Negative sampling instead rewards observed word pairs over noise pairs. It uses a different binary training goal, not an unbiased shortcut for full-softmax cross-entropy.
 
-**Optimization algorithm(s):** The first paper reports SGD/backpropagation with initial rate 0.025 and linear decay toward zero for its serial experiments; its DistBelief parallel setup uses asynchronous minibatch updates with Adagrad. These are separate recipes, not a universal optimizer shared by every Word2Vec implementation.
+**Optional math:** Skip-gram negative sampling minimizes $`-\log\sigma(u_c^\top v_w)-\sum_{j=1}^{K}\log\sigma(-u_{n_j}^\top v_w)`$. Here $`v_w`$ is the center word's input vector, $`u_c`$ the observed neighbor's output vector, and $`u_{n_j}`$ a sampled noise word's output vector. There are $`K`$ noise words. Each dot product gives a pair score; sigmoid $`\sigma`$ turns it into a binary score. The paper samples noise words from individual-word frequencies raised to $`3/4`$, smoothing their frequency differences.
 
-**Regularization techniques:** Frequent-word subsampling, limited/random context windows, vocabulary thresholds, and finite embedding dimension limit dominance and capacity. Negative sampling also changes the objective; it should not be described merely as dropout.
+**Optimization algorithm(s):** The first paper's serial experiments use SGD/backpropagation, starting at 0.025 and reducing the rate evenly toward zero. Its parallel DistBelief setup uses asynchronous minibatch Adagrad updates. These are distinct recipes, not one optimizer required by all Word2Vec implementations.
 
-**Backpropagation considerations:** Update selected embedding rows rather than dense one-hot matrices. CBOW distributes gradients across aggregated context rows; skip-gram accumulates pairwise updates. Sigmoid saturation and frequent-token update collisions can affect optimization; gradients do not differentiate through sampled token identities.
+**Regularization techniques:** Subsampling removes some frequent-word examples. Limited or random context windows, minimum vocabulary frequencies, and finite vector length also restrict learning. Negative sampling changes the loss itself; it is not simply dropout.
 
-**Parameter count / scaling behavior:** Standard negative sampling stores two $`V\times d`$ tables, approximately $`2Vd`$ parameters. Exporting only input vectors halves that embedding storage; vocabulary metadata and sampler structures remain additional costs.
+**Backpropagation considerations:** Update the relevant lookup-table rows rather than large one-hot matrices with a separate slot for every word. CBOW shares feedback across context rows; skip-gram adds pairwise updates. Nearly saturated sigmoids weaken feedback. Simultaneous updates to common words can collide. No gradients pass through the random choice of token identity.
 
-**Training paradigm:** Self-supervised prediction from observed text neighborhoods, without manually labeled semantic relationships. Analogy answers evaluate the representations; supervised downstream fine-tuning adds a separate label signal.
+**Parameter count / scaling behavior:** Standard negative sampling keeps separate input and output vector tables. Exporting only input vectors halves their storage, but vocabulary information and sampling structures still cost space.
 
-**Hardware/parallelism considerations:** Sparse updates are CPU-friendly and often memory-bandwidth-bound. Asynchronous threads improve throughput but reduce determinism; distributed tables introduce hot-word contention and communication. A large dense-matrix GPU workload is not required by the architecture.
+**Optional math:** For vocabulary size $`V`$ and vector length $`d`$, the two $`V\times d`$ tables store approximately $`2Vd`$ parameters.
+
+**Training paradigm:** Nearby words supply self-supervised targets, without manually labeled meaning relationships. Analogy answers evaluate the resulting vectors. A later supervised task adds its own label signal.
+
+**Hardware/parallelism considerations:** Sparse row updates suit CPUs and often wait on memory transfers rather than arithmetic. Asynchronous threads improve throughput but make results less repeatable. Distributed tables need communication and may compete over frequent words. Large dense GPU calculations are not required.
 
 ### 3.10.8 GloVe
 
-**Name:** Global Vectors for Word Representation (GloVe), the original 2014 log-bilinear embedding model.
+**In plain English:** GloVe learns word vectors from counts of which words appear near each other. Each word keeps one fixed vector, which can help a later language model share information across words.
 
-**Category & sub-category:** Unsupervised/self-supervised language representation pretraining; global co-occurrence fitting. The neural fields describe differentiable embedding lookups and a bilinear score, not an invented deep network.
+**Name:** Global Vectors for Word Representation (GloVe). The original 2014 model fits log counts using pairs of learned vectors.
 
-**Originating paper/vendor/year:** Pennington, Socher, and Manning, Stanford, [*GloVe: Global Vectors for Word Representation*, EMNLP 2014](https://aclanthology.org/D14-1162/). The original code release dates to August 2014; later vector releases listed on the [project page](https://nlp.stanford.edu/projects/glove/) have separate corpora and provenance.
+**Category & sub-category:** Unsupervised/self-supervised word-feature learning from global neighboring-word counts. The neural fields describe trainable lookups and two-vector scores, not a deep hidden network.
 
-**Core mechanism:** Aggregate word-context co-occurrence counts $`X_{ij}`$, then fit their logarithms with target/context embedding dot products and biases. Weighting limits the influence of very rare counts without allowing frequent pairs to grow unbounded in importance. The paper motivates the representation through ratios of co-occurrence probabilities, which can distinguish properties such as those associated with ice versus steam.
+**Originating paper/vendor/year:** Pennington, Socher, and Manning at Stanford presented [*GloVe: Global Vectors for Word Representation*, EMNLP 2014](https://aclanthology.org/D14-1162/). Original code was released in August 2014. Later vector releases on the [project page](https://nlp.stanford.edu/projects/glove/) have different training-text sources and histories.
 
-**Inputs/outputs and typical data types:** A tokenized corpus becomes weighted nonzero word-context counts. Outputs are static target/context vectors and biases; the original paper combines the two vector tables by summation for evaluation. This is not a context-sensitive sentence encoder or a normalized next-word distribution.
+**Core mechanism:** Count how often each word appears near each context word across the text collection. Learn target and context vectors whose dot product, plus two offsets, fits the logarithm of that count. Weight rare pairs less, while capping the importance of very frequent pairs. The paper motivates this through ratios of nearby-word probabilities, which can distinguish properties associated with ice versus steam.
 
-**Strengths and limitations:** Reusing aggregated statistics can make repeated optimization efficient and exposes the learning target clearly. Co-occurrence storage and preprocessing can be expensive; rare words, ambiguous senses, and corpus biases remain limitations. Similarity is not calibrated confidence, and a fitted log-count residual is not a semantic uncertainty interval.
+**Inputs/outputs and typical data types:** Tokenized text becomes weighted counts for word pairs that occur together. Outputs are static target/context vectors and offsets, called biases. The original paper adds the two vector tables for evaluation. This is neither a sentence-aware encoder nor a normalized next-word probability distribution.
 
-**Computational complexity / scalability notes:** For $`n`$ corpus tokens and window radius $`c`$, constructing counts takes approximately $`O(nc)`$ pair-processing work. With $`M`$ nonzero pairs and dimension $`d`$, one optimization pass costs $`O(Md)`$; $`E`$ passes cost $`O(EMd)`$. Sparse count storage is $`O(M)`$, not inevitably $`O(V^2)`$, but can still dominate memory.
+**Strengths and limitations:** Reusing combined counts makes repeated training efficient and the target clear. Preparing and storing counts can be expensive. Rare words, multiple meanings, and text biases remain problems. Vector similarity is not calibrated confidence. Log-count prediction error is not an uncertainty interval about meaning.
 
-**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [original paper](https://nlp.stanford.edu/pubs/glove.pdf) evaluates entity extraction from Reuters newswire in CoNLL-2003. Unlabeled-corpus counts -> GloVe vectors -> 50-dimensional features for words in a five-word window -> a CRF trained on labeled CoNLL data -> person/location/organization/miscellaneous tags forms the pipeline. Its NER table reports **88.3 test F1 with GloVe versus 85.4 for discrete features alone**; HPCA scores 88.7 on that test, so GloVe is not best there. The technical rationale is sharing lexical information beyond unrelated discrete features. This is supervised downstream evaluation of unsupervised embeddings, not a label-free NER system, Reuters deployment, or public business KPI.
+**Computational complexity / scalability notes:** Counting work grows with text length and the number of nearby positions checked. Training then visits stored pairs, with more work for longer vectors or more passes. Store only observed pairs, not every possible word pair. Even sparse counts can use most memory.
 
-**Notable vendor implementations/libraries:** Stanford's [official GloVe C implementation and vector releases](https://github.com/stanfordnlp/GloVe). The historical Wikipedia 2014 plus Gigaword 5 vectors differ from later releases. Loading vectors into PyTorch/Keras embedding layers does not reproduce their original training.
+**Optional math:** For $`n`$ text tokens and window radius $`c`$, counting costs about $`O(nc)`$. With $`M`$ nonzero pairs and vector length $`d`$, one training pass costs $`O(Md)`$; $`E`$ passes cost $`O(EMd)`$. Count storage is $`O(M)`$, not necessarily $`O(V^2)`$, where $`V`$ is vocabulary size.
+
+**Real-world problem solved - REQUIRED WORKED EXAMPLE:** **Evidence status: Research benchmark.** The [original paper](https://nlp.stanford.edu/pubs/glove.pdf) tests named-entity recognition, or NER, on CoNLL-2003 Reuters newswire. Counts from unlabeled text train GloVe vectors. A conditional random field, or CRF, then learns labeled word sequences using 50-dimensional features in a five-word window. It assigns person, location, organization, and miscellaneous entity tags.
+
+The NER table reports **88.3 test F1 with GloVe versus 85.4 for discrete features alone**. F1 balances how many predicted entities are correct with how many true entities are found; higher is better. It is not ordinary percent-correct accuracy. Another compared method, HPCA, scores 88.7, so GloVe is not best on that test. Vectors help share word information beyond separate discrete features. This evaluates unsupervised vectors inside a supervised system. It is not label-free NER, a Reuters deployment, or a public business benefit.
+
+**Notable vendor implementations/libraries:** Stanford supplies [official GloVe C code and vectors](https://github.com/stanfordnlp/GloVe). Wikipedia 2014 plus Gigaword 5 vectors differ from later releases. Loading them into PyTorch or Keras does not reproduce the training that created them.
 
 **Architecture diagram description:**
 
@@ -1338,54 +1570,69 @@ log X_ij + count weight f(X_ij) ----+-> weighted squared-error loss
 after training: combine target/context vectors -> NLP features
 ```
 
-**Activation functions used and why:** No hidden nonlinear activation is required: embedding lookups feed a bilinear dot product plus biases. Logarithms transform count targets and a fractional power weights examples; these are data/objective transformations, not sigmoid class probabilities.
+**Activation functions used and why:** No hidden nonlinear activation is needed. Two lookup vectors feed a dot product plus biases. Logarithms rescale target counts, while a fractional power sets example weights. These transform the data and loss; they are not sigmoid class probabilities.
 
-**Loss function(s):** $`J=\sum_{X_{ij}>0}f(X_{ij})(w_i^\top u_j+b_i+\tilde b_j-\log X_{ij})^2`$. The paper uses $`f(x)=\min((x/x_{\max})^\alpha,1)`$, with $`x_{\max}=100`$ and $`\alpha=3/4`$. Omitting zero entries avoids $`\log0`$; this is weighted least squares rather than negative-sampling logistic loss.
+**Loss function(s):** Compare each predicted log count with its observed log count. Square the error and weight it by how common the pair is. Skip zero-count pairs because their logarithm is undefined. This is weighted least squares, not negative-sampling logistic loss.
 
-**Optimization algorithm(s):** The original recipe uses Adagrad with initial rate 0.05, sampling nonzero count entries. It runs 50 iterations below 300 dimensions and 100 otherwise. Coordinatewise accumulated-gradient scaling supplies adaptation; no cosine or Transformer warmup schedule is implied. The current small-corpus demo has different settings.
+**Optional math:** The loss is $`J=\sum_{X_{ij}>0}f(X_{ij})(w_i^\top u_j+b_i+\tilde b_j-\log X_{ij})^2`$. Here $`X_{ij}`$ counts target word $`i`$ with context word $`j`$. Their vectors are $`w_i,u_j`$, and their biases are $`b_i,\tilde b_j`$. The weight is $`f(x)=\min((x/x_{\max})^\alpha,1)`$, with count $`x`$, threshold $`x_{\max}=100`$, and exponent $`\alpha=3/4`$. It raises pair weight up to a cap of one. Excluding zero entries avoids $`\log0`$.
 
-**Regularization techniques:** Low-dimensional factors constrain rank; weighting, vocabulary truncation, and inverse-distance context weighting control statistical influence. The weighting function is not L2 parameter regularization. The original result does not require an assumed dropout layer.
+**Optimization algorithm(s):** The original recipe uses Adagrad, starting at 0.05 and sampling nonzero counts. It runs 50 iterations below 300 vector dimensions and 100 otherwise. Adagrad adapts each weight's step using accumulated squared gradients. No cosine decay or Transformer warmup is implied. The current small-text demo has different settings.
 
-**Backpropagation considerations:** Each pair updates two vector rows and two biases. Counts are fixed targets, not differentiable text tokens. The jointly bilinear problem is nonconvex; stable log-count computation, initialization, and accumulated-gradient precision matter.
+**Regularization techniques:** Short vectors limit the patterns the model can fit. Pair weights, vocabulary cutoffs, and stronger weights for closer context words control influence. Weighting training pairs is not the same as an L2 penalty on model weights. No assumed dropout layer is required by the original result.
 
-**Parameter count / scaling behavior:** For vocabulary $`V`$ and dimension $`d`$, separate target/context tables and biases contain $`2Vd+2V`$ parameters. Summed exported vectors need $`Vd`$ values; optimizer accumulators and the sparse count corpus add training storage.
+**Backpropagation considerations:** Each pair updates two vector rows and two biases. Counts are fixed targets; text tokens are not differentiable. Training both vector tables together can have several local solutions rather than one guaranteed best solution. Stable logarithms, starting values, and accurate accumulated-gradient records matter.
 
-**Training paradigm:** Corpus-derived co-occurrence supervision without manually labeled lexical meanings. The CRF example adds annotated BIO entity targets afterward; its F1 must not be attributed to embeddings alone or to wholly unsupervised training.
+**Parameter count / scaling behavior:** Training stores target vectors, context vectors, and both sets of biases. Adding the vector tables for export reduces storage. Optimizer records and sparse pair counts are additional training costs.
 
-**Hardware/parallelism considerations:** The reference implementation uses multithreaded CPU training over shuffled sparse records. Preprocessing can be disk- and memory-intensive; distributing embedding rows adds communication and contention. GPUs are optional implementation choices, not evidence of a hidden deep architecture.
+**Optional math:** With vocabulary size $`V`$ and vector length $`d`$, training parameters total $`2Vd+2V`$. Summed exported vectors need $`Vd`$ values.
+
+**Training paradigm:** Observed neighboring words supply targets without manually labeled meanings. The CRF example later adds BIO labels: beginning, inside, or outside an entity. Its F1 belongs to that full supervised system, not the vectors alone or wholly unsupervised training.
+
+**Hardware/parallelism considerations:** Reference code uses several CPU threads on shuffled sparse records. Preparing counts can demand much disk access and memory. Distributing vector rows adds communication and competing updates. GPUs are optional; their use would not imply a hidden deep network.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| SimCLR | Images with useful invariance-preserving augmentations | Simple scalable contrastive features | Large-batch cost and false negatives | ImageNet frozen-feature linear evaluation |
-| MoCo | Large image collections with moderate current batches | Large queued dictionary with momentum consistency | Stale/false-negative keys | ImageNet linear probing and detection transfer |
-| BYOL | Images with meaningful alternate views | No explicit negatives required | Collapse prevention depends on the full recipe | ImageNet ResNet-50 linear evaluation |
-| DINO | Image patches/global views, especially ViTs | Useful cross-view global and patch features | Teacher/centering sensitivity | ImageNet ViT-S/16 linear and k-NN evaluation |
-| MAE | Patch-structured images | Visible-only encoder lowers pretraining work | Pixel reconstruction is not calibrated semantics | Fine-tuned ImageNet ViT-H evaluation |
-| CLIP | Naturally paired images and language | Language-defined classification and retrieval | Paired supervision, bias, and uncalibrated scores | Zero-shot ImageNet and cross-modal retrieval |
-| Word2Vec: CBOW / skip-gram | Tokenized text and local context windows | Efficient static predictive embeddings | Polysemy, vocabulary gaps, and corpus bias | Matched-corpus semantic/syntactic analogy evaluation |
-| GloVe | Sparse global word-context counts | Reusable weighted co-occurrence statistics | Count storage and context-independent vectors | CoNLL-2003 NER with embedding features |
+| SimCLR | Images with useful modified views | Learns features by matching paired views | Big batches cost more; related images may be treated as mismatches | ImageNet tests of frozen features |
+| MoCo | Large image collections with moderate batches | Reuses many slowly changing comparison vectors | Old or wrongly mismatched queue entries | ImageNet classification and detection-transfer tests |
+| BYOL | Images with meaningful alternate views | Does not need explicit mismatches | Full recipe must prevent constant outputs | ResNet-50 ImageNet linear-classifier tests |
+| DINO | Whole images and patches, especially with ViTs | Learns consistent whole-image and patch features | Sensitive to teacher and centering settings | ViT-S/16 linear and nearest-neighbor ImageNet tests |
+| MAE | Images divided into patches | Saves encoder work by hiding patches | Good pixel repairs do not prove reliable meaning | Fine-tuned ViT-H ImageNet tests |
+| CLIP | Naturally matching images and language | Text defines search queries and classes | Needs paired supervision; scores can be biased and uncalibrated | Zero-shot ImageNet and image-text search tests |
+| Word2Vec: CBOW / skip-gram | Tokenized text and neighboring words | Learns useful static vectors cheaply | Multiple meanings, unknown words, and text bias | Meaning and grammar analogy tests on matched text |
+| GloVe | Stored counts of neighboring word pairs | Reuses weighted counts across training passes | Large count storage; one vector per word | CoNLL-2003 entity recognition using learned vectors |
 
 ## Evidence reading notes
 
-- **FID and Inception Score:** DDPM's 3.17 FID and 9.46 +/- 0.11 IS are checked against the original CIFAR-10 table and 50,000-sample protocol, including training-reference versus test-reference statistics. Score-SDE's 2.20 belongs to the continuous deep NCSN++ VE model, not the generic framework. DiT's 2.27 belongs to the guided, long-trained 256-resolution XL/2 configuration, not its unguided 400,000-step ablations. These numbers are sourced, not locally reproduced.
-- **Likelihood:** RealNVP's 3.49, Glow's 3.35, and Gated PixelCNN's 3.03 bits/dimension are paper-specific CIFAR-10 results. Continuous/dequantized likelihood and discrete autoregressive likelihood have different qualifications. Five-bit Glow face demonstrations must not be mixed into an eight-bit comparison.
-- **Representation evaluation:** SimCLR's wider-backbone headline, MoCo's shorter training budget, BYOL's backbone size, DINO's linear versus k-NN evaluator, MAE's supervised fine-tuning and resolution, and CLIP's prompted zero-shot protocol all matter. The chapter is not a leaderboard computed under a common budget.
-- **Static word embeddings:** Word2Vec's CBOW/skip-gram semantic and syntactic percentages are checked against the original 640-dimensional, matched-corpus comparison, not mixed with later Google News exports. GloVe's 88.3 versus 85.4 CoNLL test F1 comes from a supervised CRF with 50-dimensional embedding features versus its discrete-only baseline; the paper's HPCA result is higher on that test. These are neither embedding-only accuracy nor business gains. CLIP retains the original paper's natural language supervision characterization despite the chapter's broad self-/weak-supervision editorial grouping.
-- **Production versus research:** The updated WaveNet deployment is supported by Google's dated announcement; the original WaveNet listener scores are a separate research result. Other worked examples primarily establish research capabilities. Model cards and demo code are not evidence of audited customer savings.
-- **Disclosure limits:** The original beta-VAE OpenReview PDF was unavailable to this evidence pass; its original attribution and dataset are supported by the authors' dSprites documentation, while detailed architecture/optimizer statements are explicitly tied to the checked 2018 follow-up. DALL-E 3's report and evaluation artifacts were checked, but they intentionally do not disclose a complete generator recipe. Stable Diffusion version distinctions here use the v1.4/SDXL cards and SDXL paper; unverified per-checkpoint details are not inferred from inaccessible cards.
+- **FID and Inception Score:** FID compares image-feature distributions; lower is better. Inception Score, or IS, rewards confident class predictions and class variety using a pretrained classifier; higher is better. Neither is percent-correct image accuracy. DDPM's 3.17 FID and 9.46 +/- 0.11 IS retain the original CIFAR-10 table and 50,000-sample procedure. Training-reference and test-reference statistics remain distinct. Score-SDE's 2.20 belongs to continuous deep NCSN++ VE, not every score model. DiT's 2.27 belongs to guided, long-trained XL/2 at 256 resolution, not its unguided 400,000-step component tests. These numbers come from sources, not local reruns.
+- **Likelihood:** RealNVP's 3.49, Glow's 3.35, and Gated PixelCNN's 3.03 bits/dimension are paper-specific CIFAR-10 results. This likelihood-based measure describes coding cost per image value; lower is better. Continuous models with added pixel noise and discrete next-pixel models require different qualifications. Do not mix Glow's five-bit face demonstrations into an eight-bit comparison.
+- **Representation evaluation:** Keep SimCLR's wider headline model, MoCo's shorter training, and BYOL's network size attached to their scores. DINO's linear classifier and k-nearest-neighbor reference test differ. MAE's results include labeled fine-tuning and a specified resolution. CLIP uses prompted zero-shot evaluation. This chapter is not a ranking under one shared training budget.
+- **Static word embeddings:** Word2Vec's meaning and grammar percentages use the original 640-dimensional comparison on matched text. They are not mixed with later Google News vectors. GloVe's 88.3 versus 85.4 CoNLL test F1 compares a labeled CRF with 50-dimensional vector features against discrete features alone. F1 balances correct entity predictions and coverage of true entities; higher is better. HPCA scored higher on that test. These are not vector-only accuracy or business gains. CLIP also retains the paper's description of natural language supervision despite this chapter's broad grouping.
+- **Production versus research:** Google's dated announcement supports deployment of an updated WaveNet. Original WaveNet listener ratings are a separate research result. Most other examples demonstrate research capabilities. Model cards and demo code do not prove audited customer savings.
+- **Disclosure limits:** The original beta-VAE OpenReview PDF was unavailable during the evidence check. Attribution and dataset facts use the authors' dSprites documentation; detailed network and optimizer settings come from the checked 2018 follow-up. DALL-E 3's report and evaluation artifacts were checked, but do not reveal a complete generator recipe. Stable Diffusion version differences use the v1.4/SDXL cards and SDXL paper. Details from inaccessible cards were not guessed.
 
 ## Coverage and continuation manifest
 
-**Covered: 28 entries, each with the nine common and nine neural fields, an architecture diagram, a worked example, and category-table coverage.**
+**This chapter covers 28 entries. Each keeps all nine common fields and nine neural fields, a network diagram, a worked example, and a row in its category table.**
 
 | Section range | Coverage | Entry count |
 |---|---|---|
-| 3.6.1-3.6.5 | Autoencoder; denoising autoencoder; VAE; beta-VAE; VQ-VAE | 5 |
-| 3.7.1-3.7.4 | GAN; DCGAN; versioned StyleGAN family; CycleGAN | 4 |
-| 3.8.1-3.8.7 | DDPM; score-SDE; latent diffusion/Stable Diffusion; DiT; DALL-E 1; DALL-E 2; DALL-E 3 | 7 |
-| 3.9.1-3.9.4 | RealNVP; Glow; PixelCNN; WaveNet | 4 |
-| 3.10.1-3.10.8 | SimCLR; MoCo; BYOL; DINO; MAE; CLIP; Word2Vec (CBOW/skip-gram); GloVe | 8 |
+| 3.6.1-3.6.5 | Rebuilding and codes: autoencoder, denoising autoencoder, VAE, beta-VAE, VQ-VAE | 5 |
+| 3.7.1-3.7.4 | Generator/checker feedback: GAN, DCGAN, distinct StyleGAN versions, CycleGAN | 4 |
+| 3.8.1-3.8.7 | Diffusion and image systems: DDPM, score-SDE, latent diffusion/Stable Diffusion, DiT, DALL-E 1, DALL-E 2, DALL-E 3 | 7 |
+| 3.9.1-3.9.4 | Reversible or sequential generation: RealNVP, Glow, PixelCNN, WaveNet | 4 |
+| 3.10.1-3.10.8 | Learned features: SimCLR, MoCo, BYOL, DINO, MAE, CLIP, Word2Vec (CBOW/skip-gram), GloVe | 8 |
 
-**Connections to the rest of the book:** [Reading guide and evidence policy](00-reading-guide.md); [supervised neural, contrastive, and Siamese methods](02-supervised-neural.md); [semi-supervised learning and pseudo-labeling](03-semi-supervised.md); [classical unsupervised methods](04-unsupervised-classical.md); [foundation-model pretraining](06-foundation-models.md); [MoE models](07-moe-models.md); [dedicated MoE deep dive](08-moe-deep-dive.md); [comparative selection guide](09-comparative-guide.md); [glossary](10-glossary.md).
+**Read next or review earlier material:** Start with the [reading guide and evidence policy](00-reading-guide.md). Related chapters cover [supervised neural and matching methods](02-supervised-neural.md), [semi-supervised learning and machine-generated labels](03-semi-supervised.md), and [classical unsupervised methods](04-unsupervised-classical.md). Continue to [foundation-model pretraining](06-foundation-models.md), [mixture-of-experts models](07-moe-models.md), or the [deeper MoE explanation](08-moe-deep-dive.md). The [selection guide](09-comparative-guide.md) compares choices, and the [glossary](10-glossary.md) explains terms.
 
-**Bounded continuation, not a claim of exhaustiveness:** Additional depth could cover hierarchical VQ-VAE-2 and residual quantization; Wasserstein and energy-based models; consistency/distilled diffusion; flow matching and rectified flows; newer Stable Diffusion/DiT-derived checkpoints; video, audio, and 3D diffusion; spline and continuous normalizing flows; PixelCNN++ and parallel WaveNet; DINOv2 and later variants; SimCLRv2/MoCo v2-v3; fastText/subword and multilingual static embeddings; multimodal masked modeling; domain-specific scientific applications; and rigorous calibration, memorization, licensing, and privacy audits. These are non-required extensions, not silently covered by the 28 entries. No standalone reinforcement-learning taxonomy or undisclosed proprietary training recipe is implied.
+**Where this chapter stops:** The 28 entries are not an exhaustive survey. Possible extensions, not covered here, include:
+
+- Hierarchical VQ-VAE-2 and residual quantization, which use several coding stages.
+- Wasserstein GAN variants and energy-based models, which use other distribution-comparison or scoring rules.
+- Consistency and distilled diffusion, which aim to shorten generation; flow matching and rectified flows, which learn paths from noise to data.
+- Newer Stable Diffusion/DiT-derived models, plus diffusion for video, audio, and 3D data.
+- Spline flows using flexible curved transformations, and continuous normalizing flows using continuous-time transformations.
+- PixelCNN++, parallel WaveNet, DINOv2 and later variants, and SimCLRv2/MoCo v2-v3.
+- fastText, word-piece and multilingual static vectors, and masked learning across several data types.
+- Scientific applications and rigorous checks of calibration, memorization, licensing, and privacy.
+
+These are optional extensions, not topics silently included in the 28 entries. This chapter also does not provide a separate reinforcement-learning classification or reveal undisclosed proprietary training recipes.

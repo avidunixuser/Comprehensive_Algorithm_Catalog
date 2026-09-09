@@ -2,10 +2,13 @@
 
 ## Comprehensive Algorithm Catalog
 
-A book-length reference organized by training signal, with a standalone
-Mixture of Experts deep dive, cross-cutting comparisons, and a glossary.
-Numbered three-level headings identify individual catalog entries;
-family entries distinguish their representative variants and releases.
+A guide to how computers learn, grouped by the feedback each method uses.
+It also includes a closer look at Mixture of Experts, comparison tables,
+and a glossary. Each numbered entry explains a method or model family.
+Different model versions are kept separate where their details differ.
+
+Start with each entry's **In plain English** introduction. Then read how it
+works and its worked example. The math is optional on a first read.
 
 [Repository overview](README.md) | [Reading guide](book/00-reading-guide.md)
 

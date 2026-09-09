@@ -1,188 +1,240 @@
 # 2. Semi-Supervised Learning Algorithms
 
-This volume covers 22 methods and explicitly scoped method families in six categories. It is a bounded reference, not a claim to enumerate all semi-supervised learning. **Evidence policy date: 2026-09-08.** The cited papers are historical sources, not assertions about the latest available models. Conference years and earlier arXiv uploads are distinguished where relevant. Public reference code establishes an implementation, not commercial deployment.
+This chapter covers 22 methods and clearly defined method families in six categories. It does not cover every semi-supervised method. **Evidence policy date: 2026-09-08.** The papers describe past research, not necessarily today's newest models. Where needed, we separate conference dates from earlier arXiv uploads. Public research code shows that an implementation exists. It does not show that a company uses it in a product.
 
-Semi-supervised learning uses labeled observations and unlabeled observations to learn a task for which some labels are available. An unlabeled image is not a negative example. Nor is an automatically generated label equivalent to a human annotation. The additional data help only through assumptions connecting the distribution of inputs to the desired labels.
+Imagine a photo collection with a few pictures labeled "cat" or "dog" and many unlabeled pictures. A label is a known answer. **Semi-supervised learning** uses both groups to learn the same task. The labeled pictures teach the class names. The unlabeled pictures may help reveal how pictures vary and which ones belong together. But an unlabeled picture is not a "not-cat" example. A model's guessed label is also not a human-checked answer.
 
-Use the [reading guide](00-reading-guide.md) for the book's taxonomy and evidence conventions. Neural architectures are explained further in [supervised neural learning](02-supervised-neural.md); related representation-learning objectives appear in [unsupervised neural learning](05-unsupervised-neural.md). A VAE can have an unsupervised stage inside a semi-supervised system, and a Transformer can have self-supervised pretraining before semi-supervised fine-tuning. Architecture alone does not determine supervision.
+Extra pictures help only when their patterns relate to the task. If the unlabeled collection contains birds, a cat-or-dog model may confidently give them wrong labels. More data can then make learning worse. The methods below differ in how they use the extra data and limit such mistakes.
+
+Use the [reading guide](00-reading-guide.md) for the book's categories and evidence rules. See [supervised neural learning](02-supervised-neural.md) for network designs and [unsupervised neural learning](05-unsupervised-neural.md) for ways to learn useful input features. Features are input details, such as pixel values, or patterns a network learns from them. A **vector** is an ordered list of numbers that can hold those features.
+
+A variational autoencoder, or VAE, can learn without labels inside a larger semi-supervised system. A Transformer can first learn from targets made from its own text, called **self-supervised pretraining**, then learn a task with some labeled examples. The network's design alone does not tell us how it was trained.
 
 ### Reading the objectives and costs
 
-Let $`D_L=\{(x_i,y_i)\}_{i=1}^{n_l}`$, $`D_U=\{u_i\}_{i=1}^{n_u}`$, and $`n=n_l+n_u`$. Let $`C`$ be the number of target classes, $`p_\theta(y\mid x)`$ a classifier, and $`H(q)=-\sum_c q_c\log q_c`$. Most neural recipes minimize
+A **classifier** predicts a class, such as a digit or a document topic. A neural classifier learns **weights**, numbers that control its calculations. A **loss** is a score for what training should improve; training usually tries to make it smaller. Most neural methods here combine a loss on known labels with a loss on unlabeled examples. The latter may reward confidence, agreement after a small change, agreement with another model, or successful reconstruction of an input.
 
+Several recurring terms will help:
+
+- **Cross-entropy** penalizes giving too little predicted probability to the target answer. A target can name one class or give weights to several classes.
+- **Mean-squared error (MSE)** averages squared differences between predictions and targets; lower is better.
+- **KL divergence** measures how one probability distribution differs from another. Its direction matters: swapping the two distributions can change the value.
+- **Entropy** measures how spread out a prediction's probabilities are. Similar chances for every class mean high entropy. Nearly all the probability on one class means low entropy. Low entropy means confidence, not correctness.
+- **Softmax** turns class scores into probabilities that sum to one. Those numbers are not automatically trustworthy chances.
+- **Backpropagation** works backward through a network to calculate how changing each weight would change the loss. These change signals are called **gradients**. An **optimizer**, such as SGD or Adam, uses them to update weights. The **learning rate** controls update size.
+- A **batch** is a group of examples processed together. An **epoch** is one pass through a dataset. **Dropout** temporarily switches off some network signals during training. **Normalization** rescales or recenters values to help training.
+
+**Optional math:** Write the labeled set as $`D_L=\{(x_i,y_i)\}_{i=1}^{n_l}`$ and the unlabeled set as $`D_U=\{u_i\}_{i=1}^{n_u}`$. Here $`x_i`$ and $`u_i`$ are inputs, $`y_i`$ is a known label, and $`n_l,n_u`$ count the examples. Thus $`n=n_l+n_u`$ is the total. A common loss is:
 
 $$
 \mathcal L=\mathcal L_s(D_L)+\lambda(t)\mathcal L_u(D_U).
 $$
 
+Here $`\mathcal L_s`$ measures labeled-task loss, $`\mathcal L_u`$ measures the chosen unlabeled loss, and $`\lambda(t)`$ sets its weight at training time $`t`$. The same form does not make different unlabeled losses interchangeable. A sum, a batch average, and an average over only accepted examples have different scales.
 
-This notation does not mean that their unlabeled objectives are interchangeable. They may encourage confidence, agreement under perturbation, agreement with another model, or successful reconstruction. The relative weighting depends on whether each loss is a sum, a batch mean, or a mean over selected examples.
+**Optional math:** For $`C`$ classes, $`p_\theta(y\mid x)`$ is the probability assigned to class $`y`$ for input $`x`$ by a model with weights $`\theta`$. For a probability list $`q`$, entropy is $`H(q)=-\sum_{c=1}^{C}q_c\log q_c`$. The term $`q_c`$ is the probability of class $`c`$; the sum combines all classes.
 
-Here $`d`$ denotes feature dimension or a specifically identified hidden width, $`p`$ denotes learned parameters, $`B`$ denotes batch size, and $`E`$ denotes epochs. For neural costs, $`F`$ denotes the forward cost of the stated backbone on one example; a backward pass is another architecture-dependent constant multiple of this cost. For graphs, $`m`$ denotes stored edges and $`s`$ solver iterations. These qualifications matter: neither a convolutional model nor an iterative kernel solver has a universal cost determined by its algorithm name.
+Cost notes first describe how work grows, then sometimes give Big-O notation. Unless a field says otherwise, $`d`$ is the number of input features or a named hidden-layer width, $`p`$ is the number of learned parameters, $`B`$ is batch size, and $`E`$ is the number of epochs. $`F`$ is the work for one forward prediction by the stated main network, or **backbone**. Backpropagation adds a network-dependent multiple of that work. For graphs, $`m`$ counts stored links and $`s`$ counts solver steps. The method's name alone cannot determine its cost.
 
 ### Assumptions, failure modes, and evaluation
 
-- **Cluster assumption:** examples in the same high-density region tend to share a label. A class may occupy several clusters. Unlabeled clusters do not reveal their semantic names; with no labeled representative, identifying a new class is generally impossible without further information.
-- **Low-density separation:** a useful decision boundary avoids regions containing much probability mass. This complements the cluster assumption, but is wrong when genuine classes overlap or the target cuts across a dense population.
-- **Manifold assumption:** observations concentrate near a lower-dimensional structure, and the target varies smoothly along its relevant directions. Smoothness in raw pixel distance, a graph chosen for convenience, or a pretrained embedding is not automatically task-relevant.
-- **View and augmentation assumptions:** co-training needs genuinely informative alternative views; consistency methods need perturbations that preserve the target. A transformation useful for photographs may corrupt a digit label. Back-translation can alter negation or sentiment.
-- **Confirmation bias:** an incorrect prediction becomes a training target, making the model increasingly confident in its mistake. High confidence is not calibrated correctness. Thresholds, warm-up, teacher averaging, and disagreement checks mitigate different parts of this feedback loop; none proves that a pseudo-label is correct.
-- **Out-of-distribution unlabeled data:** an unknown class can receive an extremely confident known-class prediction. Graph edges can also connect unrelated populations. Filtering, unknown-class handling, subgroup audits, and a matched-domain supervised baseline are necessary design choices, not automatic properties of the recipes below. [Oliver et al.'s realistic evaluation, full text v4](https://arxiv.org/html/1804.09170v4) directly documents degradation from out-of-class unlabeled examples.
+- **Groups should relate to labels.** Methods often assume that examples in a crowded group tend to share a class. This is the **cluster assumption**. One class may fill several groups. The groups do not reveal their names: without a labeled example or other information, a new class usually cannot be identified.
+- **The dividing line should pass through gaps.** **Low-density separation** means placing a class boundary where few examples lie. This can fail when real classes overlap or the desired label divides a crowded group.
+- **Nearby examples should change in useful, smooth ways.** Inputs may have many numbers but vary mainly along a simpler underlying shape. This lower-dimensional shape is called a **manifold**. The assumption is that inputs lie near such a shape and small moves along its relevant directions change the target smoothly. Closeness in raw pixels, a chosen graph, or a pretrained feature space may not reflect the task.
+- **Different views must keep useful information.** Co-training needs two useful ways to describe the same object. Consistency methods need changes that preserve its answer. An image change, also called an **augmentation**, that suits photos may change a digit. Translating text to another language and back, called **back-translation**, may alter "not" or reverse sentiment.
+- **Mistakes can teach more mistakes.** In self-training, a wrong guess becomes a training target. The next model may become even more sure of it. This feedback loop is **confirmation bias**. Predicted chances should match how often those answers are actually right. That match is called **calibration**; high confidence alone does not provide it. Confidence cutoffs, a slow start, teacher averaging, and disagreement checks can reduce different risks. None proves a guessed label is right.
+- **The extra data may come from the wrong classes.** Such data are **out of distribution (OOD)** for the intended task. A model may confidently force an unknown class into a known one. A graph may also link unrelated groups. Check filtering, handling of unknown classes, and performance within relevant subgroups. Compare with a labeled-only model on matching data. These protections are not automatic. [Oliver et al.'s realistic evaluation, full text v4](https://arxiv.org/html/1804.09170v4) directly shows harm from out-of-class unlabeled examples.
 
-**Transductive versus inductive evaluation.** A transductive experiment exposes the inputs of the particular evaluation pool during training, while hiding their labels. This is legitimate when declared, but it is not an estimate of performance on untouched future inputs. Inductive evaluation reserves a separate pool whose features and labels never participate in fitting or model selection. Graph inference commonly predicts only existing vertices; an out-of-sample rule or graph rebuild must be specified. Conversely, a transductively trained SVM still has a decision function: its existence does not retroactively make a transductive evaluation inductive.
+**Transductive versus inductive evaluation.** There are two different questions. Can a method label this particular unlabeled collection? Or can it predict new inputs it has never seen? **Transductive evaluation** answers the first: training may see the evaluation inputs, but not their labels. That is valid if stated clearly. **Inductive evaluation** tests a separate pool whose inputs and labels played no part in fitting or model selection. It better matches the second question.
 
-**Label-budget protocol.** Report training labels, validation labels, teacher-training labels, and labels involved in augmentation or checkpoint selection separately. A claim of "100 labels" may mean 100 labels in the gradient objective plus thousands used to tune hyperparameters. Declare whether the draw is class-balanced, naturally imbalanced, grouped by patient or document source, or stratified in another way. Repeat both label draws and model initializations; report the statistic and its uncertainty. Record unlabeled-pool size, provenance, duplicate filtering, class overlap, pretraining, augmentations, backbone, training steps, and checkpoint rule. Never select the best test checkpoint for a deployment estimate. Some historical tables below do report best-checkpoint results; they are identified rather than silently compared with test-locked experiments.
+Graph methods often label only the points already in their graph. To use them on new inputs, specify a prediction rule or how to rebuild the graph. A transductively trained SVM can still have a rule for new inputs. That fact does not change how its original experiment was evaluated.
 
-In the worked examples, an inference "decision" means how a predicted class would be used in the named research task. It does not imply that a hospital, search engine, or other organization deployed the model. Technical reasons for suitability are this volume's analysis unless explicitly attributed to a source.
+**Label-budget protocol.** Count labels used for training, validation, teacher training, augmentation choices, and model selection separately. A "100 labels" result might use only 100 answers in its training loss, yet thousands more to choose settings. Validation data help choose settings. Test data should be saved for the final check. A **checkpoint** is a saved model during training; do not choose the best test checkpoint and present it as an estimate for future use.
+
+Report how labels were chosen: equal numbers per class, the population's natural imbalance, groups such as patients or document sources, or another rule. Repeat both the label selection and the random start of training. Give averages or other stated summaries and their uncertainty. A **standard deviation** describes how much results vary across runs. For example, error is the share of wrong answers; its standard deviation in percentage points is a separate measure of variation.
+
+Also record the unlabeled pool's size and source, duplicate removal, overlap of classes, pretraining, image changes, network, training steps, and checkpoint rule. Some historical results below use the best checkpoint. We retain that warning rather than treating them as equivalent to results with a test set kept untouched.
+
+In each worked example, a prediction "decision" means how the answer serves the research task. It does not mean a hospital, search engine, or company deployed the model. Explanations of why a method fits a task are this chapter's analysis unless credited to a source.
 
 ## 2.1 Self-labeling and multiple-view approaches
 
-These methods turn model predictions into additional supervision. Their main differences are who supplies a target, what makes that target admissible, and how diversity is maintained.
+These methods turn guesses on many unlabeled examples into extra training targets. They differ in who makes a guess, when it is accepted, and how they avoid repeating the same mistakes.
 
 ### 2.1.1 Self-training and Pseudo-Label
 
-**Name:** Self-training / pseudo-labeling; the neural reference instantiation here is Lee's Pseudo-Label.
+**In plain English:** Learn from a few known answers, guess answers for unlabeled examples, and train on those guesses too. This can use extra data cheaply, but it can also make early mistakes stick.
 
-**Category & sub-category:** Semi-supervised learning; self-labeling with a single classifier.
+**Name:** Self-training / pseudo-labeling. The neural example here is Lee's Pseudo-Label.
 
-**Originating paper/vendor/year:** Self-training predates deep learning. Dong-Hyun Lee's [2013 ICML workshop paper, *Pseudo-Label*](https://www.kaggle.com/blobs/download/forum-message-attachment-files/746/pseudo_label_final.pdf) popularized a particularly simple neural implementation; it did not invent the entire self-training family. The link is a public copy of the original workshop paper.
+**Category & sub-category:** Semi-supervised learning; one classifier creates extra labels for itself.
 
-**Core mechanism:** Fit a classifier using labeled data, predict labels for unlabeled inputs, then train against some of those predictions. A common modern variant retains $`\hat y=\arg\max_c p_\theta(c\mid u)`$ only when confidence exceeds a threshold. Lee's original formulation instead recomputes hard targets during training and gradually increases their loss weight; a confidence cutoff is not part of its defining procedure. Offline rounds with a frozen teacher and online regeneration of targets are different implementations of the same broad idea.
+**Originating paper/vendor/year:** Self-training existed before deep learning. Dong-Hyun Lee's [2013 ICML workshop paper, *Pseudo-Label*](https://www.kaggle.com/blobs/download/forum-message-attachment-files/746/pseudo_label_final.pdf) made a simple neural version widely known. It did not invent the whole family. This link is a public copy of the original workshop paper.
 
-**Inputs/outputs and typical data types:** Labeled and unlabeled examples in a shared feature space; outputs are pseudo-labels and a classifier for new examples. Applications include images, sparse text vectors, and tabular records, provided the base learner can handle them.
+**Core mechanism:** First train on labeled examples. Next predict answers for unlabeled inputs and use some predictions as targets. A **hard target** names one class rather than spreading probability across classes. Many later versions accept it only above a confidence cutoff, or **threshold**. Lee's original method instead keeps making fresh hard targets during training and slowly raises their loss weight. A cutoff is not part of its defining procedure. Some versions label a pool with a frozen model between training rounds; others refresh guesses during training.
 
-**Strengths and limitations:** The wrapper is simple, architecture-agnostic, and easy to compare with a supervised baseline. It can exploit abundant in-domain data without constructing a similarity graph. Its central weakness is self-reinforcing error; confidence filtering can additionally starve rare or difficult classes. Predicting a label does not supply independent evidence for that label.
+**Optional math:** A common later rule chooses $`\hat y=\arg\max_c p_\theta(c\mid u)`$. Here $`u`$ is an unlabeled input, $`p_\theta`$ is the current classifier, $`c`$ ranges over classes, and $`\hat y`$ is the highest-probability class. A separate threshold decides whether to use it.
 
-**Computational complexity / scalability notes:** Each offline labeling round costs approximately $`O(n_uF)`$, followed by the chosen learner's retraining cost. Online neural training is roughly $`O(EnF)`$ for fixed passes per example, with potentially different labeled/unlabeled sampling rates. Hard-label caches require $`O(n_u)`$ storage; full probability vectors require $`O(n_uC)`$.
+**Inputs/outputs and typical data types:** Start with labeled and unlabeled examples described by the same kinds of features. The result is guessed labels, called **pseudo-labels**, and a classifier for new examples. The base learner may handle images, word-count vectors, or tables.
+
+**Strengths and limitations:** This is a simple addition to many learners and needs no graph of similar examples. It is easy to compare with labeled-only training. But if a dog picture is wrongly labeled "cat," learning that guess can reinforce the error. A confidence cutoff can also leave rare or difficult classes with too little training data. Repeating a prediction is not independent evidence that it is true.
+
+**Computational complexity / scalability notes:** Each labeling round must run the model on all candidate inputs, then pay for retraining. More examples usually mean proportionally more work when passes per example stay fixed. Saving one class per example takes less space than saving every class probability.
+
+**Optional math:** With $`n_u`$ unlabeled inputs and forward cost $`F`$, an offline labeling pass costs about $`O(n_uF)`$. Online training is roughly $`O(EnF)`$ for $`E`$ epochs over $`n`$ examples, under fixed passes per example. Labeled and unlabeled sampling rates may differ. Hard-label storage is $`O(n_u)`$; storing probabilities for $`C`$ classes is $`O(n_uC)`$.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** Lee studies handwritten-digit recognition on MNIST. In the 600-labeled-example experiment, pixel vectors enter a one-hidden-layer network; its current digit predictions become targets for unlabeled training images; the resulting classifier assigns a digit to each test image. Table 2 reports **8.57% test error for the dropout network and 5.03% after adding Pseudo-Label**, without the additional denoising-autoencoder pretraining used in another row. This comparison makes self-labeling's contribution easier to interpret than mixing pretraining and pseudo-labeling results. Hyperparameters were selected with a validation set, so 600 is a training-label count, not an all-inclusive annotation budget. No production OCR deployment or business KPI is reported. [Original experiment](https://www.kaggle.com/blobs/download/forum-message-attachment-files/746/pseudo_label_final.pdf).
+**Evidence status: Research benchmark.** Lee tests handwritten-digit recognition on MNIST with **600 labeled examples**. Pixel vectors enter a network with one hidden layer. Its current digit guesses become targets for unlabeled training images. The final network predicts a digit for each test image.
 
-**Notable vendor implementations/libraries:** [scikit-learn's `SelfTrainingClassifier`](https://scikit-learn.org/stable/modules/generated/sklearn.semi_supervised.SelfTrainingClassifier.html) wraps estimators and supports selection policies. It is not an implementation of every detail of Lee's neural training schedule.
+Table 2 reports **8.57% test error for the dropout network and 5.03% after adding Pseudo-Label**. These rows do not use the extra denoising-autoencoder pretraining found in another row. Keeping them separate makes the contribution of pseudo-labeling clearer. Settings were chosen with a validation set, so 600 counts training labels, not all annotations used for development. The paper reports no production optical character recognition (OCR) deployment or business performance measure (KPI). [Original experiment](https://www.kaggle.com/blobs/download/forum-message-attachment-files/746/pseudo_label_final.pdf).
 
-**Architecture diagram description:** Lee's actual MNIST backbone is `784 pixels -> dense 5,000 -> dense 10 outputs`. Optional denoising-autoencoder initialization is a separate stage, not a mandatory part of self-training.
+**Notable vendor implementations/libraries:** [scikit-learn's `SelfTrainingClassifier`](https://scikit-learn.org/stable/modules/generated/sklearn.semi_supervised.SelfTrainingClassifier.html) adds self-training to other estimators and offers rules for selecting guesses. It does not reproduce every part of Lee's neural training schedule.
 
-**Activation functions used and why:** ReLU supplies piecewise-linear, potentially sparse hidden responses. Importantly, the original experiment uses **independent sigmoid outputs**, not a softmax; the paper explicitly favors their saturation regions even though MNIST classes are mutually exclusive. Many later implementations instead use a categorical softmax.
+**Architecture diagram description:** Lee's MNIST network is `784 pixels -> dense 5,000 -> dense 10 outputs`. "Dense" means each unit receives inputs from the previous layer. Optional denoising-autoencoder initialization is a separate stage, not a required part of self-training.
 
-**Loss function(s):** The original network uses summed binary cross-entropies against one-hot true or pseudo-labels, with an epoch-dependent multiplier on the unlabeled term. A modern categorical implementation normally uses softmax cross-entropy. These losses should not be silently substituted when reproducing the original result.
+**Activation functions used and why:** ReLU keeps positive hidden values and sets negative ones to zero. The original experiment uses **independent sigmoid outputs**, not softmax. Each sigmoid squeezes its own value between zero and one. The paper favors their nearly flat end regions even though each digit belongs to only one class. Many later versions use softmax instead.
 
-**Optimization algorithm(s):** Mini-batch SGD with momentum. The paper reports initial learning rate 1.5, exponential multiplication by 0.998 per epoch, and momentum increasing from 0.5 to 0.99 over 500 epochs. Its update also scales the new gradient by $`1-\text{momentum}`$, so copying only the learning-rate scalar into another optimizer is not faithful. These settings belong to that sigmoid/dropout implementation, not to all pseudo-labeling.
+**Loss function(s):** The original network adds binary cross-entropy losses for the outputs. Its target has one entry set to one and the others to zero, whether the label is known or guessed. The unlabeled loss gets an epoch-dependent weight. A modern softmax version usually uses categorical cross-entropy instead. Do not swap these losses when trying to reproduce the original result.
 
-**Regularization techniques:** Dropout and a delayed unlabeled-loss ramp; without pretraining, the original ramp starts at epoch 100 and reaches weight 3 at epoch 600. Denoising pretraining changes the schedule and is reported separately.
+**Optimization algorithm(s):** Mini-batch stochastic gradient descent (SGD) with momentum, which carries part of earlier updates forward. The learning rate starts at 1.5 and is multiplied by 0.998 each epoch. Momentum rises from 0.5 to 0.99 over 500 epochs. The update also multiplies the new gradient by one minus momentum. Copying only the learning rate into another optimizer will not reproduce that rule. These settings belong to this sigmoid/dropout network.
 
-**Backpropagation considerations:** Treat the hard argmax target as fixed for its update; do not differentiate through label selection. Incorrect saturated targets can produce misleading or weak corrective gradients. Stable logit-based cross-entropy avoids numerical overflow.
+**Regularization techniques:** Dropout and a slow start for the unlabeled loss reduce dependence on early guesses. Without pretraining, that loss starts increasing at epoch 100 and reaches weight 3 at epoch 600. Denoising pretraining uses a different schedule and is reported separately.
 
-**Parameter count / scaling behavior:** The stated affine layers have $`784(5000)+5000+5000(10)+10=3,975,010`$ parameters, an arithmetic count excluding an optional pretraining decoder. The wrapper itself adds no learned parameters.
+**Backpropagation considerations:** Hold the chosen class fixed during its update; do not take gradients through the class-selection step. Wrong targets near sigmoid's flat ends can send misleading or weak correction signals. Computing cross-entropy from the raw output scores, called logits, helps avoid numerical overflow.
 
-**Training paradigm:** Supervised anchoring followed by joint supervised and self-labeled training; optional unsupervised pretraining must be counted as an additional stage.
+**Parameter count / scaling behavior:** The two dense layers contain **3,975,010 parameters**, calculated from their sizes. This excludes any optional pretraining decoder. Self-training itself adds no learned parameters.
 
-**Hardware/parallelism considerations:** A single GPU can handle the reference MLP. At larger scale, prediction and retraining can be data-parallel, but pseudo-label versioning and refresh cadence become part of reproducibility.
+**Optional math:** The count is $`784(5000)+5000+5000(10)+10=3,975,010`$. Each product counts connections; each following term counts the output units' bias values.
+
+**Training paradigm:** Start with labeled learning, then train jointly on true and self-made labels. Any label-free pretraining is an extra stage and must be counted.
+
+**Hardware/parallelism considerations:** One GPU can handle this reference multilayer perceptron (MLP), a network of dense layers. Larger jobs can split prediction and training across devices. Record which model made each set of pseudo-labels and when they were refreshed.
 
 ### 2.1.2 Co-training
 
+**In plain English:** Describe each object in two useful ways and train one classifier on each description. Each classifier can teach the other using confident guesses based on information the other view lacks.
+
 **Name:** Co-training.
 
-**Category & sub-category:** Semi-supervised learning; multiple-view self-labeling.
+**Category & sub-category:** Semi-supervised learning; classifiers exchange guesses across different views of the same examples.
 
 **Originating paper/vendor/year:** Avrim Blum and Tom Mitchell, [*Combining Labeled and Unlabeled Data with Co-Training*, COLT 1998](https://www.cs.cmu.edu/~avrim/Papers/cotrain.pdf).
 
-**Core mechanism:** Represent each example through two views, train a classifier on each, and let confident predictions from one view expand the labeled information available to the other. The idealized analysis assumes that both views suffice for prediction and are conditionally independent given the class, with additional learnability conditions. Merely splitting a feature vector in half does not establish these assumptions. In practice, complementary errors can still make the procedure useful without exact independence.
+**Core mechanism:** Train two classifiers on a small labeled set, one per view. Let confident guesses from each add training information for the other. For example, one view may contain webpage words and the other words in links pointing to that page. The theory assumes that either view can predict the class. It also assumes the views are independent once the class is known, plus conditions that make learning possible. Simply cutting a feature list in half does not meet these conditions. In practice, views that make different errors may still help even without exact independence.
 
-**Inputs/outputs and typical data types:** Paired views of the same objects, a small labeled seed, and a larger unlabeled pool. The original example uses webpage text and incoming hyperlink anchor text. Outputs are two classifiers, optionally combined, and labels for previously unlabeled examples.
+**Inputs/outputs and typical data types:** Each object needs two matching descriptions, a few known labels, and a larger unlabeled pool. The original views are webpage text and incoming-link text. Training returns two classifiers, possibly combined, plus guesses for previously unlabeled examples.
 
-**Strengths and limitations:** One view can provide evidence unavailable to the other, making this less circular than a classifier teaching only itself. However, correlated mistakes can still be exchanged and amplified. Missing views, weak views, class imbalance, and confidence scores that are not comparable across classes complicate selection. A multi-view dataset is not automatically a co-training-compatible dataset.
+**Strengths and limitations:** A second view can contribute evidence missing from the first. This is less circular than a classifier teaching only itself. Still, both may share and reinforce a mistake. Missing or weak views, unequal class sizes, and confidence scores that are hard to compare across classes make selection difficult. Two available views are not automatically two suitable views.
 
-**Computational complexity / scalability notes:** For $`R`$ rounds, the cost is the sum of two learners' repeated training costs plus prediction over candidate pools. Sparse multinomial naive Bayes scales with processed nonzero feature counts rather than a dense $`nd`$ matrix. The two fits can run concurrently, but label exchange synchronizes rounds; there is no universal polynomial bound for arbitrary wrapped learners.
+**Computational complexity / scalability notes:** Every round trains two learners and labels candidate examples. The fits can run at the same time, but must wait for label exchange between rounds. The original word-count learners can work mostly on words that actually appear, rather than a full table of all possible words.
+
+**Optional math:** For $`R`$ rounds, add both learners' training and candidate-prediction costs over all $`R`$ rounds. Sparse multinomial naive Bayes scales with processed nonzero word counts, not necessarily $`nd`$ entries for $`n`$ documents and $`d`$ possible features. There is no one cost bound for every possible pair of learners.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** The original web-page study uses **1,051 pages from four universities**, targeting course homepages versus other pages. Each run holds out 263 pages, starts from **3 positive and 9 negative labels**, and uses the remaining 776 pages as unlabeled data. Page words and incoming-link words enter separate naive Bayes classifiers; exchanged predictions improve a combined course-page classifier, whose decision identifies pages for a course-oriented index. Across five random splits, Table 2 reports combined-classifier error falling from **11.1% with supervised training to 5.0% with co-training**. The technical fit is that link text supplies evidence beyond page content; that is not a claim about a deployed university search product. No business KPI is reported. [Study and protocol](https://www.cs.cmu.edu/~avrim/Papers/cotrain.pdf).
+**Evidence status: Research benchmark.** The original study uses **1,051 pages from four universities** to distinguish course homepages from other pages. Each run holds out 263 pages, starts with **3 positive and 9 negative labels**, and treats the remaining 776 pages as unlabeled.
 
-**Notable vendor implementations/libraries:** The paper supplies the original algorithm and naive Bayes instantiation. [scikit-learn's `MultinomialNB`](https://scikit-learn.org/stable/modules/generated/sklearn.naive_bayes.MultinomialNB.html) can supply view classifiers, but is not a complete co-training wrapper. This entry describes the non-neural original implementation; using neural view encoders changes the training and hardware requirements.
+Separate naive Bayes classifiers process page words and incoming-link words. They exchange predictions, and a combined classifier identifies pages for a course-oriented index. Over five random splits, Table 2 reports error falling from **11.1% with supervised training to 5.0% with co-training**. Link text can help because it says things the page itself may not say. This was not evidence of a deployed university search product, and no business KPI was reported. [Study and protocol](https://www.cs.cmu.edu/~avrim/Papers/cotrain.pdf).
+
+**Notable vendor implementations/libraries:** The paper gives the original procedure using naive Bayes. [scikit-learn's `MultinomialNB`](https://scikit-learn.org/stable/modules/generated/sklearn.naive_bayes.MultinomialNB.html) can provide the word-count classifiers, but not the whole exchange procedure. This entry covers the non-neural original. Using neural networks for the views changes training and hardware needs.
 
 ### 2.1.3 Tri-training
 
+**In plain English:** Train three classifiers from slightly different samples of the known answers. When two agree on an unlabeled example, their answer may help train the third.
+
 **Name:** Tri-training.
 
-**Category & sub-category:** Semi-supervised learning; agreement-based ensemble self-labeling without prescribed views.
+**Category & sub-category:** Semi-supervised learning; several classifiers use agreement to select extra labels, without requiring separate views.
 
 **Originating paper/vendor/year:** Zhi-Hua Zhou and Ming Li, [*Tri-Training: Exploiting Unlabeled Data Using Three Classifiers*, IEEE TKDE, 2005](https://cs.nju.edu.cn/zhouzh/zhouzh.files/publication/tkde05.pdf).
 
-**Core mechanism:** Bootstrap the labeled data to initialize three classifiers. When two agree on an unlabeled example, their agreed label can supervise the third. The original procedure also estimates the error of the agreeing pair on labeled data and controls the number of added examples; indiscriminately adding every agreement is not the full algorithm. The third classifier need not disagree with the pair. Repeated updates seek useful diversity without requiring two naturally separate feature views.
+**Core mechanism:** Start three classifiers with **bootstrap samples**: random samples of the labeled data that allow repeated examples. Two classifiers' agreement can supply a target for the third. The original method also estimates the agreeing pair's error on labeled examples and limits how many new examples it adds. Adding every agreement is not the full algorithm. The third classifier need not disagree with the pair. Repeating these steps seeks useful differences among classifiers without needing two natural views.
 
-**Inputs/outputs and typical data types:** One labeled set and one unlabeled set with the same schema. Outputs are three updated classifiers and a majority-vote prediction. The reference implementation described here uses decision trees on tabular features, not neural networks.
+**Inputs/outputs and typical data types:** A labeled set and an unlabeled set with the same fields go in. Three updated classifiers come out. Their majority vote gives the final class. The reference here uses decision trees on table columns, not neural networks.
 
-**Strengths and limitations:** Unlike co-training, tri-training does not require sufficient and redundant views or calibrated probability outputs. Agreement offers a practical selection signal. It is not equivalent to independent corroboration: bootstrap models can share a systematic blind spot, and very small labeled sets provide unreliable error estimates. The updating and sample-size safeguards matter precisely because agreement alone can be wrong.
+**Strengths and limitations:** Tri-training needs neither two views that each contain enough information nor trustworthy probability estimates. It uses agreement instead. But agreement is not independent proof: models trained from similar data may share blind spots. With very few labels, their estimated error is also unreliable. Limits on added examples and update checks help because agreement alone can be wrong.
 
-**Computational complexity / scalability notes:** Each round entails three candidate-labeling operations and up to three retrainings. With tree learners, cost depends on tree depth, split search, and training-set growth. For a fixed fitted tree, a prediction follows a path of approximately its depth. Storing several evolving pseudo-labeled sets and repeatedly fitting the ensemble can dominate any savings in manual labeling.
+**Computational complexity / scalability notes:** Each round makes candidate predictions with three classifiers and may retrain all three. For trees, work depends on depth, how splits are searched, and the growing training sets. Predicting with a fitted tree follows one path, so deeper paths take more work. Storing several changing pseudo-labeled sets and repeated fits can cost substantial time and memory.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** Zhou and Li evaluate the Wisconsin Diagnostic Breast Cancer dataset, listed as **569 records with 30 attributes**. About one quarter is held out; their 80%-unlabeled protocol hides labels for 80% of the remaining training pool. Features enter three bootstrapped J4.8 trees; agreement-selected records are added to the third tree's training data; majority voting produces the benchmark's diagnostic class. Table III reports error changing from **0.094 to 0.075** for the initial versus final tri-training ensemble, averaged over three random partitions. The methodological fit relative to co-training is that this dataset does not supply the required redundant views. This is retrospective classification research, not evidence of clinical deployment, patient benefit, or a verified medical business KPI. Exact per-split label counts depend on partition rounding. [Original tables and evaluation](https://cs.nju.edu.cn/zhouzh/zhouzh.files/publication/tkde05.pdf).
+**Evidence status: Research benchmark.** Zhou and Li test the Wisconsin Diagnostic Breast Cancer dataset, listed as **569 records with 30 attributes**. About one quarter is held out. In their 80%-unlabeled setting, labels are hidden for 80% of the remaining training pool.
 
-**Notable vendor implementations/libraries:** The original study uses J4.8 trees, alongside separately evaluated base-learner alternatives. [Weka's J48](https://weka.sourceforge.io/doc.dev/weka/classifiers/trees/J48.html) supplies the tree learner; this does not mean its base classifier automatically performs tri-training. Neural base learners are possible extensions, not the instantiation documented here.
+Three bootstrapped J4.8 trees process the features. Examples selected by agreement help train the third tree, and majority voting predicts the dataset's diagnostic class. Table III reports error changing from **0.094 to 0.075**, from the initial to the final ensemble, averaged over three random partitions. This task lacks the two suitable views that co-training needs. The study classifies past records; it does not show clinical deployment, patient benefit, or a verified medical business KPI. Exact label counts per split depend on rounding. [Original tables and evaluation](https://cs.nju.edu.cn/zhouzh/zhouzh.files/publication/tkde05.pdf).
+
+**Notable vendor implementations/libraries:** The study uses J4.8 trees and separately tests other base learners. [Weka's J48](https://weka.sourceforge.io/doc.dev/weka/classifiers/trees/J48.html) supplies a tree learner, not the whole tri-training procedure. Neural learners are possible extensions, not the version documented here.
 
 ### 2.1.4 Noisy Student
 
+**In plain English:** A teacher model labels a large image collection, then a student learns those answers while seeing noisier images and training conditions. The improved student can become the next teacher.
+
 **Name:** Noisy Student training.
 
-**Category & sub-category:** Semi-supervised learning; large-scale teacher-student self-training with student noise.
+**Category & sub-category:** Semi-supervised learning; large-scale self-training with separate teacher and student networks.
 
 **Originating paper/vendor/year:** Qizhe Xie and colleagues, [*Self-training with Noisy Student improves ImageNet classification*, CVPR 2020; arXiv submission 2019](https://arxiv.org/html/1911.04252v4). The work is associated with Google Research.
 
-**Core mechanism:** Train a teacher on labeled images, generate pseudo-labels without student-style noise, and train an equal-sized or larger student on labeled and pseudo-labeled data. Noise is applied to the student, forcing it to predict stable targets under more difficult conditions. Promote the student to teacher and repeat. Teacher capacity, data filtering, class rebalancing, and noise are substantive parts of the procedure, not merely implementation decorations.
+**Core mechanism:** Train the teacher on labeled images. Have it label candidates without the noise used to challenge the student. Train an equal-sized or larger student on real labels and teacher guesses, while adding image and network noise. The student must give stable answers under harder conditions, rather than merely copy an easy input-output pair. Replace the teacher with the student and repeat. Teacher size, filtering, class balancing, and noise all matter to the method.
 
-**Inputs/outputs and typical data types:** Labeled images, a very large candidate image pool, and teacher predictions; outputs are a stronger image classifier and optionally another generation of pseudo-labels. Soft or hard teacher labels are possible; their storage and loss behavior differ.
+**Inputs/outputs and typical data types:** Use labeled images, a very large image pool, and teacher predictions. The intended result is a better image classifier and possibly a new round of pseudo-labels. A teacher can provide one class per image or a probability list, called a **soft target**. These choices need different storage and losses.
 
-**Strengths and limitations:** The method can improve an already strong classifier, so its usefulness is not restricted to tiny label budgets. A larger student need not simply copy teacher errors. Nevertheless, the method requires substantial compute and a sufficiently relevant image pool. Class balancing can reproduce incorrect teacher assignments, and a private corpus limits exact external reproduction.
+**Strengths and limitations:** It can improve an already strong model, not just one trained on very few labels. A larger student is not limited to copying every teacher mistake. Still, it needs substantial computing power and relevant unlabeled images. Class balancing can repeat wrong assignments. A private image collection makes exact reproduction by others difficult.
 
-**Computational complexity / scalability notes:** Each round combines teacher inference over candidates with multiple student-training epochs. Teacher and student forward costs need not be equal. Offline pseudo-labeling is a major independent workload; soft targets require space proportional to the number of stored class probabilities.
+**Computational complexity / scalability notes:** Each round labels the candidate pool and trains the student for multiple epochs. A large student may cost more per prediction than its teacher. Labeling the pool is a major task even when done before training. Soft-target storage grows with the number of images times the number of class probabilities saved.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** For ImageNet recognition, the study combines the full labeled ImageNet training set with **300 million candidate JFT images used without their labels**. Filtering and rebalancing produce **130 million sampled training items representing 81 million unique images**; those numbers are not interchangeable. A teacher labels candidates, an EfficientNet student learns from the filtered mixture, and the final classifier selects an ImageNet category. The reported EfficientNet-L2 result is **88.4% top-1 accuracy**, with 480 million parameters. Student noise offers a technical advantage over straightforward imitation, but the result also depends on capacity, data, iterations, and resolution handling. This is a benchmark result, not a demonstrated commercial image-search KPI. [Data preparation and Tables 2 and 8](https://arxiv.org/html/1911.04252v4).
+**Evidence status: Research benchmark.** The ImageNet study uses the full labeled ImageNet training set plus **300 million candidate JFT images used without their labels**. Filtering and rebalancing yield **130 million sampled training items representing 81 million unique images**. These counts differ because sampled items need not all be different images.
 
-**Notable vendor implementations/libraries:** Google's [Noisy Student research repository](https://github.com/google-research/noisystudent) and released EfficientNet models. Availability of those artifacts does not establish use in a specific Google product.
+A teacher labels candidates, and an EfficientNet student learns from the filtered mix. The final model chooses an ImageNet category. EfficientNet-L2 reports **88.4% top-1 accuracy**, meaning its highest-scoring class is correct that often, with 480 million parameters. Student noise helps explain the approach, but the result also depends on size, data, repeated rounds, and image resolution. It is a benchmark, not a demonstrated commercial image-search KPI. [Data preparation and Tables 2 and 8](https://arxiv.org/html/1911.04252v4).
 
-**Architecture diagram description:** The cited example is **EfficientNet-L2**: `image -> convolutional stem -> repeated expanded mobile inverted-bottleneck blocks with depthwise convolution and squeeze-excitation -> pooling -> classification head`. The teacher and student are separate networks; the recipe is not itself a new block architecture.
+**Notable vendor implementations/libraries:** Google's [Noisy Student research repository](https://github.com/google-research/noisystudent) and released EfficientNet models provide research artifacts. They do not establish use in a particular Google product.
 
-**Activation functions used and why:** EfficientNet uses smooth, self-gating Swish-type nonlinearities in its feature extractor, bounded sigmoid channel gates in squeeze-excitation, and softmax for categorical output probabilities. The projection inside an inverted bottleneck is linear; not every convolution is followed by the same nonlinearity.
+**Architecture diagram description:** The example is **EfficientNet-L2**: `image -> convolutional stem -> repeated expanded mobile inverted-bottleneck blocks with depthwise convolution and squeeze-excitation -> pooling -> classification head`. The stem finds early image patterns. Each repeated block expands then narrows its features, filters channels separately, and adjusts their importance. Pooling summarizes them for classification. Teacher and student are separate networks; Noisy Student does not define a new block design.
 
-**Loss function(s):** Cross-entropy on genuine and teacher-provided labels. With soft targets this is distribution matching, equivalent to forward KL up to the fixed teacher entropy. The paper concatenates labeled and unlabeled samples when forming the average training loss.
+**Activation functions used and why:** EfficientNet uses smooth Swish-type functions to control how feature values pass through the network. Sigmoid gates adjust channel importance in squeeze-excitation. Softmax produces the class probabilities. The final projection inside an inverted bottleneck is linear, so not every convolution has the same activation afterward.
 
-**Optimization algorithm(s):** The [reference optimizer](https://github.com/google-research/noisystudent/blob/master/utils.py) is RMSProp with momentum. The paper's large-model schedule starts at learning rate 0.128 for labeled batch size 2,048 and decays by 0.97 every 2.4 epochs in a 350-epoch run. Warm-up and resolution fine-tuning belong to the concrete implementation.
+**Loss function(s):** Cross-entropy trains on real labels and teacher labels. With soft targets, it rewards matching the teacher's whole probability list. Labeled and unlabeled examples are joined when the paper forms the average loss.
 
-**Regularization techniques:** RandAugment, dropout, and stochastic depth noise the student. The paper reports final-layer dropout 0.5 and final-block survival probability 0.8. Candidate filtering and class balancing are data-selection controls, not guarantees of clean labels.
+**Technical detail (optional):** Soft-target cross-entropy equals forward KL divergence plus the fixed teacher distribution's entropy. That extra term does not change student gradients.
 
-**Backpropagation considerations:** Teacher-generated targets are fixed during a student update; gradients do not flow into an offline teacher. Large-batch normalization, different image resolutions, and strong augmentation affect optimization independently of the pseudo-label rule.
+**Optimization algorithm(s):** The [reference optimizer](https://github.com/google-research/noisystudent/blob/master/utils.py) uses RMSProp with momentum to scale and smooth gradient updates. The paper's large-model schedule starts at learning rate 0.128 for labeled batch size 2,048. It multiplies the rate by 0.97 every 2.4 epochs in a 350-epoch run. The implementation also includes a gradual start and later fine-tuning for resolution.
 
-**Parameter count / scaling behavior:** EfficientNet-L2 has **480M parameters** in this study. Its reported training/test resolutions are 475/800. An additional teacher increases training storage or offline preprocessing, but only the final student is required for ordinary inference.
+**Regularization techniques:** RandAugment changes training images; dropout and stochastic depth switch off some signals or blocks in the student. The paper reports final-layer dropout 0.5 and final-block survival probability 0.8. Filtering candidates and balancing classes control data selection, but do not guarantee correct labels.
 
-**Training paradigm:** Supervised teacher training, pseudo-label generation and filtering, noisy student training, repeated teacher replacement, and final resolution adjustment.
+**Backpropagation considerations:** Keep the teacher's saved targets fixed during each student update. Do not update an offline teacher through the student's loss. Large-batch normalization, resolution changes, and strong image changes affect training separately from the label-guessing rule.
 
-**Hardware/parallelism considerations:** This is a distributed accelerator-scale example. Teacher inference can be sharded; student gradients and normalization statistics require suitable synchronization. It is not a representative cost estimate for applying self-training to a small tabular dataset.
+**Parameter count / scaling behavior:** EfficientNet-L2 has **480M parameters** in this study. Its reported training/test resolutions are 475/800. Keeping a teacher adds storage during training or earlier labeling work. Ordinary prediction needs only the final student.
+
+**Training paradigm:** Train a labeled teacher, generate and filter pseudo-labels, train a noisy student, repeat teacher replacement, then make the final resolution adjustment.
+
+**Hardware/parallelism considerations:** This example uses distributed accelerators. Teacher prediction can be divided across machines. Student training must coordinate gradient updates and normalization statistics. Its cost is not representative of self-training on a small table.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| Self-training / Pseudo-Label | Images, text, or tabular data supported by the base learner | Simple way to reuse confident predictions | Confirmation bias and class starvation | Lee's MNIST digit benchmark |
-| Co-training | Objects with genuinely complementary paired views | Cross-view supervision adds distinct evidence | Strong view assumptions can fail | Course-page classification using page and link text |
-| Tri-training | Single-view tabular or vector data | Agreement without natural feature views | Correlated ensemble errors | Wisconsin Diagnostic Breast Cancer benchmark |
-| Noisy Student | Large labeled and unlabeled image collections | Scales teacher-student learning beyond scarce labels | High compute and corpus-reproduction costs | ImageNet with unlabeled JFT candidates |
+| Self-training / Pseudo-Label | Images, text, or tables the base learner can handle | Reuses model guesses with little extra machinery | Wrong guesses can reinforce themselves; some classes get too few targets | Lee's MNIST digit benchmark |
+| Co-training | Objects with two useful, matching descriptions | One view can supply evidence missing from the other | Both views must be informative enough | Course-page classification from page and link text |
+| Tri-training | Tables or vectors with one shared feature set | Uses agreement without requiring two natural views | All three models may share mistakes | Wisconsin Diagnostic Breast Cancer benchmark |
+| Noisy Student | Very large labeled and unlabeled image collections | Can improve even a well-trained teacher | Expensive computing and hard-to-reproduce image collections | ImageNet with unlabeled JFT candidates |
 
 ## 2.2 Low-density boundaries and manifold regularization
 
-The following methods use unlabeled geometry directly rather than relying on a neural augmentation pipeline. Low-density separation and graph smoothness are related inductive biases, but they produce different objectives and failure modes.
+These methods look at where labeled and unlabeled examples sit in feature space. One tries to place class boundaries in gaps. The other links similar examples and discourages their predictions from changing too sharply. This second idea is **manifold regularization**: using the data's simpler underlying shape to guide learning. Neither approach needs the neural image-change pipeline used by many later methods.
 
 ### 2.2.1 Transductive and semi-supervised SVM
 
-**Name:** Transductive SVM (TSVM) / semi-supervised SVM (S3VM), scoped to margin-based classification with unknown labels optimized jointly.
+**In plain English:** Use many unlabeled examples to help place a dividing line between classes. Try to keep the line away from crowded regions while still respecting the few known answers.
 
-**Category & sub-category:** Semi-supervised learning; low-density decision boundaries.
+**Name:** Transductive SVM (TSVM) / semi-supervised SVM (S3VM). This entry covers support vector machines that choose a class boundary and unknown labels together.
 
-**Originating paper/vendor/year:** Transductive inference is associated with Vapnik's statistical learning framework. Thorsten Joachims's [*Transductive Inference for Text Classification using Support Vector Machines*, ICML 1999](https://www.cs.cornell.edu/people/tj/publications/joachims_99c.pdf) provides the influential text-classification formulation and scalable training procedure used here.
+**Category & sub-category:** Semi-supervised learning; class boundaries that avoid regions crowded with examples.
 
-**Core mechanism:** Jointly choose a large-margin classifier and labels for unlabeled examples. A representative binary objective is
+**Originating paper/vendor/year:** Vapnik's statistical learning framework developed the idea of transductive inference: predicting a particular unlabeled pool. Thorsten Joachims's [*Transductive Inference for Text Classification using Support Vector Machines*, ICML 1999](https://www.cs.cornell.edu/people/tj/publications/joachims_99c.pdf) gives the influential text version and practical training procedure used here.
+
+**Core mechanism:** An SVM seeks a boundary with a wide safety gap, called a **margin**, between classes. This version also chooses labels for unlabeled examples. It discourages placing those examples within the margin. A constraint or prior expectation about class proportions matters; otherwise, assigning nearly everything to one class may look attractive. Practical training alternates label changes with SVM fitting, often increasing the influence of unlabeled data gradually. It approximates a hard search rather than finding a guaranteed global best solution.
+
+**Optional math:** A representative two-class objective is:
 
 $$
 \tfrac12\lVert w\rVert^2+
@@ -190,29 +242,37 @@ C_l\sum_{i\in L}[1-y_if(x_i)]_+
 +C_u\sum_{i\in U}[1-|f(x_i)|]_+.
 $$
 
-Here $`f(x)=w^\top\phi(x)+b`$, and $`C_l,C_u`$ weight the two hinge penalties. The last term penalizes placing unlabeled examples inside the margin. A class-balance constraint or prior is important: otherwise assigning almost everything to one class can be attractive. Alternating label changes and SVM fitting, often increasing $`C_u`$ gradually, yields a practical approximation, not a globally solved convex SVM.
+Here $`L`$ and $`U`$ index labeled and unlabeled inputs $`x_i`$. Known labels $`y_i`$ are $`-1`$ or $`+1`$. The score is $`f(x)=w^\top\phi(x)+b`$: $`\phi(x)`$ supplies features, $`w`$ supplies their weights, and $`b`$ shifts the boundary. The notation $`[v]_+`$ means the larger of $`v`$ and zero. $`C_l`$ and $`C_u`$ set the two penalties' strengths. The first term limits weight size; the second penalizes labeled margin errors; the third penalizes unlabeled points near the boundary.
 
-**Inputs/outputs and typical data types:** Labeled feature vectors plus a particular unlabeled pool; outputs are pool labels and an SVM decision function. Sparse, high-dimensional text is the original motivating case. A semi-supervised use may evaluate the resulting function on a separate future sample.
+**Inputs/outputs and typical data types:** Use labeled feature vectors and a particular unlabeled pool. Training returns labels for that pool and an SVM scoring rule. The original focus is text with many possible features but mostly zero values. A semi-supervised study may also test the resulting rule on separate, future examples.
 
-**Strengths and limitations:** The learner can place a boundary using otherwise unobserved population structure. It is unsuitable when low-density gaps do not align with classes or the assumed class ratio is wrong. The unknown-label optimization introduces local minima and initialization sensitivity absent from the ordinary convex binary SVM problem.
+**Strengths and limitations:** Unlabeled data can reveal gaps that the labeled set misses. But those gaps may not match the true classes, and the assumed class ratio may be wrong. Searching over unknown labels can get stuck in different locally good solutions depending on the starting point. An ordinary two-class supervised SVM does not have that same nonconvex label-search problem.
 
-**Computational complexity / scalability notes:** Complexity depends on the inner SVM solver, kernel, cache, number of label switches, and continuation schedule. A dense kernel matrix needs $`O(n^2)`$ memory; linear text implementations exploit sparsity. Reporting the ordinary supervised SVM cost alone omits the outer nonconvex search.
+**Computational complexity / scalability notes:** Cost depends on the inner SVM solver, similarity rule, cached values, label switches, and schedule for the unlabeled penalty. A full table of pairwise similarities needs about four times the memory when examples double. Linear text versions can exploit the many zero features. Counting only one supervised SVM fit misses the repeated outer search.
+
+**Optional math:** A dense kernel matrix for $`n`$ inputs needs $`O(n^2)`$ memory. A **kernel** supplies the pairwise comparisons used by the SVM; solver and search choices determine the remaining cost.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** Joachims uses Reuters-21578 with the ModApte split: **9,603 training documents and 3,299 test documents**, considering the ten most frequent categories while retaining documents. In one experiment only **17 labeled training documents** are supplied and the 3,299 target document vectors are exposed without labels. Stemmed, weighted text vectors enter the joint margin/label optimization; category decisions organize the target news collection. The paper reports improved precision/recall-breakeven performance over an inductive SVM in this scarce-label Reuters setting; no numerical value is inferred here from a plot. The technical fit is access to the particular collection to be organized. This is explicitly **transductive**, not an untouched-test or production news-service result. No business KPI is reported. [Sections 5.1-5.3](https://www.cs.cornell.edu/people/tj/publications/joachims_99c.pdf).
+**Evidence status: Research benchmark.** Joachims uses Reuters-21578 with the ModApte split: **9,603 training documents and 3,299 test documents**. The study considers the ten most frequent categories while retaining the documents. One experiment supplies only **17 labeled training documents** and exposes the 3,299 target document vectors without labels.
 
-**Notable vendor implementations/libraries:** Joachims's [SVMlight](https://www.cs.cornell.edu/people/tj/svm_light/) supports transductive learning. An ordinary `SVC` trained only on known labels is not a TSVM, even if predictions on unlabeled examples are subsequently inspected.
+Word endings are reduced, and weighted word features enter the joint boundary-and-label search. The predicted categories organize the target news collection. The paper reports better precision/recall-breakeven performance than an inductive SVM in this low-label setting. Precision measures how often a chosen category is right; recall measures how much of that category is found. Breakeven summarizes where those measures meet. No numerical value is guessed from a plot here. This is explicitly **transductive**: access to the target collection is part of the method's fit. It is not an untouched-test result or a production news-service result. No business KPI is reported. [Sections 5.1-5.3](https://www.cs.cornell.edu/people/tj/publications/joachims_99c.pdf).
+
+**Notable vendor implementations/libraries:** Joachims's [SVMlight](https://www.cs.cornell.edu/people/tj/svm_light/) supports transductive learning. An ordinary `SVC` fitted only to known labels is not a TSVM, even if someone later inspects its predictions on unlabeled examples.
 
 ### 2.2.2 Laplacian SVM and manifold regularization
 
-**Name:** Laplacian SVM (LapSVM), within the manifold-regularization framework; Laplacian regularized least squares is a related loss variant, not an alias.
+**In plain English:** Connect similar examples, then train a classifier that both respects known labels and changes gently across those links. Unlike a list of graph labels, its learned rule can also classify a new input.
 
-**Category & sub-category:** Semi-supervised learning; kernel methods with graph-based manifold smoothness.
+**Name:** Laplacian SVM (LapSVM), part of manifold regularization. Laplacian regularized least squares is a related version with a different loss, not another name for LapSVM.
+
+**Category & sub-category:** Semi-supervised learning; a kernel classifier guided by smooth predictions across a similarity graph.
 
 **Originating paper/vendor/year:** Mikhail Belkin, Partha Niyogi, and Vikas Sindhwani, [*Manifold Regularization: A Geometric Framework for Learning from Labeled and Unlabeled Examples*, JMLR 2006](https://www.jmlr.org/papers/v7/belkin06a.html).
 
-**Core mechanism:** Build a similarity graph over labeled and unlabeled examples and regularize a kernel function in two ways:
+**Core mechanism:** Build a graph whose points are examples and whose links connect similar ones. Fit a kernel-based prediction rule with three goals: match known labels, keep the rule controlled in size, and avoid large prediction differences across strong links. LapSVM uses hinge loss, which penalizes wrong answers and points inside the safety margin. Laplacian regularized least squares, or Laplacian RLS, uses squared error instead. The learned rule combines kernel comparisons with the observed inputs, so it can score new inputs too.
+
+**Optional math:** The framework minimizes:
 
 $$
 \frac1{n_l}\sum_{i\in L}\ell(y_i,f(x_i))
@@ -220,263 +280,321 @@ $$
 +\frac{\gamma_I}{n^2}\mathbf f^\top L_G\mathbf f.
 $$
 
-The RKHS term controls the ambient function; the graph-Laplacian term penalizes variation along nearby observations. With hinge loss the method is LapSVM; squared loss produces Laplacian RLS. A representer theorem yields a finite kernel expansion over the observed inputs, providing an explicit function for new inputs rather than only a table of vertex labels.
+Here $`L`$ indexes the $`n_l`$ labeled examples, and $`n`$ counts all examples. $`x_i,y_i`$ are an input and label, $`f`$ is the prediction rule, and $`\ell`$ is its labeled loss. $`\lVert f\rVert_{\mathcal H}^2`$ measures the rule's size in the kernel's function space, called an RKHS. $`\mathbf f`$ lists its scores on the graph. The **graph Laplacian** $`L_G`$ encodes linked-score differences. $`\gamma_A,\gamma_I`$ control the two penalties. A representer theorem justifies the finite kernel-based rule described above; the proof is not needed to use the idea.
 
-**Inputs/outputs and typical data types:** Feature vectors, labels on a subset, a kernel, and a similarity graph. Outputs include a fitted kernel classifier and predictions for new examples. Images, speech features, and document representations are common research inputs.
+**Inputs/outputs and typical data types:** Inputs are feature vectors, labels for some of them, a kernel, and a similarity graph. Outputs include a fitted classifier and predictions for new examples. Research examples use image, speech, and document features.
 
-**Strengths and limitations:** Combines a genuine out-of-sample function with unlabeled geometry. For a fixed graph and suitable loss, fitting avoids the TSVM's combinatorial label assignment. Bad neighbors, inappropriate distance scaling, and smoothness across a real class boundary can nonetheless harm classification. Graph construction and regularization strengths require validation.
+**Strengths and limitations:** It combines a prediction rule for new data with structure from unlabeled data. For a fixed graph and suitable loss, it avoids TSVM's search over label assignments. Still, bad neighbors or poorly scaled distances can hurt. Smoothing across a real class boundary is also harmful. Use validation data to choose the graph and penalty strengths.
 
-**Computational complexity / scalability notes:** Exact dense similarities and kernels require $`O(n^2)`$ storage; dense linear-algebra approaches can reach cubic time. Sparse graph multiplication is $`O(m)`$ for a scalar prediction vector, but does not by itself remove a dense kernel matrix. Iterative primal solvers and approximations change these costs; convergence and stopping rules must be reported.
+**Computational complexity / scalability notes:** Full similarity and kernel tables need roughly four times the storage if the number of examples doubles. Some exact dense solvers can need about eight times the work. A graph with few links makes graph calculations cheaper, but may still leave a full kernel table. Faster iterative solvers and approximations have different costs; report when and why they stop.
+
+**Optional math:** Dense storage is $`O(n^2)`$ for $`n`$ examples, and dense solving can reach $`O(n^3)`$ time. Multiplying a sparse graph by one score vector costs $`O(m)`$, where $`m`$ is its stored link count. This alone does not remove dense kernel costs.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** The paper's one-versus-rest USPS digit experiment uses **50 labeled and 1,957 unlabeled examples**, with ten random splits. Image-derived features enter the kernel and neighborhood graph; fitting combines labeled classification with graph smoothness; the largest class score becomes the digit decision. Table 3 reports mean error **12.7% for LapSVM versus 23.6% for SVM**. This particular comparison uses the USPS test-set pool as a semi-supervised/transductive benchmark; it is not the paper's separate out-of-sample experiment. The latter separately examines generalization to new images. Graph regularization fits the hypothesis that nearby handwriting representations carry useful class structure; it is not proof that this hypothesis holds for every recognition dataset. No production OCR KPI is reported. [Original experimental section](https://www.jmlr.org/papers/volume7/belkin06a/belkin06a.pdf).
+**Evidence status: Research benchmark.** The USPS digit experiment uses **50 labeled and 1,957 unlabeled examples**, with ten random splits. Each class is learned against the remaining classes, a scheme called **one-versus-rest**. Image features build the kernel and neighborhood graph. Training balances correct labeled predictions with smooth graph scores. The largest class score selects the digit.
 
-**Notable vendor implementations/libraries:** The [Melacci Laplacian SVM library](https://www3.diism.unisi.it/~melacci/lapsvmp/) implements primal training and related classifiers. Its documentation explicitly notes that the implementation still stores the whole kernel matrix. It is research software, not a claim of a hosted vendor service.
+Table 3 reports mean error **12.7% for LapSVM versus 23.6% for SVM**. This comparison uses the USPS test-set pool during semi-supervised/transductive learning. It is not the paper's separate experiment on previously unseen images. The result fits the idea that neighboring handwriting features carry useful class information; it does not prove this for every recognition dataset. No production OCR KPI is reported. [Original experimental section](https://www.jmlr.org/papers/volume7/belkin06a/belkin06a.pdf).
+
+**Notable vendor implementations/libraries:** The [Melacci Laplacian SVM library](https://www3.diism.unisi.it/~melacci/lapsvmp/) provides primal training, which optimizes the classifier directly, and related methods. Its documentation says it still stores the whole kernel matrix. It is research software, not a claimed hosted vendor service.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| Transductive / semi-supervised SVM | Sparse text and vector data with meaningful density gaps | Places margins using the target input distribution | Nonconvex label search and class-balance assumptions | Reuters-21578 topic assignment |
-| Laplacian SVM / manifold regularization | Kernel-compatible features with useful neighborhoods | Combines graph smoothness with an out-of-sample function | Graph quality and dense kernel costs | USPS digit classification |
+| Transductive / semi-supervised SVM | Text or vectors with useful gaps between classes | Uses the target inputs to place a class boundary | Label search can get stuck; assumed class proportions may be wrong | Reuters-21578 topic assignment |
+| Laplacian SVM / manifold regularization | Features with useful similarity measures and neighbors | Uses graph links while retaining a rule for new inputs | Bad neighbors and large kernel tables can cause problems | USPS digit classification |
 
 ## 2.3 Graph label inference
 
-Here labels are inferred on a graph whose vertices include the unlabeled observations. These entries concern classical fixed-graph inference, not trainable graph-convolution or graph-attention networks.
+Here a **graph** holds both labeled and unlabeled examples as points, or vertices. Links show which examples are related. A few known answers help spread class scores across the graph. These two methods use a fixed graph; they are not trainable graph-convolution or graph-attention networks.
 
 ### 2.3.1 Label propagation through Gaussian fields and harmonic functions
 
-**Name:** Label propagation, scoped here to the hard-clamped Gaussian-field / harmonic-function formulation.
+**In plain English:** Keep the few known labels fixed and let each unlabeled point borrow information from its neighbors. Repeating this averaging spreads the known answers through connected groups.
 
-**Category & sub-category:** Semi-supervised learning; transductive graph label inference.
+**Name:** Label propagation, specifically the Gaussian-field / harmonic-function version with fixed labeled scores. Other algorithms also use the broader name "label propagation."
 
-**Originating paper/vendor/year:** Xiaojin Zhu, Zoubin Ghahramani, and John Lafferty, [*Semi-Supervised Learning Using Gaussian Fields and Harmonic Functions*, ICML 2003](https://pages.cs.wisc.edu/~jerryzhu/pub/zgl.pdf). "Label propagation" is a broader term; this entry does not equate every algorithm bearing that name with this objective.
+**Category & sub-category:** Semi-supervised learning; predicting labels for the points in an existing graph, a transductive task.
 
-**Core mechanism:** Construct symmetric nonnegative affinities $`W`$, degrees $`D`$, and the unnormalized Laplacian $`L_G=D-W`$. Fix the labeled rows $`F_L=Y_L`$, and minimize graph Dirichlet energy $`\frac12\sum_{ij}W_{ij}\lVert F_i-F_j\rVert^2`$. Interior vertices become weighted averages of their neighbors. Partitioning the Laplacian gives
+**Originating paper/vendor/year:** Xiaojin Zhu, Zoubin Ghahramani, and John Lafferty, [*Semi-Supervised Learning Using Gaussian Fields and Harmonic Functions*, ICML 2003](https://pages.cs.wisc.edu/~jerryzhu/pub/zgl.pdf). This entry does not treat every label-propagation method as the same objective.
+
+**Core mechanism:** Build links with nonnegative similarity weights that are the same in both directions. Fix each labeled point's class scores to its known answer; this is **hard clamping**. Choose scores for the other points that keep linked scores as close as possible. Each unlabeled point becomes a weighted average of its neighbors. Repeated averaging, with known labels reset after each step, can reach this **harmonic** solution when the graph has the needed connections.
+
+**Optional math:** Let $`W`$ contain link weights, $`D`$ contain each point's total link weight on its diagonal, and $`L_G=D-W`$ be the graph Laplacian. $`F_i`$ is the class-score list at point $`i`$. The smoothness cost is $`\frac12\sum_{ij}W_{ij}\lVert F_i-F_j\rVert^2`$, which adds weighted squared differences over pairs. Fix the labeled scores $`F_L=Y_L`$. The unlabeled scores satisfy:
 
 $$
-F_U=-L_{UU}^{-1}L_{UL}Y_L,
+F_U=-L_{UU}^{-1}L_{UL}Y_L.
 $$
 
-implemented by solving a linear system, not explicitly computing an inverse. Repeated neighbor averaging with the labeled rows reclamped is an iterative route to this harmonic solution under appropriate connectivity conditions.
+Here $`L`$ and $`U`$ mark labeled and unlabeled points. $`L_{UU}`$ and $`L_{UL}`$ are the corresponding blocks of $`L_G`$, and $`Y_L`$ contains known label scores. In practice, solve the linear equations rather than explicitly computing the inverse shown in the formula.
 
-**Inputs/outputs and typical data types:** A weighted graph or features from which to construct it, together with class labels for some vertices. Output is a class-score vector at each unlabeled vertex. A connected component without any labeled boundary has no uniquely anchored class solution without an additional convention or prior.
+**Inputs/outputs and typical data types:** Start with a weighted graph, or features used to build one, and labels at some points. The output gives class scores at every unlabeled point. A disconnected group with no labeled point lacks a fixed answer to build from. It needs an added rule or prior; otherwise its class solution is not uniquely determined.
 
-**Strengths and limitations:** The formulation has an interpretable smoothness objective and, with suitable anchoring, a unique solution. Hard clamping respects trusted annotations exactly. It also preserves incorrect annotations exactly. Graph homophily, connectivity, and affinity scale are decisive; scores should not automatically be treated as calibrated deployment probabilities.
+**Strengths and limitations:** With suitable labeled anchors, the smoothness rule has a unique solution. Hard clamping preserves trusted labels exactly, but also preserves wrong labels exactly. The graph should mostly connect same-class points, a property called **homophily**. Its connections and similarity scale matter greatly. Scores are not automatically calibrated probabilities whose stated chances match real frequencies.
 
-**Computational complexity / scalability notes:** Dense construction and storage are quadratic in $`n`$. A direct dense solve over $`n_u`$ unknown vertices is cubic in $`n_u`$, apart from multiple-class right-hand sides. Sparse iterations cost approximately $`O(smC)`$, with convergence dependent on graph conditioning; exact nearest-neighbor construction can itself be expensive.
+**Computational complexity / scalability notes:** A full graph needs about four times the construction work and storage when its point count doubles. A dense direct solve can need about eight times the work when the unlabeled count doubles. Sparse graphs allow repeated link-based updates, but finding exact nearest neighbors may itself be expensive.
+
+**Optional math:** Dense construction/storage are quadratic in total points $`n`$. A direct solve is cubic in unlabeled points $`n_u`$, apart from handling several class-score columns. Sparse iteration costs about $`O(smC)`$ for $`s`$ steps, $`m`$ links, and $`C`$ classes. How quickly it settles depends on how well-conditioned the graph equations are.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** Zhu and colleagues study handwritten digits from the **CEDAR/Buffalo digit database**, represented after preprocessing by 256-dimensional image vectors. Labeled digits provide boundary values, image similarities produce graph edges, harmonic inference supplies scores for remaining vertices, and a score-based rule assigns digit classes. Section 7 reports label-budget curves comparing harmonic methods with nearest-neighbor and RBF classifiers. It also evaluates **class mass normalization**, which adds class-prior information and must not be mistaken for the unmodified hard-clamped solution. This source supports a concrete recognition experiment, but no exact error value is inferred from its curves here and no production OCR KPI is reported. The technical rationale is borrowing labels along handwriting neighborhoods rather than relying only on distance to an isolated labeled prototype. [Experiment and formulation](https://pages.cs.wisc.edu/~jerryzhu/pub/zgl.pdf).
+**Evidence status: Research benchmark.** Zhu and colleagues study handwritten digits from the **CEDAR/Buffalo digit database**. Preprocessing makes each image a 256-dimensional vector. Labeled digits fix scores at some points; image similarities create links. Harmonic averaging fills in scores for other points, then a score-based rule assigns digit classes.
 
-**Notable vendor implementations/libraries:** [scikit-learn's `LabelPropagation`](https://scikit-learn.org/stable/modules/generated/sklearn.semi_supervised.LabelPropagation.html) supplies a hard-clamped propagation implementation with supported graph kernels. Kernel construction and optional class-prior postprocessing differ from choices in the original study. Its out-of-sample prediction rule should be distinguished from inference on the training graph.
+Section 7 plots results at different label budgets against nearest-neighbor and radial-basis-function (RBF) classifiers. It also tests **class mass normalization**, a step that adds prior information about class proportions. That step is not part of the unchanged hard-clamped solution. No exact error is guessed from the curves here, and no production OCR KPI is reported. The method fits the idea of borrowing answers through handwriting neighborhoods, rather than only from an isolated labeled example. [Experiment and formulation](https://pages.cs.wisc.edu/~jerryzhu/pub/zgl.pdf).
+
+**Notable vendor implementations/libraries:** [scikit-learn's `LabelPropagation`](https://scikit-learn.org/stable/modules/generated/sklearn.semi_supervised.LabelPropagation.html) offers hard-clamped propagation with supported graph kernels. Graph-building choices and optional class-prior adjustments differ from the study. Its rule for new inputs is also separate from labeling points in the training graph.
 
 ### 2.3.2 Label spreading and local-and-global consistency
 
+**In plain English:** Spread label information between neighbors, but keep gently pulling scores toward the known answers. Unlike fixed-label propagation, this method lets even a labeled point's scores change.
+
 **Name:** Label spreading / learning with local and global consistency.
 
-**Category & sub-category:** Semi-supervised learning; normalized graph diffusion with soft label retention.
+**Category & sub-category:** Semi-supervised learning; graph-based score sharing with adjusted link scales and soft label retention.
 
 **Originating paper/vendor/year:** Dengyong Zhou, Olivier Bousquet, Thomas Lal, Jason Weston, and Bernhard Scholkopf, [*Learning with Local and Global Consistency*, NIPS 2003, proceedings volume published 2004](https://papers.nips.cc/paper_files/paper/2003/file/87682805257e619d49b8e0dfdc14affa-Paper.pdf).
 
-**Core mechanism:** Form normalized similarity $`S=D^{-1/2}WD^{-1/2}`$ and iterate
+**Core mechanism:** Adjust link weights using how strongly each point is connected overall. Then repeatedly mix two sources: scores passed along those adjusted links and the initial known-label scores. This is **soft clamping**. Labeled points can move away from their initial scores instead of staying fixed. Adjusting for connection strength, or degree normalization, also changes which score patterns count as smooth.
+
+**Optional math:** Let $`W`$ contain nonnegative similarities and $`D`$ contain total link weights on its diagonal. Define adjusted similarities $`S=D^{-1/2}WD^{-1/2}`$. With score table $`F`$ and initial label indicators $`Y`$, update:
 
 $$
 F^{(t+1)}=\alpha SF^{(t)}+(1-\alpha)Y,\qquad 0<\alpha<1.
 $$
 
-The fixed point is $`(1-\alpha)(I-\alpha S)^{-1}Y`$. It balances graph smoothness and fidelity to the initial label indicators. Unlike hard-clamped propagation, labeled vertices can move away from their initial one-hot scores. Degree normalization also changes what counts as a smooth function. Multiplying all final scores by the same positive constant does not change their argmax, but can matter when interpreting them as probabilities.
+Here $`t`$ counts updates and $`\alpha`$ sets how much to rely on the graph. The settled scores are $`(1-\alpha)(I-\alpha S)^{-1}Y`$, where $`I`$ is the identity matrix. Multiplying every final score by one positive constant leaves the winning class unchanged, but can affect how scores are interpreted as probabilities.
 
-**Inputs/outputs and typical data types:** Labeled and unlabeled vertices in a nonnegative affinity graph. Output is a class-score field, usually converted to labels by argmax. Feature normalization, graph construction, and the treatment of zero-degree vertices must be specified.
+**Inputs/outputs and typical data types:** Use a graph of labeled and unlabeled points with nonnegative links. Output is a class-score list at each point; the highest score usually selects the class. Specify feature scaling, how links are built, and what happens to points with no links.
 
-**Strengths and limitations:** Soft retention can reduce the damage caused by a single erroneous label, and normalized diffusion moderates degree effects. It does not diagnose which label is wrong. Too much diffusion oversmooths class structure; too little ignores useful unlabeled geometry. The mathematical smoothness assumption remains inappropriate for heterophilous graphs.
+**Strengths and limitations:** Soft retention can limit harm from one wrong label, and degree normalization controls the influence of highly connected points. Neither identifies which label is wrong. Too much sharing blurs real class differences, called **oversmoothing**. Too little misses useful unlabeled structure. The method is poorly suited to graphs that often link different classes, called **heterophilous** graphs.
 
-**Computational complexity / scalability notes:** Sparse diffusion costs $`O(smC)`$, with $`O(m+nC)`$ storage after graph construction. A dense direct solve can require $`O(n^3)`$ time and $`O(n^2)`$ memory. Iteration count depends on $`\alpha`$, spectrum, and tolerance; taking $`\alpha`$ close to one can slow convergence.
+**Computational complexity / scalability notes:** On a sparse graph, each step processes links and class scores. Storage must hold both. A full direct solve is much more costly: doubling points can mean eight times the work and four times the storage. Update count depends on the graph, the stopping tolerance, and how strongly scores rely on neighbors. Very strong neighbor weighting can slow settling.
+
+**Optional math:** With $`s`$ steps, $`m`$ links, $`n`$ points, and $`C`$ classes, sparse work is $`O(smC)`$ and storage is $`O(m+nC)`$. Dense solving can take $`O(n^3)`$ time and $`O(n^2)`$ memory. Convergence depends on $`\alpha`$, tolerance, and the graph's spectral properties, which govern how score patterns fade during repeated sharing. Taking $`\alpha`$ near one can be slow.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** The original digit experiment uses **3,874 USPS images from digits 1-4**, with class sizes 1,269, 929, 824, and 852. Pixels define affinities; a few labeled vertices seed diffusion; the resulting score maximum assigns a digit to each unlabeled image. The main curves average 100 trials and favor consistency-based inference over the tested supervised baselines. A separately described **one-pixel-jittered affinity variant** reaches approximately **1% error with 30 labeled points**; that is not the result of every plain RBF label-spreading model. The paper also acknowledges using optimal parameters for comparison methods, a limitation for realistic label-budget claims. Neighborhood smoothing fits digit-shape variation better than relying only on a few prototypes, but this is a transductive research result with no business KPI. [Section 4.2 and model-selection discussion](https://papers.nips.cc/paper_files/paper/2003/file/87682805257e619d49b8e0dfdc14affa-Paper.pdf).
+**Evidence status: Research benchmark.** The digit experiment uses **3,874 USPS images from digits 1-4**, with class sizes 1,269, 929, 824, and 852. Pixels set link strengths. A few labeled points start score sharing, and the largest resulting score selects each unlabeled digit.
 
-**Notable vendor implementations/libraries:** [scikit-learn's `LabelSpreading`](https://scikit-learn.org/stable/modules/generated/sklearn.semi_supervised.LabelSpreading.html) implements normalized graph propagation with a clamping factor. It is not a graph neural network and requires no backpropagation through trainable layers.
+The main curves average 100 trials and favor this consistency-based approach over the tested supervised baselines. A separate **one-pixel-jittered affinity variant**, which changes how similarities handle small image shifts, reaches approximately **1% error with 30 labeled points**. This is not the result of every ordinary RBF label-spreading model. The paper also acknowledges using optimal parameters for comparison methods, which limits realistic label-budget claims. Neighbor sharing suits changes in digit shapes better than relying only on a few examples. Still, this is a transductive research result, not a reported business KPI. [Section 4.2 and model-selection discussion](https://papers.nips.cc/paper_files/paper/2003/file/87682805257e619d49b8e0dfdc14affa-Paper.pdf).
+
+**Notable vendor implementations/libraries:** [scikit-learn's `LabelSpreading`](https://scikit-learn.org/stable/modules/generated/sklearn.semi_supervised.LabelSpreading.html) implements normalized graph sharing with a clamping factor. It is not a graph neural network and needs no backpropagation through learned layers.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| Harmonic label propagation | Homophilous similarity graphs | Interpretable, hard-anchored smooth solution | Unanchored components and incorrect fixed labels | CEDAR/Buffalo handwritten-digit study |
-| Label spreading | Similarity graphs where soft label retention is useful | Degree-normalized diffusion and soft clamping | Graph mistakes and oversmoothing | USPS digits 1-4 benchmark |
+| Harmonic label propagation | Similarity graphs whose links mostly join the same class | Spreads scores by a clear averaging rule while fixing known labels | Unlabeled disconnected groups lack anchors; wrong fixed labels stay wrong | CEDAR/Buffalo handwritten-digit study |
+| Label spreading | Similarity graphs where known scores should not be fully fixed | Controls highly connected points' influence and allows label scores to move | Bad links or too much sharing can blur classes | USPS digits 1-4 benchmark |
 
 ## 2.4 Entropy and consistency
 
-Entropy minimization encourages decisive predictions. Consistency regularization asks related observations or models to agree. A classifier can be consistently uncertain, confidently wrong, or consistently wrong; these are distinct conditions. The following objectives therefore need supervised anchoring and careful evaluation.
+These methods ask for either more decisive answers or more stable answers. Entropy measures how spread out class probabilities are, so reducing it encourages confidence. **Consistency** means agreement after a suitable input change or between model predictions. Neither is the same as correctness. A classifier can be uncertain every time, confidently wrong once, or wrong in the same way every time. Known labels and careful tests are still essential.
 
 ### 2.4.1 Entropy minimization
 
+**In plain English:** Encourage the classifier to give more decisive answers on unlabeled examples. This can help separate groups, but confidence alone cannot tell it which answer is right.
+
 **Name:** Minimum-entropy regularization / entropy minimization.
 
-**Category & sub-category:** Semi-supervised learning; confidence-based regularization of a predictive distribution.
+**Category & sub-category:** Semi-supervised learning; encouraging confident class probabilities as an extra training goal.
 
-**Originating paper/vendor/year:** Yves Grandvalet and Yoshua Bengio, [*Semi-supervised Learning by Entropy Minimization*, NIPS 2004](https://papers.nips.cc/paper_files/paper/2004/file/96f2b50b5d3613adf9c27049b2a888c7-Paper.pdf). Their original experiments include logistic and kernel-logistic models; the neural instantiation below is the explicitly evaluated entropy term in [Miyato et al.'s VAT study](https://arxiv.org/html/1704.03976v2).
+**Originating paper/vendor/year:** Yves Grandvalet and Yoshua Bengio, [*Semi-supervised Learning by Entropy Minimization*, NIPS 2004](https://papers.nips.cc/paper_files/paper/2004/file/96f2b50b5d3613adf9c27049b2a888c7-Paper.pdf). Their experiments include logistic and kernel-logistic classifiers. The neural example below is the added entropy term tested in [Miyato et al.'s VAT study](https://arxiv.org/html/1704.03976v2), not the original paper's network.
 
-**Core mechanism:** Add $`\lambda\,\mathbb E_{u\in D_U}H(p_\theta(\cdot\mid u))`$ to supervised risk. A uniform $`C`$-class prediction has entropy $`\log C`$; a point mass has entropy zero. Under a suitable cluster assumption, discouraging uncertainty at observed inputs encourages boundaries away from them. It does not identify which confident class is correct. Unlike hard pseudo-labeling, entropy minimization differentiates a smooth function of the entire current probability vector.
+**Core mechanism:** Train on known answers, then add a penalty for uncertain predictions on unlabeled inputs. If dense groups mostly share classes, this can move class boundaries away from those groups. But it cannot name a group correctly without other evidence. Unlike selecting one hard pseudo-label, this method adjusts a smooth function of the full probability list.
 
-**Inputs/outputs and typical data types:** A probabilistic classifier, labeled examples, and unlabeled examples. Output is the same type of classifier; the regularizer neither reconstructs inputs nor creates a new architecture. It applies to differentiable tabular, image, and language models.
+**Optional math:** The added term is $`\lambda\,\mathbb E_{u\in D_U}H(p_\theta(\cdot\mid u))`$. Here $`D_U`$ is the unlabeled set, $`u`$ an input, $`p_\theta`$ the classifier, $`H`$ entropy, $`\mathbb E`$ an average, and $`\lambda`$ the penalty weight. Equal probabilities across $`C`$ classes have entropy $`\log C`$; putting all probability on one class gives zero.
 
-**Strengths and limitations:** Inexpensive and easy to combine with other objectives. By itself it can favor overconfidence or class collapse, particularly with a large unlabeled weight. Low entropy is not calibration, uncertainty estimation, or OOD detection. The original paper explicitly analyzes the assumptions needed for unlabeled data to be informative.
+**Inputs/outputs and typical data types:** Use a classifier that produces probabilities, some labeled examples, and unlabeled examples. The output is the same kind of classifier. This rule neither reconstructs inputs nor adds a new network design. It can work with differentiable models for tables, images, or language.
 
-**Computational complexity / scalability notes:** Entropy evaluation costs $`O(BC)`$ after a batch's predictions exist. Processing extra unlabeled inputs still incurs backbone forward/backward costs. No graph, additional teacher, or all-pairs distance calculation is inherently required.
+**Strengths and limitations:** The extra calculation is cheap and easy to combine with other losses. Too much weight can make the model overconfident or make it choose one class for nearly everything, called **class collapse**. Low entropy does not mean calibrated chances, reliable uncertainty estimates, or detection of out-of-distribution inputs. The original paper examines when unlabeled data can actually help.
+
+**Computational complexity / scalability notes:** Once probabilities exist, calculating their entropy is small work compared with running a large network. Still, processing extra unlabeled inputs requires predictions and gradients. The rule itself needs no graph, teacher, or pairwise-distance table.
+
+**Optional math:** Entropy calculation costs $`O(BC)`$ for $`B`$ examples and $`C`$ classes. That does not include the network's forward and backward passes.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** Miyato and colleagues examine natural-image classification on CIFAR-10 with **4,000 labeled training examples**. Their Conv-Large classifier processes augmented images; VAT promotes local stability, and the extra entropy penalty makes predictions at unlabeled observations more decisive; a ten-class score vector becomes an object-category decision. The augmented-data comparison reports **11.36% error for VAT and 10.55% for VAT+EntMin**, with reported standard deviations 0.34 and 0.05 percentage points. This is evidence for adding entropy to that particular recipe, **not** a result for entropy minimization alone. Confidence regularization complements smoothness, but the paired experiment does not establish a general superiority to pseudo-labeling. No deployed recognition system or business KPI is reported. [Original ablation table](https://arxiv.org/html/1704.03976v2).
+**Evidence status: Research benchmark.** Miyato and colleagues test CIFAR-10 classification with **4,000 labeled training examples**. A Conv-Large network processes changed versions of images. VAT encourages stable predictions near each image; the added entropy term makes unlabeled predictions more decisive. The largest of ten class scores selects an object category.
 
-**Notable vendor implementations/libraries:** Entropy can be expressed directly using stable log-softmax operations in PyTorch or TensorFlow. The [VAT TensorFlow reference](https://github.com/takerum/vat_tf) supplies a concrete neural context. A generic entropy function does not implement a complete SSL protocol.
+With image augmentation, the study reports **11.36% error for VAT and 10.55% for VAT+EntMin**, with standard deviations 0.34 and 0.05 percentage points. This tests adding entropy to that recipe, **not entropy minimization alone**. It shows how confidence and stability can complement each other in this experiment, not general superiority over pseudo-labeling. No deployed recognition system or business KPI is reported. [Original ablation table](https://arxiv.org/html/1704.03976v2).
 
-**Architecture diagram description:** The neural example uses the VAT paper's **Conv-Large**, not an unspecified modern backbone: `RGB image -> three 128-channel convolutions -> pool/dropout -> three 256-channel convolutions -> pool/dropout -> 512-channel convolution -> 256- and 128-channel 1x1 convolutions -> global pooling -> 10-way head`.
+**Notable vendor implementations/libraries:** PyTorch or TensorFlow can compute entropy with stable log-softmax operations, which calculate log probabilities safely. The [VAT TensorFlow reference](https://github.com/takerum/vat_tf) gives a concrete neural example. An entropy function alone is not a complete semi-supervised training and evaluation procedure.
 
-**Activation functions used and why:** Leaky ReLU with slope 0.1 in this CNN, followed by softmax class probabilities. Leakage retains a gradient for negative feature responses; softmax provides the normalized distribution whose entropy is penalized.
+**Architecture diagram description:** The example uses **Conv-Large** from the VAT paper: `RGB image -> three 128-channel convolutions -> pool/dropout -> three 256-channel convolutions -> pool/dropout -> 512-channel convolution -> 256- and 128-channel 1x1 convolutions -> global pooling -> 10-way head`. Convolutions find local patterns; channels hold different learned features. Pooling summarizes them. The final head produces ten class scores.
 
-**Loss function(s):** The standalone principle is supervised cross-entropy plus positive-weight predictive entropy. The worked neural example additionally includes the VAT KL penalty. Minimizing the entropy of individual predictions is different from maximizing the entropy of the aggregate class distribution.
+**Activation functions used and why:** The CNN uses leaky ReLU with slope 0.1: negative values keep a small response rather than becoming zero. This preserves gradient signals there. Softmax provides the probability list whose entropy is penalized.
 
-**Optimization algorithm(s):** For the cited neural study, Adam starts at 0.001. Appendix D specifies a 48,000-update validation schedule with linear decay over its final 16,000 updates and separately reports extending final CIFAR-10 runs to 200,000 updates. That experimental budget is not intrinsic to entropy minimization.
+**Loss function(s):** The basic rule adds positive-weight predictive entropy to labeled cross-entropy and minimizes the total. The worked example also adds VAT's KL penalty for local stability. Reducing uncertainty for each image is different from encouraging varied class use across a whole batch.
 
-**Regularization techniques:** The example also uses batch normalization, dropout, image augmentation, and VAT. Their benefits must not be attributed solely to the entropy term. The entropy coefficient itself controls a bias toward confidence rather than conventional weight shrinkage.
+**Optimization algorithm(s):** The neural study uses Adam starting at 0.001. Appendix D gives a 48,000-update validation schedule, with linear learning-rate decay over the final 16,000 updates. It separately extends final CIFAR-10 runs to 200,000 updates. This training budget is a study choice, not a requirement of entropy minimization.
 
-**Backpropagation considerations:** Differentiate through both appearances of $`p`$ in $`-\sum p\log p`$. Replacing this with cross-entropy against a detached copy of the same probabilities is not equivalent and can give a zero logit gradient. Stable log-softmax avoids evaluating $`\log 0`$.
+**Regularization techniques:** The example also uses batch normalization, dropout, image augmentation, and VAT. Their effects must not all be credited to entropy. The entropy weight controls pressure toward confidence, rather than directly shrinking network weights.
 
-**Parameter count / scaling behavior:** No additional learned parameters beyond the classifier. The described Conv-Large has approximately 3.1M convolution/head weights by arithmetic from its widths; normalization adds small additional state.
+**Backpropagation considerations:** Let the gradient account for how every probability changes the entropy. Treating a copy of the current probabilities as a fixed cross-entropy target is not the same calculation. It can give zero gradient on the output scores.
 
-**Training paradigm:** Joint supervised and unlabeled regularization; in the worked example, jointly optimized with VAT rather than as a separate pretraining stage.
+**Optional math:** In $`-\sum_c p_c\log p_c`$, $`p_c`$ is the current probability of class $`c`$. Both its appearances must receive derivatives. Stable log-softmax avoids directly evaluating $`\log 0`$.
 
-**Hardware/parallelism considerations:** The entropy arithmetic is small compared with CNN computation and is easily data-parallel. Numerical stability and unlabeled-batch composition matter more than dedicated hardware for the regularizer.
+**Parameter count / scaling behavior:** Entropy adds no learned parameters. The listed Conv-Large layers have approximately 3.1M convolution/head weights by arithmetic from their widths. Normalization adds a little extra state.
+
+**Training paradigm:** Learn from labels and unlabeled regularization together. In the example, entropy and VAT train jointly; entropy is not a separate pretraining stage.
+
+**Hardware/parallelism considerations:** Entropy arithmetic is small beside CNN work and can be split across batches on different devices. Safe probability calculations and the makeup of unlabeled batches matter more than special hardware for this loss.
 
 ### 2.4.2 Pi Model
 
-**Name:** Pi Model, conventionally written $`\Pi`$-Model.
+**In plain English:** Show the same example to one network twice with different random changes. Train it to give matching answers, even for examples without labels.
 
-**Category & sub-category:** Semi-supervised learning; same-model stochastic consistency.
+**Name:** Pi Model, usually written with the Greek letter Pi as the $`\Pi`$-Model.
 
-**Originating paper/vendor/year:** The named formulation is described by Samuli Laine and Timo Aila in [*Temporal Ensembling for Semi-Supervised Learning*, ICLR 2017; arXiv submission 2016](https://arxiv.org/pdf/1610.02242).
+**Category & sub-category:** Semi-supervised learning; one model learns to agree with itself under random changes.
 
-**Core mechanism:** Evaluate the same example twice with independent stochastic perturbations, obtaining $`p_\theta(y\mid a_1(x),\xi_1)`$ and $`p_\theta(y\mid a_2(x),\xi_2)`$. Penalize their squared difference while applying supervised cross-entropy where labels exist. Here $`a`$ can change the input and $`\xi`$ can represent dropout or other model noise. Agreement encourages predictions that are stable over the perturbation neighborhood, not just at labeled points.
+**Originating paper/vendor/year:** Samuli Laine and Timo Aila describe the named method in [*Temporal Ensembling for Semi-Supervised Learning*, ICLR 2017; arXiv submission 2016](https://arxiv.org/pdf/1610.02242).
 
-**Inputs/outputs and typical data types:** A shared labeled/unlabeled input pool and a stochastic classifier. The output is one ordinary classifier. Images are the source experiment, but the construction transfers only where defensible perturbations exist.
+**Core mechanism:** Make two independently changed versions of the same example. Also allow different network noise, such as dropout. Run both through the same weights and penalize differences between their probability lists. Add ordinary classification loss wherever a known label exists. Many unlabeled examples can then teach the model which changes should leave its answer stable.
 
-**Strengths and limitations:** Avoids an explicit pseudo-label cache or separate teacher model. However, two simultaneous predictions may agree on an incorrect answer, and excessive invariance can erase task information. The method requires careful augmentation design and an initially restrained consistency weight.
+**Optional math:** The two predictions are $`p_\theta(y\mid a_1(x),\xi_1)`$ and $`p_\theta(y\mid a_2(x),\xi_2)`$. Here $`x`$ is the input, $`y`$ a class, $`\theta`$ the shared weights, $`a_1,a_2`$ the input changes, and $`\xi_1,\xi_2`$ independent network noise. Training penalizes their squared difference.
 
-**Computational complexity / scalability notes:** Approximately two stochastic evaluations per processed example, with gradients through both branches. For fixed augmentation cost, training remains $`O(EnF)`$ with a larger constant than supervised training. Only one set of learned parameters is stored, but both branches' activations contribute to memory use.
+**Inputs/outputs and typical data types:** Use labeled and unlabeled inputs plus a classifier with random changes during training. The output is one ordinary classifier. The source tests images. Other data need changes that can reasonably preserve their labels.
+
+**Strengths and limitations:** It needs neither saved guesses for every example nor a separate teacher. But two predictions can agree on the wrong answer. Requiring agreement after an unsuitable change can remove useful information. Choose image changes carefully and start with a restrained consistency-loss weight.
+
+**Computational complexity / scalability notes:** Each example needs about two changed-view evaluations, with gradients through both. Only one set of weights is learned, but training keeps intermediate values from both paths. With fixed image-change cost, work still grows roughly with examples and epochs.
+
+**Optional math:** Training remains $`O(EnF)`$ for $`E`$ epochs, $`n`$ examples, and per-example forward cost $`F`$, but with a larger multiplier than labeled-only training.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** Laine and Aila use CIFAR-10 with **4,000 labeled images** and the remaining training images available without labels. Cropped or translated image views pass through the same convolutional network with different noise; the consistency penalty keeps the output class distribution stable; the final argmax supplies a ten-category recognition decision. Their augmented Pi Model reports **12.36% test error, with standard deviation 0.31 percentage points**. The technical advantage over labeled-only augmentation is that unlabeled examples also constrain invariance. This is a controlled recognition benchmark, not a commercial vision deployment; no business KPI is reported. The paper's validation and augmentation protocol is part of the result. [Table 1 and implementation appendix](https://arxiv.org/pdf/1610.02242).
+**Evidence status: Research benchmark.** Laine and Aila use CIFAR-10 with **4,000 labeled images** and the remaining training images unlabeled. Cropped or shifted views pass through one CNN under different noise. Matching their output probabilities teaches stable recognition. The final highest-scoring class selects one of ten categories.
 
-**Notable vendor implementations/libraries:** Laine's [temporal-ensembling research code](https://github.com/smlaine2/tempens) includes the Pi Model comparison. Later unified SSL libraries may use different backbones and should not be assumed to reproduce the original numbers automatically.
+The augmented Pi Model reports **12.36% test error, with standard deviation 0.31 percentage points**. Its useful addition is that unlabeled images also teach which changes to ignore. The result depends on the paper's validation and augmentation procedure. It is a controlled recognition benchmark, not a commercial vision deployment; no business KPI is reported. [Table 1 and implementation appendix](https://arxiv.org/pdf/1610.02242).
 
-**Architecture diagram description:** The actual reference CNN is `32x32 RGB -> 128/128/128 convolutions -> max-pool/dropout -> 256/256/256 convolutions -> max-pool/dropout -> 512 convolution -> 256 then 128 pointwise convolutions -> global average pool -> dense 10`. The network is evaluated twice with shared weights.
+**Notable vendor implementations/libraries:** Laine's [temporal-ensembling research code](https://github.com/smlaine2/tempens) includes the Pi Model comparison. Later combined libraries may change the backbone and do not automatically reproduce its numbers.
 
-**Activation functions used and why:** Leaky ReLU, slope 0.1, retains negative-side feature gradients; softmax supplies normalized probabilities for consistency comparison. This implementation uses weight normalization and mean-only batch normalization, not an assumption that every consistency CNN uses ordinary full batch normalization.
+**Architecture diagram description:** The reference CNN is `32x32 RGB -> 128/128/128 convolutions -> max-pool/dropout -> 256/256/256 convolutions -> max-pool/dropout -> 512 convolution -> 256 then 128 pointwise convolutions -> global average pool -> dense 10`. Each listed width counts feature channels. Pointwise convolutions combine channels at the same image location. The two evaluations share this one network.
 
-**Loss function(s):** Labeled cross-entropy plus a ramped mean-squared difference between the two probability vectors, evaluated on the appropriate labeled and unlabeled inputs. Normalization across class dimensions and examples affects the coefficient's meaning.
+**Activation functions used and why:** Leaky ReLU with slope 0.1 keeps a small response and gradient for negative values. Softmax gives probabilities that can be compared across views. Weight normalization rescales weights. Mean-only batch normalization recenters features without the full variance rescaling of ordinary batch normalization. These are this implementation's choices.
 
-**Optimization algorithm(s):** Adam with maximum learning rate 0.003. The source trains for 300 epochs, ramps learning rate and consistency weight during the first 80 epochs, and reduces the learning rate during the final 50 epochs. These are reference settings, not part of the abstract Pi objective.
+**Loss function(s):** Labeled cross-entropy is combined with a gradually increased mean-squared difference between the two probability lists. The comparison uses the appropriate labeled and unlabeled inputs. Averaging over classes and examples affects what the consistency weight means.
 
-**Regularization techniques:** Gaussian input noise, dropout, weight normalization, mean-only batch normalization, and dataset-appropriate geometric augmentation. Horizontal image flips should not be inherited indiscriminately by digit tasks.
+**Optimization algorithm(s):** Adam uses maximum learning rate 0.003. Training lasts 300 epochs. The learning rate and consistency weight ramp up during the first 80 epochs; the learning rate drops during the final 50. These are reference settings, not the definition of the Pi loss.
 
-**Backpropagation considerations:** In the original Pi Model, **both predictions receive gradients**. Treating one branch as a detached teacher is a different implementation. Independent noise is essential; identical deterministic branches would yield no useful consistency signal.
+**Regularization techniques:** Gaussian input noise, dropout, weight normalization, mean-only batch normalization, and suitable geometric image changes. Do not automatically transfer horizontal flips from photo tasks to digit tasks.
 
-**Parameter count / scaling behavior:** Approximately 3.1M convolution/head weights from the listed widths, plus normalization parameters. Two evaluations do not mean two independently learned parameter sets.
+**Backpropagation considerations:** In the original Pi Model, **both predictions receive gradients**. Freezing one path as a teacher changes the method. Independent noise matters: two identical deterministic paths already agree and give no useful consistency signal.
 
-**Training paradigm:** End-to-end supervised anchoring and stochastic consistency, with a warm-up that delays strong reliance on initially unreliable predictions.
+**Parameter count / scaling behavior:** The listed convolution/head widths give approximately 3.1M weights, plus normalization parameters. Running the model twice does not create two independently learned weight sets.
 
-**Hardware/parallelism considerations:** A GPU handles the reference CNN. Branches can be batched together, but normalization, augmentation independence, and memory accounting must remain equivalent to the intended two-view computation.
+**Training paradigm:** Train on labels and view agreement together. A warm-up period delays strong trust in the model's unreliable early answers.
+
+**Hardware/parallelism considerations:** A GPU can handle the reference CNN. The two views can share a batch, provided their noise stays independent and normalization matches the intended calculation. Count memory for both paths.
 
 ### 2.4.3 Temporal ensembling
 
+**In plain English:** Save a running average of each example's earlier predictions. Use that steadier history to teach the current model instead of making two fresh predictions every time.
+
 **Name:** Temporal ensembling.
 
-**Category & sub-category:** Semi-supervised learning; per-example prediction averaging across training epochs.
+**Category & sub-category:** Semi-supervised learning; averaging each example's predictions across training epochs.
 
 **Originating paper/vendor/year:** Samuli Laine and Timo Aila, [*Temporal Ensembling for Semi-Supervised Learning*, ICLR 2017](https://arxiv.org/pdf/1610.02242), first posted in 2016.
 
-**Core mechanism:** Maintain an exponential moving average of each training example's predictions. With $`Z_i^{(t)}=\beta Z_i^{(t-1)}+(1-\beta)p_i^{(t)}`$, use the bias-corrected target $`\tilde Z_i^{(t)}=Z_i^{(t)}/(1-\beta^t)`$ after initialization at zero. Train the current noisy prediction to match a target accumulated from earlier epochs. This ensembles historical outputs, not model weights, and avoids requiring two fresh stochastic predictions for every update.
+**Core mechanism:** Give each training example a saved probability list. After each epoch, combine its old list with its newest prediction, giving recent answers more weight. This is an **exponential moving average (EMA)**. Correct for the fact that the saved list started at zero. The current noisy prediction learns to match the target built from earlier epochs. This averages outputs, not network weights, and avoids two fresh predictions per update.
 
-**Inputs/outputs and typical data types:** A persistently indexed dataset of labeled and unlabeled examples. Output is one classifier; the auxiliary state is a class-probability history for each training example. Stable example identity is essential when shuffling or distributing batches.
+**Optional math:** For example $`i`$ at epoch $`t`$, update $`Z_i^{(t)}=\beta Z_i^{(t-1)}+(1-\beta)p_i^{(t)}`$. Here $`p_i^{(t)}`$ is the current probability list, $`Z_i^{(t)}`$ the saved average, and $`\beta`$ the old-history weight. Starting from zero requires the corrected target $`\tilde Z_i^{(t)}=Z_i^{(t)}/(1-\beta^t)`$.
 
-**Strengths and limitations:** Historical averaging can provide less noisy targets and reduces repeated forward/backward work relative to the Pi Model. Targets are stale within an epoch, and the method does not naturally accommodate an ever-growing stream of previously unseen examples without cache management. A biased historical prediction may remain influential for several epochs.
+**Inputs/outputs and typical data types:** Use labeled and unlabeled examples with stable identifiers. The output is one classifier; the extra stored data hold prediction histories for training examples. Shuffling or moving examples across devices must not mix up those histories.
 
-**Computational complexity / scalability notes:** Current-network training is approximately one stochastic evaluation per example, plus $`O(nC)`$ target-cache storage and refresh work. For many examples or classes this cache can dominate the wrapper's memory, even though it is inexpensive on small benchmarks. It is not an inference-time ensemble.
+**Strengths and limitations:** Averaging can make targets less noisy and needs less repeated current-network work than the Pi Model. But targets stay unchanged within an epoch. New examples in a growing stream need cache management, and an old wrong guess can influence the target for several epochs.
+
+**Computational complexity / scalability notes:** Training needs about one fresh noisy evaluation per example plus history updates. The history grows with both the number of examples and the number of classes, which can become costly. Prediction after training uses one model, not an ensemble of old networks.
+
+**Optional math:** For $`n`$ examples and $`C`$ classes, target-cache storage and refresh work are $`O(nC)`$.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** On SVHN cropped-house-number recognition, the paper uses **500 labels within the official 73,257-image training set**, without the supplied extra-image split. An image's historical predictions are averaged across epochs, its current noisy prediction is trained toward that average, and inference for the benchmark remains a single digit classifier. Table 2 reports **5.12% error with standard deviation 0.13 percentage points**, versus **6.65% with standard deviation 0.53** for the augmented Pi Model in that experiment. The technical fit is obtaining a smoother target without doubling current model evaluation; this is not a measured saving in a production address-reading service. No business KPI is reported. [Original SVHN table and appendix](https://arxiv.org/pdf/1610.02242).
+**Evidence status: Research benchmark.** The SVHN cropped-house-number experiment uses **500 labels within the official 73,257-image training set**, without its extra-image split. Earlier predictions of each digit image are averaged. Current noisy predictions learn to match that average. The final model remains a single digit classifier.
 
-**Notable vendor implementations/libraries:** The [authors' implementation](https://github.com/smlaine2/tempens) supplies the original method. A generic exponential-moving-average parameter utility does **not** implement temporal ensembling's per-example target cache.
+Table 2 reports **5.12% error with standard deviation 0.13 percentage points**, versus **6.65% with standard deviation 0.53** for the augmented Pi Model in that experiment. This shows how a smoother target can help without doubling current-model evaluation. It does not measure savings in a production address-reading service. No business KPI is reported. [Original SVHN table and appendix](https://arxiv.org/pdf/1610.02242).
 
-**Architecture diagram description:** The reference backbone is the same 128/256/512-channel convolutional classifier specified for the Pi Model: `noisy image -> CNN -> current probability vector -> consistency against stored historical target`. Cache storage sits outside the neural architecture.
+**Notable vendor implementations/libraries:** The [authors' implementation](https://github.com/smlaine2/tempens) provides the method. A utility that averages network weights does **not** implement the per-example prediction cache required here.
 
-**Activation functions used and why:** Leaky ReLU with slope 0.1 preserves a gradient for negative feature values; the softmax head produces probabilities that can be averaged across epochs. Averaging logits instead changes the target.
+**Architecture diagram description:** The backbone is the same 128/256/512-channel CNN described for the Pi Model: `noisy image -> CNN -> current probability vector -> consistency against stored historical target`. The cache is extra training storage, not another network layer.
 
-**Loss function(s):** Supervised cross-entropy plus ramped squared distance from current probabilities to the bias-corrected historical probability target. The first epoch must not penalize the model for disagreement with an all-zero uninitialized cache.
+**Activation functions used and why:** Leaky ReLU with slope 0.1 preserves negative-value gradients. Softmax makes class probabilities that can be averaged across epochs. Averaging raw scores, or logits, instead produces a different target.
 
-**Optimization algorithm(s):** Adam; the source uses maximum learning rate **0.001 for temporal ensembling on SVHN**, rather than its usual 0.003 setting. Training lasts 300 epochs with the 80-epoch ramp-up and 50-epoch ramp-down. Prediction-ensemble decay is 0.6 in the source experiments.
+**Loss function(s):** Add labeled cross-entropy to a gradually increased squared difference between current probabilities and the corrected historical target. During the first epoch, do not punish disagreement with an all-zero, uninitialized cache.
 
-**Regularization techniques:** Dropout, input noise, weight normalization, mean-only batch normalization, and dataset-specific augmentation. Historical averaging is a target regularizer, not a substitute for these mechanisms.
+**Optimization algorithm(s):** Adam uses maximum learning rate **0.001 for temporal ensembling on SVHN**, not the paper's usual 0.003. Training lasts 300 epochs, with an 80-epoch ramp-up and a 50-epoch ramp-down. The prediction-average decay is 0.6 in the source experiments.
 
-**Backpropagation considerations:** Targets from previous epochs are detached stored values; gradients do not traverse the entire training history. Incorrect bias correction or mismatched example indices silently changes the objective.
+**Regularization techniques:** Dropout, input noise, weight normalization, mean-only batch normalization, and changes suited to the dataset. Historical averaging steadies targets; it does not replace these other controls.
 
-**Parameter count / scaling behavior:** The CNN remains approximately 3.1M convolution/head weights. Auxiliary memory grows as $`nC`$, unlike Mean Teacher's dataset-size-independent teacher weights.
+**Backpropagation considerations:** Treat earlier saved targets as fixed values. Do not send gradients through the full training history. Wrong example identifiers or incorrect zero-start correction can silently make the model learn the wrong objective.
 
-**Training paradigm:** Joint semi-supervised training with epoch-level target refresh. The final classifier can predict new examples inductively without maintaining their histories.
+**Parameter count / scaling behavior:** The CNN still has approximately 3.1M convolution/head weights. The extra cache grows as the number of examples times classes. Mean Teacher, below, instead stores another set of weights whose size does not grow with the dataset.
 
-**Hardware/parallelism considerations:** Distributed training must merge or consistently shard prediction histories. Cache communication and dataset identity can be more important bottlenecks than the averaging arithmetic.
+**Training paradigm:** Train jointly with labels and unlabeled targets, refreshing targets each epoch. Afterward, the classifier can predict new examples without keeping their histories.
+
+**Hardware/parallelism considerations:** Distributed training must either merge histories correctly or assign each history consistently to a device. Moving caches and tracking identities may cost more than the averaging calculation itself.
 
 ### 2.4.4 Mean Teacher
 
+**In plain English:** Keep a teacher whose weights are a running average of the student's recent weights. This steadier teacher supplies targets for unlabeled examples, including ones it has not seen before.
+
 **Name:** Mean Teacher.
 
-**Category & sub-category:** Semi-supervised learning; consistency with an exponentially averaged parameter teacher.
+**Category & sub-category:** Semi-supervised learning; learning to agree with a teacher made by averaging model weights.
 
-**Originating paper/vendor/year:** Antti Tarvainen and Harri Valpola, [*Mean teachers are better role models*, NeurIPS 2017](https://arxiv.org/html/1703.01780v6). The cited expanded arXiv version is from 2018.
+**Originating paper/vendor/year:** Antti Tarvainen and Harri Valpola, [*Mean teachers are better role models*, NeurIPS 2017](https://arxiv.org/html/1703.01780v6). The cited expanded arXiv version dates from 2018.
 
-**Core mechanism:** Train a student with labeled classification loss and agreement with a teacher under perturbed inputs or model noise. After each student update, set $`\theta'_t=\alpha\theta'_{t-1}+(1-\alpha)\theta_t`$. The teacher is an average of weights, rather than a cache of predictions for each example. Consequently, it can supply a target immediately for a newly sampled unlabeled input and refreshes every step instead of every epoch.
+**Core mechanism:** Train a student using known labels and agreement with teacher predictions under independently changed inputs or network noise. After each student update, mix the teacher's old weights with the student's new weights. This exponential moving average smooths the teacher's changes. It stores weights rather than each example's prediction history. The teacher can therefore make a target for a newly sampled image immediately and refreshes every step rather than every epoch.
 
-**Inputs/outputs and typical data types:** Labeled and unlabeled inputs, independently perturbed student/teacher views, and two parameter states. Output is a single classifier, commonly the final EMA teacher. The paper evaluates both small CNNs and residual architectures; their results must be distinguished.
+**Optional math:** The update is $`\theta'_t=\alpha\theta'_{t-1}+(1-\alpha)\theta_t`$. Here $`\theta_t`$ is the current student weight set, $`\theta'_t`$ is the teacher weight set, $`t`$ counts updates, and $`\alpha`$ controls how much old teacher weight to retain.
 
-**Strengths and limitations:** Avoids the dataset-sized temporal-ensembling cache and often stabilizes targets. The teacher remains dependent on the student's history, so it is not an independent source of truth. Excessive averaging slows adaptation; inappropriate augmentation and unreliable early predictions can still cause failure.
+**Inputs/outputs and typical data types:** Use labeled and unlabeled inputs, independent student/teacher changes, and two weight sets. The result is one chosen classifier, commonly the final averaged teacher. The paper tests both small CNNs and networks with skip connections, called residual networks. Their results are not interchangeable.
 
-**Computational complexity / scalability notes:** One teacher forward pass accompanies student training. EMA updates cost $`O(p)`$ per step and teacher storage is $`O(p)`$, independent of $`n`$. Only the student needs ordinary training gradients; final inference does not require evaluating all historical models.
+**Strengths and limitations:** It avoids a cache that grows with the dataset and can stabilize targets. But the teacher is built from the student's history, not independent truth. Too much averaging makes it slow to adapt. Poor image changes and unreliable early guesses can still cause failure.
+
+**Computational complexity / scalability notes:** Student training is joined by one teacher forward pass. Averaging and storing teacher weights cost more as the network grows, not as the dataset grows. Only the student needs ordinary training gradients. Final prediction does not run every historical model.
+
+**Optional math:** With $`p`$ parameters, averaging costs $`O(p)`$ per step and teacher storage is $`O(p)`$. These costs do not depend on the number of examples $`n`$.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** On SVHN house-number recognition with **250 labels**, the paper's non-residual convolutional Mean Teacher reports **4.35% error**. Normalized digit images receive independent perturbations; the EMA teacher supplies a probability target; student learning combines that target with the few known labels; inference chooses one of ten digit classes. The methodological advantage over temporal ensembling is step-level target updates without keeping a prediction record for every image. This number belongs to the CNN experiment, not the paper's separate, substantially different residual-network results. Standard SVHN training data and the authors' validation-label protocol apply; no production address-processing KPI is reported. [Paper abstract and experimental appendix](https://arxiv.org/html/1703.01780v6).
+**Evidence status: Research benchmark.** On SVHN house-number recognition with **250 labels**, the paper's non-residual convolutional Mean Teacher reports **4.35% error**. Normalized digit images receive independent changes. The averaged teacher supplies probabilities, and the student combines those targets with the few known labels. Prediction selects one of ten digits.
 
-**Notable vendor implementations/libraries:** [Curious AI's Mean Teacher repository](https://github.com/CuriousAI/mean-teacher) includes TensorFlow and PyTorch research implementations. EMA utilities in other frameworks implement only one component of the method.
+Compared with temporal ensembling, it updates targets every step without keeping a record per image. This number belongs to the CNN experiment, not the separate, substantially different residual-network results. The standard SVHN training data and the authors' validation-label procedure apply. No production address-processing KPI is reported. [Paper abstract and experimental appendix](https://arxiv.org/html/1703.01780v6).
 
-**Architecture diagram description:** For this example, use the paper's Table 6 CNN with convolutional groups of 128, 256, and then 512/256/128 channels and a pooled ten-class head. `Student view -> CNN(theta)` and `teacher view -> identical CNN(theta_EMA)` meet at a consistency loss.
+**Notable vendor implementations/libraries:** [Curious AI's Mean Teacher repository](https://github.com/CuriousAI/mean-teacher) contains TensorFlow and PyTorch research implementations. A framework's weight-averaging utility provides only one piece of the method.
 
-**Activation functions used and why:** Leaky ReLU, slope 0.1, keeps negative-side feature gradients; softmax provides teacher/student distributions on a common probability scale. The small reference CNN uses weight normalization and mean-only batch normalization. The paper's residual-network experiments have separate architectural and regularization choices.
+**Architecture diagram description:** The example uses the paper's Table 6 CNN: convolutional groups with 128, 256, then 512/256/128 channels, followed by a pooled ten-class head. `Student view -> CNN(theta)` and `teacher view -> identical CNN(theta_EMA)` meet at a consistency loss. The paths have the same layer design but different weight states.
 
-**Loss function(s):** Labeled student cross-entropy plus probability-vector mean-squared consistency in the small-CNN experiment. The paper also studies KL-based consistency; choosing it changes the scale and behavior of the coefficient.
+**Activation functions used and why:** Leaky ReLU with slope 0.1 keeps gradients on the negative side. Softmax places both models' outputs on a common probability scale. The small CNN uses weight normalization and mean-only batch normalization. The paper's residual models make separate design and regularization choices.
 
-**Optimization algorithm(s):** Adam with maximum learning rate 0.003 for the small CNN. In semi-supervised SVHN, learning rate and consistency strength ramp over 40,000 steps, with no final ramp-down; the no-extra-data run lasts 180,000 steps. Teacher decay and Adam's second-moment coefficient change from 0.99 during ramp-up to 0.999 afterward.
+**Loss function(s):** The small-CNN experiment adds labeled student cross-entropy to mean-squared differences between teacher and student probabilities. The paper also studies KL-based agreement. Choosing that instead changes the loss's behavior and scale, so its coefficient is not directly interchangeable.
 
-**Regularization techniques:** Input noise, translations, dropout, normalization, and teacher averaging. The reference SVHN sampler uses one labeled and 99 unlabeled examples per minibatch; other datasets use different ratios.
+**Optimization algorithm(s):** Adam uses maximum learning rate 0.003 for the small CNN. On semi-supervised SVHN, the rate and consistency weight rise over 40,000 steps, with no final ramp-down. The no-extra-data run lasts 180,000 steps. Teacher decay and Adam's second-moment coefficient, which smooths squared gradients, change from 0.99 during ramp-up to 0.999 afterward.
 
-**Backpropagation considerations:** Stop gradients through teacher targets. EMA is an explicit update, not gradient descent on teacher loss and not backpropagation through past optimizer steps. Handle normalization state deliberately when copying or averaging models.
+**Regularization techniques:** Input noise, translations, dropout, normalization, and teacher averaging. The reference SVHN sampler uses one labeled and 99 unlabeled examples per minibatch. Other datasets use different ratios.
 
-**Parameter count / scaling behavior:** Each reference CNN has approximately 3.1M convolution/head weights. Training stores roughly two model states plus student optimizer state; inference needs one selected model.
+**Backpropagation considerations:** Hold teacher targets fixed while updating the student. Teacher averaging is an explicit weight update, not gradient descent on a teacher loss or differentiation through earlier training steps. Deliberately choose how to copy or average normalization state as well as weights.
 
-**Training paradigm:** Joint semi-supervised consistency learning from a student and its continually averaged teacher; no separate pretrained teacher is required by the recipe.
+**Parameter count / scaling behavior:** Each reference CNN has approximately 3.1M convolution/head weights. Training stores roughly two model states plus the student's optimizer state. Prediction needs only one selected model.
 
-**Hardware/parallelism considerations:** Teacher inference adds compute but less activation memory than a second trainable network. Distributed implementations must keep EMA and normalization state consistent across replicas.
+**Training paradigm:** Train the student with labels and agreement with its continually averaged teacher. The basic recipe needs no separately pretrained teacher.
+
+**Hardware/parallelism considerations:** Teacher predictions add work, but need less saved intermediate state than a second fully trainable network. Across devices, keep teacher averages and normalization state consistent.
 
 ### 2.4.5 Virtual adversarial training
 
+**In plain English:** Find a small input change that most unsettles the model's current answer. Then train the model to resist that change, without needing a true label for the example.
+
 **Name:** Virtual adversarial training (VAT).
 
-**Category & sub-category:** Semi-supervised learning; label-independent local adversarial consistency.
+**Category & sub-category:** Semi-supervised learning; stable predictions under deliberately challenging nearby input changes.
 
-**Originating paper/vendor/year:** Takeru Miyato and colleagues introduced a [distributional-smoothing formulation](https://arxiv.org/abs/1507.00677) in 2015, followed by the expanded [*Virtual Adversarial Training: A Regularization Method for Supervised and Semi-Supervised Learning*](https://arxiv.org/html/1704.03976v2), posted in 2017 and revised in 2018 for the journal work.
+**Originating paper/vendor/year:** Takeru Miyato and colleagues introduced a [distributional-smoothing formulation](https://arxiv.org/abs/1507.00677) in 2015. The expanded [*Virtual Adversarial Training: A Regularization Method for Supervised and Semi-Supervised Learning*](https://arxiv.org/html/1704.03976v2) was posted in 2017 and revised in 2018 for the journal work.
 
-**Core mechanism:** Find a small perturbation that most changes the model's current predictive distribution:
+**Core mechanism:** First predict a probability list for an input. Search for a small change that most alters that list. Then train the classifier to keep the changed prediction close to the original, while also learning from known labels. "Virtual" means the target is the model's own prediction, not the unknown true answer. Unlike random noise, the change deliberately follows a direction where the model is locally fragile.
+
+**Optional math:** VAT approximates:
 
 $$
 r_{\rm vadv}\approx\arg\max_{\lVert r\rVert\le\epsilon}
@@ -484,200 +602,234 @@ D_{\rm KL}\!\left(\operatorname{sg}[p_\theta(\cdot\mid x)]
 \parallel p_\theta(\cdot\mid x+r)\right).
 $$
 
-Then penalize that divergence during training. A finite-difference power-iteration approximation finds a sensitive direction without constructing a Hessian. "Virtual" means the target distribution is the model's prediction, not the unknown true class. Compared with random noise, the perturbation deliberately searches for a locally fragile direction.
+Here $`x`$ is the input, $`r`$ its change, and $`\epsilon`$ the allowed size under the chosen norm $`\lVert r\rVert`$. $`p_\theta`$ is the classifier and $`D_{\rm KL}`$ compares its two probability lists. $`\operatorname{sg}`$ means hold the original list fixed for gradients. $`r_{\rm vadv}`$ is the estimated most disruptive allowed change. A finite-difference power iteration estimates that direction using gradient changes, rather than building a full Hessian table of second derivatives.
 
-**Inputs/outputs and typical data types:** Differentiable inputs or embeddings, labeled and unlabeled examples, and a perturbation norm and radius. Outputs are a regularized classifier; perturbations are training auxiliaries, not generated ground-truth examples.
+**Inputs/outputs and typical data types:** Use inputs or learned input vectors for which gradients can be computed, some labeled examples, unlabeled examples, and a rule limiting change size. The output is a classifier trained for local stability. The changed inputs help training; they are not newly verified examples.
 
-**Strengths and limitations:** Does not require labels to construct local adversarial directions and need not rely entirely on handcrafted augmentations. The radius is meaningful only relative to preprocessing and feature scale. Local smoothness does not establish global adversarial robustness, and perturbations may leave the natural-data manifold.
+**Strengths and limitations:** It finds challenging directions without true labels and does not rely only on hand-chosen image changes. But the allowed radius makes sense only relative to input scaling and preprocessing. Stability nearby does not prove protection against all adversarial changes. A changed image can also leave the pattern followed by real images, the data manifold.
 
-**Computational complexity / scalability notes:** Each power iteration adds gradient-based perturbation work, followed by evaluation of the perturbed input. A fixed small iteration count gives a constant-factor increase over ordinary neural training, not a dense Hessian cost. More iterations, longer sequences, or larger backbones increase actual cost.
+**Computational complexity / scalability notes:** Each search iteration adds gradient work, followed by a prediction on the changed input. A fixed small number of iterations multiplies ordinary training cost by a constant factor. It does not require storing a dense Hessian. More search iterations, longer inputs, or larger networks still increase the actual bill.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** Miyato and colleagues classify CIFAR-10 images with **4,000 labeled examples**. The Conv-Large network predicts a distribution, a locally sensitive input direction is estimated, and the classifier learns to preserve its prediction under that perturbation while respecting genuine labels. The augmented-data table reports **11.36% test error with standard deviation 0.34 percentage points for VAT**. The separate 10.55% VAT+EntMin row includes an additional regularizer, as explained above. VAT fits a task where local robustness around unlabeled images is useful even beyond available geometric augmentations. This is an image-classification experiment, not evidence of a deployed adversarially secure system or a business KPI. [Original comparison and Appendix D](https://arxiv.org/html/1704.03976v2).
+**Evidence status: Research benchmark.** Miyato and colleagues classify CIFAR-10 images with **4,000 labeled examples**. Conv-Large first predicts probabilities. VAT estimates a sensitive input direction and trains the network to keep its answer stable there, while respecting known labels.
 
-**Notable vendor implementations/libraries:** [The authors' VAT TensorFlow code](https://github.com/takerum/vat_tf). Generic adversarial-attack libraries do not necessarily implement the same stopped target, norm, or training objective.
+With image augmentation, the paper reports **11.36% test error with standard deviation 0.34 percentage points for VAT**. The separate 10.55% VAT+EntMin result includes the extra confidence penalty described above. VAT fits tasks where stability near unlabeled images helps beyond available geometric image changes. This is not evidence of a deployed adversarially secure system or a business KPI. [Original comparison and Appendix D](https://arxiv.org/html/1704.03976v2).
 
-**Architecture diagram description:** The cited example is **Conv-Large**: the 128/256-channel convolutional groups, 512/256/128-channel final group, pooling, and ten-class head described in the entropy entry. `Input -> prediction -> perturbation search -> perturbed input -> same CNN` is a training computation graph, not an extra inference architecture.
+**Notable vendor implementations/libraries:** [The authors' VAT TensorFlow code](https://github.com/takerum/vat_tf) provides the reference. A general adversarial-attack library may use a different fixed target, change-size rule, or loss.
 
-**Activation functions used and why:** Leaky ReLU with slope 0.1 retains negative-side gradients; softmax supplies the distribution compared by KL in the source CNN. Batch normalization is used; perturbation search must not inadvertently change the normalization behavior being tested.
+**Architecture diagram description:** The example uses **Conv-Large** from the entropy entry: 128/256-channel convolutional groups, a final 512/256/128-channel group, pooling, and a ten-class head. `Input -> prediction -> perturbation search -> perturbed input -> same CNN` describes extra training steps, not an added prediction-time network.
 
-**Loss function(s):** Labeled cross-entropy plus expected KL divergence to the stopped clean prediction in the estimated adversarial direction. Entropy minimization is an optional **additional** term, not part of VAT's definition.
+**Activation functions used and why:** Leaky ReLU with slope 0.1 preserves negative-side gradients. Softmax supplies the probability list compared by KL divergence. The source CNN also uses batch normalization. The search must not accidentally change the normalization behavior it is testing.
 
-**Optimization algorithm(s):** Adam starts at 0.001 in Appendix D. Its validation schedule uses 48,000 updates with linear decay over the final 16,000; the source separately extends final CIFAR-10 training to 200,000 updates. Radius selection uses validation data and therefore consumes a tuning budget.
+**Loss function(s):** Add labeled cross-entropy to the average KL difference between the fixed original prediction and the prediction in the estimated challenging direction. Entropy minimization is an optional **additional** term, not part of VAT's definition.
 
-**Regularization techniques:** VAT itself, together with the experiment's dropout, batch normalization, and optional input augmentation. Neither its norm nor its radius is a universal image-independent constant.
+**Optimization algorithm(s):** Appendix D starts Adam at 0.001. Validation runs use 48,000 updates with linear decay over the final 16,000; final CIFAR-10 runs separately extend to 200,000 updates. Choosing the radius uses validation data, so its labels count toward the tuning budget.
 
-**Backpropagation considerations:** Stop the reference probabilities and ordinarily detach the constructed perturbation before the outer update. This avoids differentiating through the inner search. Small finite-difference steps need adequate numerical precision; storing a full Hessian is unnecessary.
+**Regularization techniques:** VAT itself, plus the experiment's dropout, batch normalization, and optional image augmentation. Neither the choice of norm nor the radius is one universal setting for all images.
 
-**Parameter count / scaling behavior:** No additional learned parameters over the approximately 3.1M-weight Conv-Large backbone. Additional memory holds perturbed activations and input gradients rather than a second independently trained classifier.
+**Backpropagation considerations:** Hold the original probabilities fixed and normally treat the completed input change as fixed during the outer model update. This avoids sending gradients through the inner search. Very small finite-difference steps need enough numerical precision. A full Hessian is unnecessary.
 
-**Training paradigm:** End-to-end supervised learning plus label-independent local smoothness on unlabeled, and potentially labeled, observations.
+**Parameter count / scaling behavior:** VAT adds no learned parameters to the approximately 3.1M-weight Conv-Large network. Extra memory holds changed-input activations and input gradients, not another independently trained classifier.
 
-**Hardware/parallelism considerations:** GPU/autodiff support is important for efficient input gradients. Multi-device training must preserve the intended perturbation norm per example rather than accidentally normalizing across a whole distributed batch.
+**Training paradigm:** Learn from true labels and local stability together. The stability term needs no labels and can use unlabeled inputs, and potentially labeled inputs too.
+
+**Hardware/parallelism considerations:** GPUs and automatic differentiation help compute input gradients efficiently. In distributed training, measure the allowed change separately for each example. Accidentally normalizing across an entire multi-device batch changes the method.
 
 ### 2.4.6 Unsupervised Data Augmentation
 
+**In plain English:** Make a much-changed version of an unlabeled image or document that should keep the same meaning. Train its prediction to match the answer for the original or gently changed version.
+
 **Name:** Unsupervised Data Augmentation for Consistency Training (UDA).
 
-**Category & sub-category:** Semi-supervised learning; consistency under strong, domain-appropriate augmentation.
+**Category & sub-category:** Semi-supervised learning; agreement under strong changes suited to the data.
 
-**Originating paper/vendor/year:** Qizhe Xie and colleagues, [*Unsupervised Data Augmentation for Consistency Training*, NeurIPS 2020; arXiv submission 2019](https://arxiv.org/html/1904.12848v6). Despite its name, the classifier training discussed here uses labeled data.
+**Originating paper/vendor/year:** Qizhe Xie and colleagues, [*Unsupervised Data Augmentation for Consistency Training*, NeurIPS 2020; arXiv submission 2019](https://arxiv.org/html/1904.12848v6). Despite "Unsupervised" in the name, the classifier training here also uses known labels.
 
-**Core mechanism:** Make a prediction on an original or weakly changed unlabeled input, then train the model to agree on a substantially augmented version. UDA emphasizes the quality of the augmentation: image transformations and text back-translation provide different kinds of semantic invariance. The framework also discusses confidence masking, sharpening, and training-signal annealing, which limits already-easy labeled examples early in training. Those options and their coefficients must be identified per experiment.
+**Core mechanism:** Predict on an original or weakly changed unlabeled input. Train the classifier to keep that answer on a strongly changed version. A **weak** image change is relatively gentle; a **strong** one is more challenging. Both should preserve the task's answer. For text, translating to another language and back can create a changed version. UDA emphasizes making these changes useful, not just adding arbitrary noise.
 
-**Inputs/outputs and typical data types:** Labeled and unlabeled images or documents, plus an augmentation mechanism. Outputs are task probabilities and a classifier. A text back-translation system can have its own training data and cost; those are not "free" merely because downstream labels are scarce.
+The framework also discusses rejecting low-confidence targets, sharpening probabilities toward stronger preferences, and **training-signal annealing**. The last option temporarily limits the influence of already-easy labeled examples early in training. State which options and weights each experiment uses.
 
-**Strengths and limitations:** Makes consistency meaningful over richer variations than small Gaussian noise. It combines with pretrained representations. However, a fluent paraphrase may change a label, and a large pretrained model already embodies substantial upstream data and compute. A twenty-label fine-tuning result is not a twenty-example-from-scratch learning result.
+**Inputs/outputs and typical data types:** Use labeled and unlabeled images or documents plus a way to make changed versions. The output is a classifier and task probabilities. A back-translation model has its own training data and cost. Those resources are not free just because the final task has few labels.
 
-**Computational complexity / scalability notes:** Training includes target-view inference and augmented-view learning, plus augmentation generation. For the text example, a dense Transformer layer costs $`O(T^2d+Td^2)`$ for sequence length $`T`$, when feed-forward width scales with hidden width $`d`$; attention alone is not the full layer cost. Back-translation may be performed offline but still counts toward resource use.
+**Strengths and limitations:** Rich changes can teach more useful stability than small random noise, and UDA can use pretrained features. But even a fluent rewrite can change a review's sentiment. A large pretrained model already reflects substantial earlier data and computing. Fine-tuning with twenty labels is not learning from scratch with twenty examples.
+
+**Computational complexity / scalability notes:** Training needs original-view predictions, changed-view learning, and the work of making the changes. For text, comparing every token position with every other can grow quickly with sequence length. Other Transformer calculations also matter. Back-translation done beforehand still counts as resource use.
+
+**Optional math:** A dense Transformer layer costs $`O(T^2d+Td^2)`$ for $`T`$ token positions and hidden width $`d`$, when its feed-forward width grows with $`d`$. Attention supplies the first part, not the full layer cost.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** On IMDb sentiment classification, Table 4 uses **20 labeled reviews**. The **BERT_FINETUNE** configuration is BERT-Large additionally pretrained on in-domain unlabeled text, then trained with UDA. Reviews and back-translated variants become token sequences; the consistency-trained classifier outputs positive/negative probabilities; the benchmark decision is the review's sentiment label. The paper reports **4.20% error with UDA versus 6.50% without UDA for that initialization**. It is not the result for randomly initialized Transformers or plain BERT-Large, and it does not establish that only twenty annotations were used across every development stage. Additional unlabeled-corpus counts are not inferred from the headline table. No deployed review-analysis service or business KPI is reported. [Table 4 and Appendix E.1](https://arxiv.org/html/1904.12848v6).
+**Evidence status: Research benchmark.** Table 4 tests IMDb review sentiment with **20 labeled reviews**. The **BERT_FINETUNE** model is BERT-Large additionally pretrained on unlabeled text from the same domain, then trained with UDA. Reviews and their back-translations become token sequences. The model predicts positive/negative probabilities and selects the review's sentiment.
 
-**Notable vendor implementations/libraries:** Google's [UDA research repository](https://github.com/google-research/uda) includes text and image implementations. A generic augmentation library alone does not implement its consistency, sampling, or model-selection protocol.
+For that initialization, the paper reports **4.20% error with UDA versus 6.50% without UDA**. This is not a randomly initialized Transformer result or a plain BERT-Large result. It also does not show that only twenty annotations were used across all development stages. No additional unlabeled-corpus count is inferred from the headline table. No deployed review-analysis service or business KPI is reported. [Table 4 and Appendix E.1](https://arxiv.org/html/1904.12848v6).
 
-**Architecture diagram description:** The worked text backbone is **BERT-Large**: `WordPiece and position embeddings -> 24 Transformer encoder layers, hidden width 1,024 and 16 attention heads -> pooled [CLS] representation -> two-class head`. The [BERT paper](https://arxiv.org/html/1810.04805v2) establishes the architecture; UDA's image experiments instead use their own CNN backbones.
+**Notable vendor implementations/libraries:** Google's [UDA research repository](https://github.com/google-research/uda) includes text and image code. A library that only changes inputs does not supply the full consistency, sampling, and model-selection procedure.
 
-**Activation functions used and why:** GELU supplies smooth gating in BERT feed-forward sublayers; softmax normalizes attention weights and class probabilities; the original tanh pooler bounds its transformed representation. LayerNorm and residual connections support optimization. These are backbone choices, not requirements of UDA.
+**Architecture diagram description:** The text example uses **BERT-Large**: `WordPiece and position embeddings -> 24 Transformer encoder layers, hidden width 1,024 and 16 attention heads -> pooled [CLS] representation -> two-class head`. WordPiece splits text into tokens; embeddings turn tokens and positions into vectors. Attention combines information across positions. The final classifier uses a summary from the special `[CLS]` token. The [BERT paper](https://arxiv.org/html/1810.04805v2) establishes this design. UDA's image experiments use separate CNN backbones.
 
-**Loss function(s):** Supervised cross-entropy plus weighted KL consistency from a stopped original-view distribution to the augmented-view prediction. The text setup reports unlabeled weight 1. Image-specific temperature and confidence settings should not be copied into the IMDb result without verification.
+**Activation functions used and why:** GELU smoothly controls values in BERT's feed-forward layers. Softmax turns attention scores and class scores into normalized weights or probabilities. The original tanh pooler bounds its transformed summary values. LayerNorm rescales features, and residual connections provide shortcut paths that help training. These are BERT choices, not UDA requirements.
 
-**Optimization algorithm(s):** The [text reference optimizer](https://github.com/google-research/uda/blob/master/text/bert/optimization.py) uses an Adam-family update with weight decay, linear warm-up, and linear decay. Appendix E.1 explores fine-tuning rates $`10^{-5},2\times10^{-5},5\times10^{-5}`$; this is a search range, not a claimed single setting for all datasets.
+**Loss function(s):** Add labeled cross-entropy to weighted KL agreement between a fixed original-view target and the changed-view prediction. The text setup reports unlabeled weight 1. Do not assume image-specific temperature or confidence settings also produced the IMDb result without checking.
 
-**Regularization techniques:** Back-translation, BERT dropout of 0.1 in the cited fine-tuning setup, and consistency. Input noising must be checked for sentiment-preserving behavior rather than assumed correct because it is linguistically plausible.
+**Optimization algorithm(s):** The [text reference optimizer](https://github.com/google-research/uda/blob/master/text/bert/optimization.py) uses an Adam-family update with weight decay, which shrinks weights. Its rate rises linearly at the start and then falls linearly. Appendix E.1 explores fine-tuning rates $`10^{-5},2\times10^{-5},5\times10^{-5}`$. These are candidate learning rates, not one claimed setting for every dataset.
 
-**Backpropagation considerations:** Teacher-view predictions are stopped targets; gradients pass through the augmented classifier. Discrete back-translation is not differentiated through as part of ordinary UDA training. Sequence truncation and tokenization must be consistent across views.
+**Regularization techniques:** Back-translation, consistency, and BERT dropout of 0.1 in the cited fine-tuning setup. Check that a changed review keeps its sentiment; plausible wording alone is not enough.
 
-**Parameter count / scaling behavior:** BERT-Large has approximately **340M parameters**, plus its small task head. UDA itself adds no mandatory trainable backbone parameters; its augmentation generator, if used, is a separate model and resource.
+**Backpropagation considerations:** Hold the original-view target fixed and send gradients through the changed-view classifier. Ordinary UDA does not differentiate through the discrete translation process. Keep tokenization and sequence-shortening rules consistent across views.
 
-**Training paradigm:** Self-supervised BERT pretraining, additional in-domain pretraining for BERT_FINETUNE, then semi-supervised task fine-tuning. The stages should not be collapsed into a single supervision label.
+**Parameter count / scaling behavior:** BERT-Large has approximately **340M parameters**, plus its small task head. UDA adds no required learned backbone parameters. A model that generates augmentations is a separate model and resource.
 
-**Hardware/parallelism considerations:** The paper's text experiments use a v3-32 Cloud TPU Pod and length-512 sequences. This reports the source setup, not a minimum hardware requirement for all UDA applications. Augmentation throughput and sequence memory can dominate practical cost.
+**Training paradigm:** First use self-supervised BERT pretraining. BERT_FINETUNE then adds in-domain pretraining, followed by semi-supervised task fine-tuning. These are different stages with different sources of training targets.
+
+**Hardware/parallelism considerations:** The text experiments use a v3-32 Cloud TPU Pod and length-512 sequences. This states the source hardware, not the minimum for every UDA task. Generating changed inputs and storing long sequences can dominate cost.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| Entropy minimization | Probabilistic models with meaningful low-density separation | Cheap confidence regularizer | Can amplify overconfidence and collapse | Entropy addition in the CIFAR-10 VAT ablation |
-| Pi Model | Images or other data with defensible stochastic perturbations | No historical cache or separate teacher weights | Two gradient-bearing views and correlated errors | CIFAR-10 with 4,000 labels |
-| Temporal ensembling | Persistently indexed finite datasets | Smooth historical targets with fewer fresh evaluations | Per-example cache and epoch-stale targets | SVHN with 500 labels |
-| Mean Teacher | Large or changing unlabeled pools | Step-level EMA targets without a dataset-sized cache | Teacher inherits student biases | SVHN with 250 labels |
-| Virtual adversarial training | Differentiable vectors, images, or embeddings | Finds locally sensitive directions without labels | Radius sensitivity and extra input-gradient work | CIFAR-10 with 4,000 labels |
-| UDA | Images and text with strong label-preserving augmentation | Effective consistency beyond weak noise | Augmentation errors and upstream-model costs | IMDb sentiment with BERT_FINETUNE and 20 labels |
+| Entropy minimization | Probability-based classifiers where gaps help separate classes | Adds confidence pressure cheaply | Can make wrong answers too confident or favor one class | Added entropy in the CIFAR-10 VAT comparison |
+| Pi Model | Images or other inputs with safe random changes | Needs no saved history or separate teacher weights | Trains through two views that may share a wrong answer | CIFAR-10 with 4,000 labels |
+| Temporal ensembling | A fixed dataset whose examples keep stable identities | Averages earlier answers with fewer fresh evaluations | Saves targets per example and refreshes only each epoch | SVHN with 500 labels |
+| Mean Teacher | Large or changing unlabeled pools | Refreshes teacher weights every step without per-example histories | Teacher can inherit the student's mistakes | SVHN with 250 labels |
+| Virtual adversarial training | Images or vectors with usable input gradients | Finds small challenging changes without labels | Sensitive to change size; requires extra gradient work | CIFAR-10 with 4,000 labels |
+| UDA | Images and text with strong changes that preserve answers | Learns stability under more than mild noise | Changes may alter labels; earlier models have their own costs | IMDb sentiment with BERT_FINETUNE and 20 labels |
 
 ## 2.5 Combined modern recipes
 
-These recipes combine several mechanisms rather than introducing a unique neural architecture. Their small-image examples commonly use **Wide ResNet-28-2 (WRN-28-2)**, approximately 1.5M parameters: a convolutional stem, three groups of four residual units, widening feature channels through roughly 32/64/128, global pooling, and a class head. The cited SSL implementations use preactivation normalization and leaky ReLU; that is a concrete implementation choice, not a definition of every Wide ResNet. See the [Google reference backbone](https://github.com/google-research/fixmatch/blob/master/libml/models.py) and [TorchSSL backbone](https://github.com/TorchSSL/TorchSSL/blob/main/models/nets/wrn.py).
+These methods combine training ideas rather than each inventing a new network. Their small-image examples often use **Wide ResNet-28-2 (WRN-28-2)**, with approximately 1.5M parameters. It starts with a convolution, then uses three groups of four residual units. A residual unit has a shortcut that adds earlier features to newly calculated ones. Feature widths grow through roughly 32/64/128 channels, followed by global pooling and a class head.
 
-Comparisons across the original papers are not a leaderboard under one controlled protocol. In particular, later TorchSSL tables reimplement earlier methods and use different checkpoint reporting. The worked examples identify the relevant comparison rather than attributing every numerical difference to a new threshold rule.
+The cited implementations normalize features before residual-layer operations and use leaky ReLU. These are choices in the reference code, not requirements of every Wide ResNet. See the [Google reference backbone](https://github.com/google-research/fixmatch/blob/master/libml/models.py) and [TorchSSL backbone](https://github.com/TorchSSL/TorchSSL/blob/main/models/nets/wrn.py).
+
+Do not read results from different papers as one controlled ranking. Later TorchSSL tables reimplement earlier methods and report checkpoints differently. Each example below identifies its actual comparison. A changed score cannot always be credited to a changed threshold rule.
 
 ### 2.5.1 MixMatch
 
+**In plain English:** Average several guesses for an unlabeled image, then train on blends of images and their target answers. This combines learning from guesses with learning to behave smoothly between examples.
+
 **Name:** MixMatch.
 
-**Category & sub-category:** Semi-supervised learning; combined label guessing, entropy reduction, and interpolation consistency.
+**Category & sub-category:** Semi-supervised learning; combining soft label guesses, stronger confidence, and training on mixed examples.
 
 **Originating paper/vendor/year:** David Berthelot and colleagues, [*MixMatch: A Holistic Approach to Semi-Supervised Learning*, NeurIPS 2019](https://arxiv.org/html/1905.02249v2).
 
-**Core mechanism:** Average predictions over several augmentations of an unlabeled image, sharpen the average into a lower-entropy soft target, and mix both labeled and unlabeled examples and their targets. Sharpening with temperature $`\tau_s`$ gives $`q_c\propto\bar p_c^{1/\tau_s}`$. MixUp-style interpolation forms $`x'=\lambda x_a+(1-\lambda)x_b`$ and the corresponding interpolated target. The objective asks the classifier to behave sensibly between examples as well as under augmentation. A guessed label remains a soft distribution rather than necessarily becoming an argmax class.
+**Core mechanism:** Make several changed views of an unlabeled image and average the model's predictions. **Sharpen** that average by giving its larger probabilities more emphasis. Keep it as a soft probability target, not necessarily a single chosen class. Then blend pairs of images and blend their targets by the same amount, a step called **MixUp**. Train on these mixed pairs as well as the effects of image changes.
 
-**Inputs/outputs and typical data types:** Labeled/unlabeled images and label-preserving augmentation. Output is one inductive classifier. Interpolating raw pixels is a modeling bias, not a literal assertion that a blended cat and truck image has an independently observed fractional label.
+**Optional math:** Sharpening uses $`q_c\propto\bar p_c^{1/\tau_s}`$. Here $`\bar p_c`$ is the average guessed probability for class $`c`$, $`\tau_s`$ is a temperature controlling sharpness, and $`q_c`$ is the new target, normalized so its entries sum to one. Mixing uses $`x'=\lambda x_a+(1-\lambda)x_b`$. Here $`x_a,x_b`$ are two inputs, $`x'`$ their blend, and $`\lambda`$ sets the share of each; targets are blended with the same share.
 
-**Strengths and limitations:** Integrates complementary regularizers and can use low-confidence examples through soft targets. It is more complex than plain pseudo-labeling, and errors can enter through guessing, sharpening, and interpolation simultaneously. Sharpening can make an incorrect target harder to correct; interpolation may be inappropriate in some discrete or structured domains.
+**Inputs/outputs and typical data types:** Use labeled and unlabeled images and changes that should preserve their labels. The output is a classifier for new inputs. A blended cat-and-truck picture has a blended training target by design; no person has independently observed a fractional class label for it.
 
-**Computational complexity / scalability notes:** Label guessing requires multiple unlabeled forward passes, followed by training on mixed examples. For a fixed augmentation count, the cost remains linear in examples and epochs up to a backbone-dependent multiplier. It has no mandatory dataset-sized prediction cache or graph.
+**Strengths and limitations:** Several controls work together, and soft targets let the method use less-confident examples. But it is more involved than plain pseudo-labeling. Errors can enter during guessing, sharpening, or mixing. Sharpening a wrong target can make it harder to correct. Mixing raw inputs may be unsuitable for some discrete data or tasks with strict structure.
+
+**Computational complexity / scalability notes:** Guessing labels needs several forward passes for each unlabeled image. Training then processes mixed examples. If the number of views stays fixed, work grows roughly in proportion to examples and epochs, with a network-dependent multiplier. No graph or dataset-sized prediction cache is required.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** On CIFAR-10, the paper exposes only **250 training labels** from the 50,000-image training pool. Augmented images produce averaged and sharpened class guesses; mixed image/target pairs train WRN-28-2; the resulting argmax supplies an object-category decision on the held-out test set. The paper reports **11.08% error with standard deviation 0.87 percentage points** for this setting. It reports median error over the last twenty checkpoints and uses a separate **5,000-example validation resource for hyperparameter selection**. Thus the training-label count is not the entire development-label budget. The technical fit versus plain pseudo-labeling is combining uncertainty-aware targets with interpolation regularization. No commercial image-recognition KPI is reported. [Implementation details and CIFAR-10 results](https://arxiv.org/html/1905.02249v2).
+**Evidence status: Research benchmark.** The CIFAR-10 experiment exposes **250 training labels** from the 50,000-image training pool. Changed images produce averaged, sharpened guesses. Mixed images and matching targets train WRN-28-2. The largest class score selects an object category on the held-out test set.
 
-**Notable vendor implementations/libraries:** Google's [MixMatch research code](https://github.com/google-research/mixmatch), including its [training implementation](https://github.com/google-research/mixmatch/blob/master/mixmatch.py). Its runtime flags should be recorded rather than assumed to match all published experiments.
+The paper reports **11.08% error with standard deviation 0.87 percentage points**. It reports median error over the last twenty checkpoints and uses a separate **5,000-example validation resource for hyperparameter selection**. Thus 250 is not the whole development-label budget. Compared with plain pseudo-labeling, the recipe keeps soft guesses and adds pressure for sensible behavior between examples. No commercial image-recognition KPI is reported. [Implementation details and CIFAR-10 results](https://arxiv.org/html/1905.02249v2).
 
-**Architecture diagram description:** The example is **WRN-28-2**: `augmented image views -> shared residual CNN -> averaged/sharpened targets; mixed images -> same CNN -> supervised and unlabeled losses`. Target construction adds operations, not a new feature-extractor architecture.
+**Notable vendor implementations/libraries:** Google's [MixMatch research code](https://github.com/google-research/mixmatch) includes its [training implementation](https://github.com/google-research/mixmatch/blob/master/mixmatch.py). Record runtime options rather than assuming their defaults match every published experiment.
 
-**Activation functions used and why:** The reference residual implementation uses leaky ReLU with slope 0.1 to retain negative-side gradients, batch normalization, and softmax to make probability averaging well-defined. Sharpening changes target probabilities; it is not a hidden-layer activation.
+**Architecture diagram description:** The example uses **WRN-28-2**: `augmented image views -> shared residual CNN -> averaged/sharpened targets; mixed images -> same CNN -> supervised and unlabeled losses`. Building targets adds calculations, not a new feature-extracting network.
 
-**Loss function(s):** Cross-entropy for the mixed examples originating in the labeled partition, plus squared probability error for the mixed unlabeled partition. Both use interpolated targets. The distinction between these two losses is a defining difference from recipes that use cross-entropy everywhere.
+**Activation functions used and why:** The reference residual network uses leaky ReLU with slope 0.1, preserving some gradient for negative values. Batch normalization helps control feature scales. Softmax gives probabilities suitable for averaging. Sharpening changes target probabilities, not hidden-layer activations.
 
-**Optimization algorithm(s):** The public implementation uses Adam with default learning rate 0.002. The paper describes a non-decaying learning-rate approach with EMA evaluation and a 16,000-step linear ramp of the unlabeled coefficient. This does not mean that every later reimplementation uses Adam.
+**Loss function(s):** Mixed examples that started in the labeled group use cross-entropy. Those that started in the unlabeled group use squared probability error. Both use mixed targets. This two-loss choice differs from methods that use cross-entropy for both groups.
 
-**Regularization techniques:** Augmentation, low-temperature sharpening, MixUp interpolation, weight shrinkage, and parameter EMA. Record the effective shrinkage update: the code multiplies its weight-decay flag by learning rate, so the flag alone is not a per-step fractional shrinkage.
+**Optimization algorithm(s):** The public code uses Adam with default learning rate 0.002. The paper describes a rate that does not decay, evaluation using averaged model weights, and a 16,000-step linear increase of the unlabeled-loss weight. Later reimplementations do not necessarily use Adam.
 
-**Backpropagation considerations:** Detach guessed targets before their use in the training loss; do not optimize the classifier by moving its own target toward an easier answer in the same computation. Mixing and minibatch interleaving must preserve target alignment and the intended normalization statistics.
+**Regularization techniques:** Image changes, low-temperature sharpening, MixUp, weight shrinkage, and an exponential moving average of weights. Record the actual shrinkage rule: the code multiplies its weight-decay option by the learning rate. The option alone is not the fraction removed from weights each step.
 
-**Parameter count / scaling behavior:** Approximately **1.5M parameters** for the cited WRN-28-2. An EMA copy adds training/evaluation state, not another learned architecture. Widening the backbone increases many convolutional parameter counts approximately quadratically in width.
+**Backpropagation considerations:** Hold guessed targets fixed when computing training gradients. Otherwise, the model could move its own target toward an easier answer in that same update. Keep images aligned with their targets during mixing and minibatch interleaving. Interleaving also affects the batch-normalization statistics.
 
-**Training paradigm:** Joint supervised and pseudo-target learning with two augmented predictions per unlabeled example in the standard reference setting; the paper commonly uses sharpening temperature 0.5.
+**Parameter count / scaling behavior:** The cited WRN-28-2 has approximately **1.5M parameters**. A weight-average copy adds stored state for training/evaluation, not a new learned design. Making layers twice as wide makes many convolutional weight counts about four times as large.
 
-**Hardware/parallelism considerations:** GPU batch processing is straightforward, but label guessing and mixed-batch learning increase image throughput requirements. Distributed shuffles must move labels with their corresponding images.
+**Training paradigm:** Learn from labels and guessed targets jointly. The standard reference setting makes two changed-view predictions per unlabeled example. The paper commonly uses sharpening temperature 0.5.
+
+**Hardware/parallelism considerations:** GPUs can process batches directly, but extra guesses and mixed-image training raise throughput needs. Shuffling data across devices must move targets with their images.
 
 ### 2.5.2 ReMixMatch
 
+**In plain English:** Use a gentle image change to make a target, then teach the model to keep that answer under several harder changes. Also adjust guesses when the model is using some classes too often.
+
 **Name:** ReMixMatch.
 
-**Category & sub-category:** Semi-supervised learning; distribution-aligned, augmentation-anchored combination recipe.
+**Category & sub-category:** Semi-supervised learning; combining class-frequency adjustment with gentle-to-strong image agreement.
 
 **Originating paper/vendor/year:** David Berthelot and colleagues, [*ReMixMatch: Semi-Supervised Learning with Distribution Alignment and Augmentation Anchoring*, ICLR 2020; arXiv submission 2019](https://arxiv.org/html/1911.09785v2).
 
-**Core mechanism:** Adjust an unlabeled prediction by a ratio of estimated target class frequency to running model-prediction frequency, then renormalize and sharpen it. This **distribution alignment** counters an aggregate class bias. Use a weakly augmented prediction as an anchor for several strongly augmented views rather than averaging potentially destructive strong views into the target. The recipe also retains interpolation and adds a rotation-prediction objective. Its online CTAugment policy adapts augmentation choices during training.
+**Core mechanism:** Track how often the model predicts each class. Adjust a guess using the ratio of expected class frequency to that running predicted frequency, then rescale probabilities to sum to one and sharpen them. This is **distribution alignment**. It counters class bias across many predictions, but depends on having useful expected frequencies.
 
-**Inputs/outputs and typical data types:** Labeled and unlabeled images, an estimated target class marginal, and weak/strong augmentation mechanisms. Outputs are a task classifier and auxiliary training state; an optional rotation head is not needed to make ordinary class predictions.
+A weakly changed image provides the target, or **anchor**, for several strongly changed views. This avoids averaging potentially damaging strong views into the target. The recipe also keeps MixUp and adds a task that predicts image rotation. Its CTAugment procedure adapts image-change choices during training.
 
-**Strengths and limitations:** Improves target quality and exploits stronger perturbations. Distribution alignment is useful only when its reference marginal is appropriate. A balanced seed set does not prove a balanced deployment population, and out-of-class images can be forced into known categories. More components create additional interactions to validate.
+**Inputs/outputs and typical data types:** Use labeled and unlabeled images, estimated overall class frequencies, and weak/strong image changes. Overall frequencies are also called the **class marginal**. The output is a classifier plus extra training state. An auxiliary rotation head, when used, is not needed for ordinary class predictions.
 
-**Computational complexity / scalability notes:** Multiple strong views substantially increase backbone evaluations; the paper uses eight augmentations in its standard configuration. Running class statistics cost $`O(C)`$ storage, while mixed examples and the auxiliary rotation computation add batch-level work. This is not cost-equivalent to a one-strong-view recipe.
+**Strengths and limitations:** Better targets can make stronger image changes useful. But alignment helps only if its expected class frequencies fit the task. Equal class counts in a small labeled seed do not prove an equally balanced real population. Images from unknown classes can be forced into known ones. More components also mean more interacting choices to validate.
+
+**Computational complexity / scalability notes:** Several strong views increase network work; the paper's standard configuration uses eight augmentations. Mixing examples and predicting rotations add more work. Tracking class frequencies is relatively small. This is not as cheap as a recipe with one strong view.
+
+**Optional math:** Storing running frequencies takes $`O(C)`$ space for $`C`$ classes, apart from the networks and batch data.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** The CIFAR-10 study uses **250 labeled training images**. A weak view supplies a class guess, running class statistics adjust it, strong views train against the adjusted target, and the learned classifier assigns a natural-image category. Table 1 reports **6.27% error with standard deviation 0.34 percentage points**, compared with **11.08% and 0.87** for the MixMatch comparison reported in that table. The technical rationale is that an anchored weak prediction may be more trustworthy than a guess averaged over difficult augmentations. The paper cautions that some externally reported comparison methods use different implementations, so not every table row supports a controlled component-level claim. No production computer-vision or business KPI is reported. [Original Table 1 and comparison notes](https://arxiv.org/html/1911.09785v2).
+**Evidence status: Research benchmark.** The CIFAR-10 study uses **250 labeled training images**. A weak view supplies a guess. Running class statistics adjust it, and strong views learn against the adjusted target. The final classifier chooses an image category.
 
-**Notable vendor implementations/libraries:** Google's [ReMixMatch repository](https://github.com/google-research/remixmatch). CTAugment is part of that research recipe; its presence is not evidence that a vendor product uses the trained classifier.
+Table 1 reports **6.27% error with standard deviation 0.34 percentage points**, compared with **11.08% and 0.87** for the MixMatch row in that table. A gentle-view target may be more dependable than an average across difficult image changes. However, the paper warns that some externally reported methods use different implementations. Not every row isolates the effect of one component. No production computer-vision or business KPI is reported. [Original Table 1 and comparison notes](https://arxiv.org/html/1911.09785v2).
 
-**Architecture diagram description:** The reference backbone is **WRN-28-2** with approximately 1.5M parameters. `Weak image -> shared CNN -> distribution-aligned target; several strong images and mixed images -> shared CNN -> class losses`; a small rotation head branches from the representation.
+**Notable vendor implementations/libraries:** Google's [ReMixMatch repository](https://github.com/google-research/remixmatch) includes this research recipe. Its use of CTAugment does not establish that a vendor product uses the trained classifier.
 
-**Activation functions used and why:** Leaky ReLU retains negative-side gradients in the reference residual CNN; batch normalization conditions its features. Softmax supplies normalized class and rotation probabilities. Temperature sharpening operates on targets rather than replacing the network's hidden nonlinearity.
+**Architecture diagram description:** The reference uses **WRN-28-2**, with approximately 1.5M parameters. `Weak image -> shared CNN -> distribution-aligned target; several strong images and mixed images -> shared CNN -> class losses`; a small rotation head branches from the learned features. All image paths share the main CNN.
 
-**Loss function(s):** The recipe uses cross-entropy on mixed labeled and unlabeled targets, additional unmixed strong-view consistency, and an auxiliary rotation-classification cross-entropy. In particular, it changes MixMatch's unlabeled squared-error choice. Loss coefficients and the distribution-alignment normalization are part of a faithful reproduction.
+**Activation functions used and why:** Leaky ReLU preserves negative-side gradients in the residual network, and batch normalization controls feature values. Softmax produces class and rotation probabilities. Temperature sharpening acts on targets, not in place of a hidden-layer activation.
 
-**Optimization algorithm(s):** The paper uses Adam with fixed learning rate 0.002 and evaluates an EMA of parameters with decay 0.999. Its reported coefficient choices belong to this particular implementation; a weight-decay flag should not be interpreted without its update convention.
+**Loss function(s):** Use cross-entropy for mixed labeled and unlabeled targets, extra agreement on unmixed strong views, and rotation-classification cross-entropy. Unlike MixMatch, the unlabeled loss is not squared probability error. Reproduction requires the stated loss weights and class-alignment normalization.
 
-**Regularization techniques:** Distribution alignment, weak-to-strong anchoring, CTAugment, MixUp, target sharpening, weight decay, and rotation prediction. The reference sharpening temperature is 0.5 and its Beta interpolation parameter is 0.75.
+**Optimization algorithm(s):** The paper uses Adam with fixed learning rate 0.002. Evaluation uses averaged weights with decay 0.999. The reported coefficients belong to this implementation. As with MixMatch, a weight-decay option is meaningful only alongside its update rule.
 
-**Backpropagation considerations:** Guessed targets and running marginal estimates are treated as target-building state. Gradients train the classifier and auxiliary head, not an argmax policy through discrete augmentation choices. A mistaken alignment ratio can distort all examples of a class.
+**Regularization techniques:** Class-frequency alignment, weak-to-strong targets, CTAugment, MixUp, sharpening, weight decay, and rotation prediction. The reference sharpening temperature is 0.5. Its Beta interpolation parameter is 0.75; this parameter controls the distribution used to draw mixing amounts.
 
-**Parameter count / scaling behavior:** The principal network remains approximately **1.5M parameters**, plus a small auxiliary head and EMA state. Increased cost chiefly comes from extra views, not from a much larger classifier.
+**Backpropagation considerations:** Guessed targets and running class frequencies are stored information used to build targets. Gradients update the classifier and rotation head, not the discrete image-change choices. A wrong alignment ratio can distort targets for every example of a class.
 
-**Training paradigm:** Joint semi-supervised classification with a self-supervised rotation auxiliary. This auxiliary training signal does not make the whole recipe unsupervised.
+**Parameter count / scaling behavior:** The main network still has approximately **1.5M parameters**, plus a small auxiliary head and averaged-weight state. Most extra work comes from additional views, not a much larger classifier.
 
-**Hardware/parallelism considerations:** Multiple strong views increase activation memory and augmentation throughput. Class-marginal estimates should represent the intended global data distribution when batches are spread across devices.
+**Training paradigm:** Train semi-supervised classification together with a self-supervised rotation task. The rotation target comes from the applied change. Its presence does not make the whole recipe unsupervised.
+
+**Hardware/parallelism considerations:** Multiple views need more stored activations and faster image processing. With several devices, running class frequencies should reflect the intended global data mix, not an accidental local mix.
 
 ### 2.5.3 FixMatch
 
+**In plain English:** Accept a guess from a gently changed image only when confidence is high enough. Then use that class as the answer for a strongly changed version of the same image.
+
 **Name:** FixMatch.
 
-**Category & sub-category:** Semi-supervised learning; confidence-filtered weak-to-strong pseudo-label consistency.
+**Category & sub-category:** Semi-supervised learning; confidence-filtered guesses that link weak and strong image changes.
 
-**Originating paper/vendor/year:** Kihyuk Sohn and colleagues, [*FixMatch: Simplifying Semi-Supervised Learning with Consistency and Confidence*, NeurIPS 2020](https://arxiv.org/pdf/2001.07685v2). The cited full-paper snapshot is **arXiv v2, dated 2020-11-25**, not a claim about a current model release.
+**Originating paper/vendor/year:** Kihyuk Sohn and colleagues, [*FixMatch: Simplifying Semi-Supervised Learning with Consistency and Confidence*, NeurIPS 2020](https://arxiv.org/pdf/2001.07685v2). The cited full paper is **arXiv v2, dated 2020-11-25**, not a claim about a current model release.
 
-**Core mechanism:** Predict on a weakly augmented unlabeled image. If the largest class probability exceeds a threshold, use its argmax as a hard target for a strongly augmented version of the same image. Low-confidence examples contribute zero unlabeled loss at that step. Unlike MixMatch, the basic recipe does not require soft-target averaging and MixUp; unlike Mean Teacher, it does not require a separately averaged teacher to generate targets.
+**Core mechanism:** Predict on a weakly changed unlabeled image. If its largest probability meets the threshold, choose that class as a hard target for a strongly changed version. A low-confidence example contributes no unlabeled loss at that step. Unlike MixMatch, the basic recipe needs neither averaging of soft targets nor MixUp. Unlike Mean Teacher, it needs no separately averaged teacher to make targets.
 
-**Inputs/outputs and typical data types:** Labeled images, an unlabeled image pool, weak and strong augmentation, and a confidence threshold. Output is a conventional inductive classifier. The target classes and augmentation semantics must match the unlabeled population.
+**Inputs/outputs and typical data types:** Use labeled images, unlabeled images, weak and strong image changes, and a confidence threshold. The result is a classifier for new images. The unlabeled pool must fit the target classes, and the changes must keep their meaning for the task.
 
-**Strengths and limitations:** Compact, effective, and comparatively easy to ablate. It can initially use very few unlabeled examples and then admit more as confidence grows. A fixed threshold can exclude hard classes, include confidently wrong OOD images, or make performance depend heavily on the choice of a few labeled seeds.
+**Strengths and limitations:** The rule is compact and easy to test by removing or changing a component. It may accept few unlabeled examples early and more as confidence grows. But a fixed cutoff can ignore difficult classes or accept confidently wrong out-of-distribution images. Results may also depend strongly on which few labeled images start training.
 
-**Computational complexity / scalability notes:** With labeled batch size $`B`$ and unlabeled ratio $`\mu`$, each step processes $`B`$ labeled views and approximately $`2\mu B`$ weak/strong unlabeled views. Target confidence computation is cheap relative to the CNN, but the extra image processing is not free.
+**Computational complexity / scalability notes:** Each step processes the labeled batch and two views per unlabeled image. Larger unlabeled batches mean more image work even though checking a threshold is cheap.
+
+**Optional math:** With labeled batch size $`B`$ and unlabeled-to-labeled ratio $`\mu`$, the step uses $`B`$ labeled views and about $`2\mu B`$ unlabeled views.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** On CIFAR-10 with **250 labels**, Table 2 of the original paper reports **5.07% error with standard deviation 0.65 percentage points for FixMatch (RA)** over five folds, equivalent to **94.93% accuracy**. This is the RandAugment variant; the separately reported CTAugment variant has a different standard deviation. A weakly transformed image produces a candidate category; only a sufficiently confident guess supervises its strongly transformed counterpart; a trained WRN-28-2 supplies the final object-category decision. This fits a setting where augmentations are reasonably label-preserving and a small labeled seed can initialize useful predictions. The number is a research benchmark result, not a production success rate or a controlled comparison with later TorchSSL reproductions. No business KPI is reported. [Full paper v2, Table 2 and Section 4.1](https://arxiv.org/pdf/2001.07685v2).
+**Evidence status: Research benchmark.** On CIFAR-10 with **250 labels**, original-paper Table 2 reports **5.07% error with standard deviation 0.65 percentage points for FixMatch (RA)** over five folds. This equals **94.93% accuracy**. RA means the RandAugment variant. The separately reported CTAugment variant has a different standard deviation.
 
-**Notable vendor implementations/libraries:** Google's [FixMatch repository](https://github.com/google-research/fixmatch), including the [training recipe](https://github.com/google-research/fixmatch/blob/master/fixmatch.py). Framework ports can change normalization, augmentation, and checkpoint averaging.
+A weak image change produces a candidate class. Only a confident enough guess teaches its strongly changed counterpart. A trained WRN-28-2 then chooses the object category. This suits images whose changes preserve labels and whose small labeled seed can start useful predictions. The number is not a production success rate or a controlled comparison with later TorchSSL versions. No business KPI is reported. [Full paper v2, Table 2 and Section 4.1](https://arxiv.org/pdf/2001.07685v2).
 
-**Architecture diagram description:** The example uses **WRN-28-2**. `Weak unlabeled view -> CNN -> detached argmax and confidence mask; strong view -> same CNN -> masked cross-entropy`. A separate labeled branch supplies supervised learning.
+**Notable vendor implementations/libraries:** Google's [FixMatch repository](https://github.com/google-research/fixmatch) includes the [training recipe](https://github.com/google-research/fixmatch/blob/master/fixmatch.py). Ports to other frameworks can change normalization, image changes, and checkpoint averaging.
 
-**Activation functions used and why:** Leaky ReLU with slope 0.1 retains negative-side gradients in the cited SSL residual implementation; batch normalization conditions features, and softmax supplies class probabilities for confidence filtering. A hard argmax is a target-selection operation, not a differentiable hidden activation.
+**Architecture diagram description:** The example uses **WRN-28-2**. `Weak unlabeled view -> CNN -> detached argmax and confidence mask; strong view -> same CNN -> masked cross-entropy`. Argmax selects the highest-scoring class; "detached" means it is fixed during the update. A separate labeled branch supplies ordinary supervised learning.
 
-**Loss function(s):** Labeled cross-entropy plus
+**Activation functions used and why:** The cited residual implementation uses leaky ReLU with slope 0.1, batch normalization, and softmax. These keep negative-side gradients, control feature values, and supply class probabilities for the cutoff. Choosing one class by argmax builds a target; it is not a differentiable hidden activation.
+
+**Loss function(s):** Add labeled cross-entropy to cross-entropy on accepted strong-view pseudo-labels. Average the unlabeled term over the **whole unlabeled batch**, not just accepted examples. Otherwise, especially early in training, the effective unlabeled weight changes.
+
+**Optional math:** The unlabeled term is:
 
 $$
 \frac{\lambda_u}{\mu B}\sum_b
@@ -685,146 +837,184 @@ $$
 \operatorname{CE}(\arg\max q_b,p_\theta(\cdot\mid a_s(u_b))).
 $$
 
-The denominator is the whole unlabeled batch, not merely the accepted subset. Changing it changes the effective early-training weight.
+Here $`B`$ is labeled batch size, $`\mu B`$ is unlabeled batch size, and $`b`$ indexes that batch. $`u_b`$ is an unlabeled image, $`q_b`$ its weak-view probabilities, and $`a_s`$ the strong image change. $`p_\theta`$ is the classifier. $`\tau`$ is the cutoff, $`\mathbf1`$ is one when the cutoff is met and zero otherwise, and $`\lambda_u`$ weights the loss. $`\operatorname{CE}`$ is cross-entropy; $`\arg\max`$ chooses the target class.
 
-**Optimization algorithm(s):** The reference uses SGD with Nesterov momentum 0.9, initial learning rate 0.03, and $`\eta_s=\eta_0\cos(7\pi s/(16S))`$ over the configured training budget $`S`$. The standard small-image configuration runs $`2^{20}`$ updates.
+**Optimization algorithm(s):** The reference uses SGD with Nesterov momentum 0.9, a momentum rule with a look-ahead adjustment. The initial learning rate is 0.03 and follows a cosine curve. The standard small-image run uses $`2^{20}`$ updates.
 
-**Regularization techniques:** Weak augmentation, strong RandAugment or CTAugment-based policies as separately configured, weight decay, and confidence masking. Typical reference values are $`\tau=0.95`$, $`\mu=7`$, and unlabeled weight 1. They are settings, not universally optimal constants.
+**Optional math:** The rate at update $`s`$ is $`\eta_s=\eta_0\cos(7\pi s/(16S))`$. Here $`\eta_0`$ is the initial rate, $`S`$ the configured total update budget, and $`\pi`$ the circle constant. This states the exact curve, not a generic "cosine schedule."
 
-**Backpropagation considerations:** Stop gradients through pseudo-labels and their confidence mask. Maintain correspondence between weak and strong views. Normalization statistics can couple examples, so changing batch interleaving may change results even with the same written loss.
+**Regularization techniques:** Weak changes, strong RandAugment or separately configured CTAugment policies, weight decay, and confidence filtering. Typical reference settings are threshold 0.95, unlabeled-to-labeled batch ratio 7, and unlabeled weight 1. These are choices, not universally best constants.
 
-**Parameter count / scaling behavior:** Approximately **1.5M learned parameters** in WRN-28-2. The threshold adds no learned parameters; an optional EMA for evaluation adds state but is not a Mean Teacher target generator.
+**Backpropagation considerations:** Hold pseudo-labels and accept/reject decisions fixed for gradients. Keep weak and strong views paired. Batch normalization links examples through shared statistics, so changing batch interleaving can change results even if the written loss stays the same.
 
-**Training paradigm:** Joint supervised and online pseudo-labeled training. No separate generative model, graph solve, or mandatory pretraining is required.
+**Parameter count / scaling behavior:** WRN-28-2 has approximately **1.5M learned parameters**. A threshold adds none. Optional model-weight averaging for evaluation adds state, but does not turn it into a Mean Teacher target generator.
 
-**Hardware/parallelism considerations:** GPU/TPU data parallelism is natural. Strong-augmentation throughput, the unlabeled batch ratio, and normalization synchronization are practical bottlenecks; changing GPU count can change effective training if those are not controlled.
+**Training paradigm:** Train jointly on true labels and pseudo-labels made during training. No separate generator, graph solver, or pretraining stage is required.
+
+**Hardware/parallelism considerations:** Training batches can be split across GPUs or TPUs. Strong-image processing, the unlabeled ratio, and synchronized normalization can limit speed. Changing device count can change training unless those details are controlled.
 
 ### 2.5.4 FlexMatch
 
-**Name:** FlexMatch, applying Curriculum Pseudo Labeling (CPL) to FixMatch.
+**In plain English:** Give each class its own cutoff for accepting guessed labels. Lower the cutoff for classes the model appears to be learning more slowly, so they are not left out.
 
-**Category & sub-category:** Semi-supervised learning; class-adaptive confidence thresholds.
+**Name:** FlexMatch, which adds Curriculum Pseudo Labeling (CPL) to FixMatch.
+
+**Category & sub-category:** Semi-supervised learning; adapting confidence cutoffs separately for each class.
 
 **Originating paper/vendor/year:** Bowen Zhang and colleagues, [*FlexMatch: Boosting Semi-Supervised Learning with Curriculum Pseudo Labeling*, NeurIPS 2021](https://arxiv.org/html/2110.08263v3).
 
-**Core mechanism:** Estimate a class's learning progress from the number of unlabeled examples confidently assigned to it above a base threshold. Normalize these counts to obtain relative progress $`\beta_t(c)`$, then lower the admission threshold for classes with lower estimated progress. CPL adds threshold warm-up and can apply a nonlinear mapping to progress. The estimate is not measured per-class accuracy; interpreting it that way requires assumptions about class balance and confidence quality.
+**Core mechanism:** Count how many unlabeled examples are confidently assigned to each class above a base cutoff. Compare these counts to estimate relative learning progress. Lower the admission cutoff for classes with lower estimated progress. CPL also includes a threshold warm-up and can reshape the progress-to-threshold relationship with a nonlinear rule. Crucially, the count is **not measured class accuracy**. Using it as progress depends on assumptions about class balance and confidence.
 
-**Inputs/outputs and typical data types:** FixMatch-style labeled/unlabeled images, class statistics, and persistent state recording sufficiently confident sample assignments. Output remains a normal classifier; class thresholds and selection state are training auxiliaries.
+**Optional math:** The paper calls normalized progress for class $`c`$ at step $`t`$ $`\beta_t(c)`$. It uses this estimate to set a class-specific admission threshold $`\tau_t(c)`$. The admission threshold and the base threshold used to count progress are distinct.
 
-**Strengths and limitations:** Admits useful samples from classes that a single fixed threshold might neglect. The source does not need repeated validation-set inference to estimate progress. However, few confident predictions can mean rarity, ambiguity, distribution shift, or poor learning; counts do not distinguish these explanations. The original experiments do not show uniform improvement on every dataset.
+**Inputs/outputs and typical data types:** Use FixMatch-style labeled and unlabeled images, class counts, and a saved record of sufficiently confident assignments for individual examples. The output remains a normal classifier. Thresholds and assignment records are only needed during training.
 
-**Computational complexity / scalability notes:** Reuses predictions already needed for weak-to-strong training, without another backbone forward or backward pass. Cached per-example assignments require approximately $`O(n_u)`$ auxiliary storage, plus class counts. Efficient updates avoid rescoring the entire unlabeled pool at each step.
+**Strengths and limitations:** Class-specific cutoffs can admit useful examples that one fixed cutoff misses. Estimating progress does not require repeatedly predicting on a validation set. But few confident guesses could mean a rare class, ambiguous images, changed data, or poor learning. Counts cannot tell these causes apart. The original experiments do not improve every dataset uniformly.
+
+**Computational complexity / scalability notes:** The method reuses weak-view predictions, so it needs no extra backbone forward or backward pass. It does need per-example assignment storage and class counts. Updating those records efficiently avoids rescoring the entire unlabeled pool at every step.
+
+**Optional math:** With $`n_u`$ unlabeled examples, saved assignments take about $`O(n_u)`$ extra space, plus class-count storage.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** In the paper's CIFAR-10 experiment with **40 labels, four per class**, WRN-28-2 predicts weak-view classes, CPL lowers thresholds for underrepresented confident assignments, and accepted labels train strong views. The final decision is an object category. Table 1 reports **4.97% error with standard deviation 0.06 percentage points**, versus **7.47% and 0.28** for the same study's FixMatch implementation. These are **best-checkpoint results over three runs**; the paper separately supplies last-checkpoint-window statistics. They are not directly interchangeable with FixMatch's original-paper score or a deployment estimate selected without test feedback. The technical fit is uneven class-learning progress under scarce labels; no business KPI is reported. [Methods, evaluation rule, and Table 1](https://arxiv.org/html/2110.08263v3).
+**Evidence status: Research benchmark.** The CIFAR-10 experiment uses **40 labels, four per class**. WRN-28-2 predicts weak-view classes. CPL lowers cutoffs for classes with fewer confident assignments, and accepted targets train strong views. The final classifier chooses an object category.
 
-**Notable vendor implementations/libraries:** The authors' [TorchSSL framework](https://github.com/TorchSSL/TorchSSL) supplies the comparison setting. Its unified implementations are research baselines, not proof of a vendor's production method selection.
+Table 1 reports **4.97% error with standard deviation 0.06 percentage points**, versus **7.47% and 0.28** for the same study's FixMatch implementation. These are **best-checkpoint results over three runs**. The paper separately gives statistics for a window of last checkpoints. Do not treat these as the original FixMatch score or as future-use estimates selected without test feedback. The method fits uneven learning across classes when labels are scarce. No business KPI is reported. [Methods, evaluation rule, and Table 1](https://arxiv.org/html/2110.08263v3).
 
-**Architecture diagram description:** The cited CIFAR-10 backbone is **WRN-28-2**, with the same weak/strong/labeled branches as FixMatch. `Weak-view probabilities -> cached confidence counts -> class threshold -> strong-view loss mask` is the additional control path.
+**Notable vendor implementations/libraries:** The authors' [TorchSSL framework](https://github.com/TorchSSL/TorchSSL) supplies the comparison implementations. They are research baselines, not evidence of a vendor choosing this method for production.
 
-**Activation functions used and why:** TorchSSL's reference WRN uses leaky ReLU with slope 0.1 for nonzero negative-side gradients, batch normalization, and softmax for the probabilities used by class-progress estimation. Threshold adaptation changes example selection, not the residual units' activations.
+**Architecture diagram description:** The CIFAR-10 example uses **WRN-28-2**, with FixMatch's weak, strong, and labeled branches. Its extra control path is `Weak-view probabilities -> cached confidence counts -> class threshold -> strong-view loss mask`. The mask decides which losses count, without adding neural layers.
 
-**Loss function(s):** Supervised cross-entropy plus masked hard pseudo-label cross-entropy. Replace the fixed threshold in FixMatch with $`\tau_t(c)`$, based on normalized progress; the threshold used for admission is distinct from the base threshold used to estimate progress.
+**Activation functions used and why:** TorchSSL's reference WRN uses leaky ReLU with slope 0.1, batch normalization, and softmax. They preserve negative-side gradients, control feature values, and give probabilities for counting progress. Changing a cutoff affects example selection, not activations within the residual units.
 
-**Optimization algorithm(s):** The source uses SGD with momentum 0.9, initial learning rate 0.03, the cosine schedule $`\eta_0\cos(7\pi s/(16S))`$, and $`S=2^{20}`$ updates. It evaluates an EMA model with decay 0.999. These are the comparison's backbone-training settings, not learned curriculum parameters.
+**Loss function(s):** Add supervised cross-entropy to masked cross-entropy on hard pseudo-labels. Replace FixMatch's single cutoff with the class-specific admission threshold based on progress. Do not confuse that lower admission cutoff with the base cutoff used to estimate progress.
 
-**Regularization techniques:** RandAugment, weight decay, weak-to-strong consistency, threshold warm-up, and class-dependent selection. The usual base threshold is 0.95. Thresholds need not increase monotonically if assignments change.
+**Optimization algorithm(s):** The source uses SGD with momentum 0.9 and initial learning rate 0.03. It runs $`2^{20}`$ updates with the stated cosine schedule. Evaluation uses averaged model weights with decay 0.999. These settings train the backbone; they are not learned curriculum parameters.
 
-**Backpropagation considerations:** Count updates and admission decisions are not differentiated. Gradients pass through the classifier's selected losses. Confusing the confident-assignment counter with all current pseudo-labels changes the curriculum.
+**Optional math:** The learning rate is $`\eta_0\cos(7\pi s/(16S))`$. Here $`\eta_0`$ is the initial rate, $`s`$ the current step, $`S=2^{20}`$ the update budget, and $`\pi`$ the circle constant.
 
-**Parameter count / scaling behavior:** Approximately **1.5M learned parameters** for WRN-28-2; CPL adds no learned layers. Its auxiliary memory is not identical to FreeMatch's compact running class statistics.
+**Regularization techniques:** RandAugment, weight decay, weak-to-strong agreement, threshold warm-up, and per-class selection. The usual base cutoff is 0.95. Cutoffs need not rise steadily; changing assignments can make them fall too.
 
-**Training paradigm:** Online semi-supervised learning with a confidence-based curriculum, rather than a separate curriculum trained using held-out class accuracies.
+**Backpropagation considerations:** Do not differentiate the counts or admission choices. Gradients update the classifier through selected losses. Counting all current pseudo-labels instead of the saved sufficiently confident assignments changes the curriculum.
 
-**Hardware/parallelism considerations:** Similar accelerator work to FixMatch, plus bookkeeping. Distributed implementations must keep sample identities and class statistics consistent; an independently evolving curriculum on each worker is a different procedure.
+**Parameter count / scaling behavior:** WRN-28-2 has approximately **1.5M learned parameters**; CPL adds no learned layers. Its per-example storage differs from FreeMatch's smaller, class-level running statistics.
+
+**Training paradigm:** Learn from labels and online guesses with a confidence-based curriculum. It is not a separate curriculum trained from held-out class accuracies.
+
+**Hardware/parallelism considerations:** Accelerator work is similar to FixMatch, with extra bookkeeping. Keep example identities and class statistics consistent across devices. Letting each worker develop an independent curriculum gives a different procedure.
 
 ### 2.5.5 FreeMatch
 
+**In plain English:** Let confidence cutoffs change as the model learns, both overall and by class. Also discourage the model from using only a narrow set of classes across its predictions.
+
 **Name:** FreeMatch.
 
-**Category & sub-category:** Semi-supervised learning; self-adaptive global/local thresholds and marginal-diversity regularization.
+**Category & sub-category:** Semi-supervised learning; adapting overall and per-class cutoffs while encouraging varied class use.
 
 **Originating paper/vendor/year:** Yidong Wang and colleagues, [*FreeMatch: Self-adaptive Thresholding for Semi-supervised Learning*, ICLR 2023; arXiv submission 2022](https://arxiv.org/html/2205.07246v3).
 
-**Core mechanism:** Estimate global model confidence by an EMA of the largest predicted probability in each unlabeled example. Separately average each class's predicted probability. The class threshold is
+**Core mechanism:** Keep an exponential moving average of the highest predicted probabilities on unlabeled examples. It weights recent predictions more and estimates overall confidence. Separately average each class's predicted probability. Use the overall value as a starting cutoff, then lower it for classes receiving smaller average probabilities. These statistics start with equal-class values and change during training.
+
+An added **self-adaptive fairness** term encourages a spread of class use across the predictions. It uses both probability averages and histograms, or counts, of chosen classes. This is a batch-level diversity rule. It does not assert that every real population has equal class frequencies.
+
+**Optional math:** For class $`c`$ at step $`t`$, the cutoff is:
 
 $$
 \tau_t(c)=\tau_t^{\rm global}
 \frac{\bar p_t(c)}{\max_j\bar p_t(j)}.
 $$
 
-Both statistics start from uniform-class values and evolve during training. A self-adaptive fairness term encourages diversity in aggregate predictions using probability and hard-label histograms. It is not the same as asserting that every deployment population has a uniform class prior.
+Here $`\tau_t^{\rm global}`$ is the running overall-confidence cutoff, $`\bar p_t(c)`$ the running probability average for class $`c`$, and $`j`$ ranges over classes. The denominator is the largest such class average.
 
-**Inputs/outputs and typical data types:** Labeled/unlabeled images, weak and strong views, and running confidence, probability, and class-histogram statistics. Outputs are a classifier and adaptive thresholds used during training.
+**Inputs/outputs and typical data types:** Use labeled and unlabeled images, weak and strong views, and running confidence, probability, and chosen-class statistics. Training produces a classifier and changing cutoffs used to accept pseudo-labels.
 
-**Strengths and limitations:** Removes the need to fix one admission-confidence value across the entire training trajectory and can help at extremely low label counts. It does not remove all hyperparameters: EMA rates, objective weights, augmentations, and optimizer settings remain. Biased confidence, missing classes, and OOD inputs can corrupt both the thresholds and the fairness statistics. "Class fairness" here is not a guarantee of demographic fairness.
+**Strengths and limitations:** There is no need to fix one admission confidence for the entire run. This can help with extremely few labels. But "FreeMatch" does not mean free of settings: averaging rates, loss weights, image changes, and optimizer settings remain. Biased confidence, missing classes, and out-of-distribution images can spoil both the cutoffs and the fairness statistics. **Class fairness here does not guarantee demographic fairness.**
 
-**Computational complexity / scalability notes:** Backbone work is comparable to weak/strong-view pseudo-labeling. Running statistics require $`O(C)`$ state, plus ordinary batch probabilities, rather than a historical target for every image. Computing and communicating class marginals is generally small compared with CNN training.
+**Computational complexity / scalability notes:** Network work is similar to other weak/strong-view pseudo-labeling. Extra statistics grow with class count, not with a saved history for every image. Computing and sharing these averages is generally small beside CNN training.
+
+**Optional math:** Running statistics take $`O(C)`$ space for $`C`$ classes, plus ordinary batch probabilities.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** The paper studies CIFAR-10 with **ten labels, one per class**. Weak-view predictions determine an evolving confidence threshold and class corrections; accepted strong-view predictions train the classifier, while the fairness term discourages degenerate aggregate class use; inference assigns one object category. Table 1 reports **8.07% error with standard deviation 4.24 percentage points**, compared with **13.85% and 12.04** for its FlexMatch comparison. The large variability matters. These results use three random seeds and the paper's **best-error-over-checkpoints reporting rule**, not a test-locked deployment protocol. The technical fit is an initially unreliable fixed confidence level; the result is not evidence that one label per class reliably suffices in a new domain. No business KPI is reported. [Setup and Table 1](https://arxiv.org/html/2205.07246v3).
+**Evidence status: Research benchmark.** The CIFAR-10 experiment uses **ten labels, one per class**. Weak-view predictions update overall and class-specific cutoffs. Accepted targets train strong views, while the fairness term discourages using too few classes across predictions. The final model chooses an object category.
 
-**Notable vendor implementations/libraries:** The paper links the [TorchSSL ecosystem](https://github.com/TorchSSL/TorchSSL); [Microsoft's Semi-supervised-learning/SemiLearn repository](https://github.com/microsoft/Semi-supervised-learning) includes modern recipe implementations. Repository ownership does not identify a deployed product using the method.
+Table 1 reports **8.07% error with standard deviation 4.24 percentage points**, compared with **13.85% and 12.04** for its FlexMatch comparison. That large run-to-run variation matters. Results use three random seeds and the paper's **best-error-over-checkpoints reporting rule**. They are not from a deployment-style protocol that locks model choice before checking test performance. The approach fits the problem of an unreliable fixed confidence cutoff early in training. It does **not** show that one label per class will reliably work in a new domain. No business KPI is reported. [Setup and Table 1](https://arxiv.org/html/2205.07246v3).
 
-**Architecture diagram description:** The CIFAR-10 example uses **WRN-28-2**: `weak view -> CNN -> running confidence and class statistics -> adaptive mask; strong view -> shared CNN -> class and marginal-diversity losses`.
+**Notable vendor implementations/libraries:** The paper links the [TorchSSL ecosystem](https://github.com/TorchSSL/TorchSSL). [Microsoft's Semi-supervised-learning/SemiLearn repository](https://github.com/microsoft/Semi-supervised-learning) includes modern recipe implementations. Repository ownership does not identify a deployed product that uses them.
 
-**Activation functions used and why:** Leaky ReLU retains negative-side feature gradients and batch normalization conditions the reference WRN. Softmax produces normalized predictions, which also make its running class-marginal estimates meaningful.
+**Architecture diagram description:** The CIFAR-10 example uses **WRN-28-2**: `weak view -> CNN -> running confidence and class statistics -> adaptive mask; strong view -> shared CNN -> class and marginal-diversity losses`. "Marginal" refers to class use averaged across examples, not an extra image feature.
 
-**Loss function(s):** $`\mathcal L_s+w_u\mathcal L_u+w_f\mathcal L_f`$, where $`\mathcal L_u`$ is adaptively masked pseudo-label cross-entropy. The paper's Eq. 11 defines $`\mathcal L_f=-\operatorname{CE}(a,b)`$: $`a`$ and $`b`$ are normalized running and accepted-batch probability marginals, each divided by its corresponding hard-prediction histogram. This is the source's histogram-corrected marginal-entropy/diversity proxy, not ordinary positive cross-entropy to a fixed uniform target or per-example entropy minimization.
+**Activation functions used and why:** Leaky ReLU keeps negative-side feature gradients, and batch normalization controls the reference WRN's feature values. Softmax produces probabilities used both for classification and for running averages of class use.
 
-**Optimization algorithm(s):** The source comparison uses SGD with momentum 0.9, initial learning rate 0.03, $`\eta_0\cos(7\pi s/(16S))`$, and $`S=2^{20}`$ updates. EMA model evaluation uses decay 0.999. Adaptation-statistic EMA and model-weight EMA are distinct mechanisms.
+**Loss function(s):** Combine labeled loss, adaptively filtered pseudo-label cross-entropy, and a particular class-diversity loss. The last term corrects average probabilities using counts of chosen classes. It is not ordinary positive cross-entropy toward fixed equal class frequencies. It is also not entropy minimization for each example.
 
-**Regularization techniques:** Strong augmentation, weight decay, adaptive pseudo-label selection, and the self-adaptive fairness penalty. The fairness weight and statistic smoothing remain choices to validate, despite the method's name.
+**Optional math:** The total is $`\mathcal L_s+w_u\mathcal L_u+w_f\mathcal L_f`$, where $`\mathcal L_s`$ is labeled cross-entropy, $`\mathcal L_u`$ the masked pseudo-label loss, and $`w_u,w_f`$ their stated weighting choices for unlabeled and fairness terms. Equation 11 defines $`\mathcal L_f=-\operatorname{CE}(a,b)`$. Here $`\operatorname{CE}`$ is cross-entropy; $`a`$ comes from running class probabilities and $`b`$ from accepted-batch class probabilities. Each is divided by its corresponding hard-prediction histogram, then normalized. The negative sign belongs to the source's histogram-corrected diversity proxy; replacing it with ordinary positive cross-entropy changes the objective.
 
-**Backpropagation considerations:** Treat running estimates and hard selection as auxiliary state, while differentiating the classifier's current probability losses. Histogram divisions need safeguards for empty classes; skipping that detail can produce undefined values precisely in scarce-label cases.
+**Optimization algorithm(s):** The source uses SGD with momentum 0.9, initial learning rate 0.03, and $`2^{20}`$ updates on the stated cosine curve. Model evaluation uses averaged weights with decay 0.999. Averaging adaptation statistics and averaging model weights are separate operations.
 
-**Parameter count / scaling behavior:** Approximately **1.5M learned parameters** in WRN-28-2, with only class-sized adaptation state beyond normal training buffers. No new expert network or learned threshold-prediction head is required.
+**Optional math:** The learning rate is $`\eta_0\cos(7\pi s/(16S))`$. Here $`\eta_0`$ is the initial rate, $`s`$ is the step, $`S=2^{20}`$ the total update budget, and $`\pi`$ the circle constant.
 
-**Training paradigm:** End-to-end semi-supervised classification with continuously estimated confidence and class statistics; no separate validation-driven curriculum.
+**Regularization techniques:** Strong image changes, weight decay, adaptive pseudo-label selection, and the self-adaptive fairness term. Its weight and the amount of statistic smoothing still need validation despite the method's name.
 
-**Hardware/parallelism considerations:** Similar image-processing load to FixMatch, with inexpensive class-statistic reductions. If different devices see different class mixtures, synchronize the intended statistics rather than silently producing worker-specific thresholds.
+**Backpropagation considerations:** Treat running estimates and hard accept/reject choices as extra training state. Differentiate the current probability losses. Guard histogram divisions when a class count is zero. Otherwise, exactly the low-label cases of interest can produce undefined calculations.
+
+**Parameter count / scaling behavior:** WRN-28-2 has approximately **1.5M learned parameters**. Extra adaptation storage is class-sized beyond normal training buffers. It needs no new expert network or learned head for predicting thresholds.
+
+**Training paradigm:** Learn semi-supervised classification jointly while updating confidence and class statistics. There is no separately validation-driven curriculum.
+
+**Hardware/parallelism considerations:** Image work is similar to FixMatch, plus small class-statistic calculations. If devices see different class mixtures, combine the intended statistics. Otherwise, they silently develop different thresholds.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| MixMatch | Images where interpolation and weak augmentation are useful | Soft label guessing plus interpolation regularization | Several coupled target-construction choices | CIFAR-10 with 250 labels |
-| ReMixMatch | Images with reliable weak anchors and strong augmentations | Distribution alignment and richer consistency | Prior mismatch and many augmented views | CIFAR-10 with 250 labels |
-| FixMatch | Images with trustworthy weak/strong view semantics | Simple confidence-filtered consistency | Fixed threshold excludes some useful classes | CIFAR-10 with 250 labels |
-| FlexMatch | Closed-set images with uneven class learning progress | Class-specific admission curriculum | Confidence counts confound difficulty and rarity | CIFAR-10 with 40 labels |
-| FreeMatch | Very sparsely labeled closed-set image tasks | Adapts overall and class-specific confidence levels | Sensitive running statistics and high small-label variance | CIFAR-10 with ten labels |
+| MixMatch | Images suited to gentle changes and blending | Uses soft guesses and teaches behavior between examples | Several target-building choices can go wrong together | CIFAR-10 with 250 labels |
+| ReMixMatch | Images with reliable weak targets and useful strong changes | Adjusts class use and trains across richer changes | Wrong expected class frequencies; many extra views | CIFAR-10 with 250 labels |
+| FixMatch | Images whose weak and strong changes preserve labels | Accepts confident guesses with a simple rule | One fixed cutoff can exclude useful classes | CIFAR-10 with 250 labels |
+| FlexMatch | Images from known classes that are learned at different rates | Gives each class its own admission cutoff | Few confident guesses may mean rarity, not difficulty | CIFAR-10 with 40 labels |
+| FreeMatch | Known-class image tasks with very few labels | Adapts confidence cutoffs overall and by class | Running statistics can be biased; low-label results vary greatly | CIFAR-10 with ten labels |
 
 ## 2.6 Generative and reconstruction approaches
 
-These approaches obtain additional learning signals from explaining or reconstructing the inputs. Modeling input structure can help classification, but likelihood, reconstruction quality, image realism, and classification accuracy are different objectives. None should be used as an unqualified proxy for the others.
+These methods learn from unlabeled inputs by trying to explain or rebuild them. A **generative model** learns a way to produce inputs. A **reconstruction model** tries to recover an input or its internal features. Either task may help a classifier learn useful patterns. But realistic-looking images, accurate reconstructions, high model likelihood, and correct class predictions measure different things. **Likelihood** describes how well a probability model accounts for the observed data. None of these scores automatically stands in for the others.
 
 ### 2.6.1 Semi-supervised variational autoencoders: M1 and M2
 
-**Name:** Semi-supervised deep generative models M1, M2, and the explicitly stacked M1+M2 system.
+**In plain English:** Learn a compact description of many unlabeled images, then use a few known answers to learn classes. M1 learns features before classification; M2 learns classes and image generation together; M1+M2 combines those stages.
 
-**Category & sub-category:** Semi-supervised learning; variational generative modeling and latent-feature classification.
+**Name:** Semi-supervised deep generative models M1, M2, and the stacked M1+M2 system. These are three related but different setups.
+
+**Category & sub-category:** Semi-supervised learning; learning hidden input features and probability models that can generate inputs.
 
 **Originating paper/vendor/year:** Diederik Kingma, Shakir Mohamed, Danilo Rezende, and Max Welling, [*Semi-supervised Learning with Deep Generative Models*, NIPS 2014](https://arxiv.org/html/1406.5298v2).
 
-**Core mechanism:** **M1** learns a VAE representation from all inputs, then trains a classifier on latent features; the paper evaluates a TSVM in that role. **M2** introduces a class variable: $`p_\theta(x,y,z)=p(y)p(z)p_\theta(x\mid y,z)`$, with inference networks $`q_\phi(y\mid x)`$ and $`q_\phi(z\mid x,y)`$. Known labels condition the labeled objective; unknown labels are summed over, weighted by the inferred class posterior. **M1+M2** trains the latter model on the former's learned representation. These are related but distinct systems, and their benchmark scores differ substantially.
+**Core mechanism:** **M1** trains a variational autoencoder (VAE) on all inputs. Its encoder turns an input into a probability-based short description, called a **latent representation**. A decoder tries to generate the input from it. A separate classifier then learns from these features; the paper tests a TSVM in that role.
 
-**Inputs/outputs and typical data types:** Labeled and unlabeled vectors or images. Outputs include latent features, a class posterior, and a conditional generative model. M1 alone has no classification labels in its VAE objective; its downstream classifier makes the complete workflow supervised or semi-supervised.
+**M2** adds a class variable to the generative model. One network guesses the class; another estimates hidden information given the input and a class; a decoder generates inputs from class and hidden information. Known labels specify the class during labeled learning. For unlabeled inputs, training considers every possible class and averages their contributions using guessed class probabilities. **M1+M2** first learns M1 features, then trains M2 on those features. Their benchmark scores must stay separate.
 
-**Strengths and limitations:** Gives an explicit probabilistic connection between classes and input structure, potentially separating category from style. However, a good input-density model need not emphasize discriminative features. Inference approximations, likelihood choice, and latent collapse can limit performance, and summing over many classes becomes expensive.
+**Optional math:** M2 models $`p_\theta(x,y,z)=p(y)p(z)p_\theta(x\mid y,z)`$. Here $`x`$ is an input, $`y`$ a class, $`z`$ hidden information, and $`\theta`$ generative-model weights. $`p(y),p(z)`$ are prior distributions, and $`p_\theta(x\mid y,z)`$ describes generating an input. Inference networks with weights $`\phi`$ estimate $`q_\phi(y\mid x)`$, the class probabilities, and $`q_\phi(z\mid x,y)`$, the hidden-information distribution.
 
-**Computational complexity / scalability notes:** For fixed Monte Carlo samples, a VAE minibatch costs encoder/decoder forward and backward passes. M2's exact unlabeled-class sum scales approximately as $`O(BCF)`$, where $`F`$ now denotes one class-conditioned inference/generation evaluation, plus classifier cost. This class factor is not present in an ordinary single-head classifier.
+**Inputs/outputs and typical data types:** Use labeled and unlabeled vectors or images. Depending on the setup, outputs include latent features, inferred class probabilities, and a class-conditioned generator. M1's VAE stage itself uses no class labels. Its later classifier makes the complete workflow supervised or semi-supervised.
+
+**Strengths and limitations:** The model explicitly connects classes to how inputs are generated. It may help separate a digit's identity from its writing style. But describing common input details well does not guarantee learning the details that distinguish classes. Approximate inference and a poorly chosen input probability model can hurt. So can **latent collapse**, where the generator ignores the hidden code. Considering every class also becomes expensive when there are many.
+
+**Computational complexity / scalability notes:** A VAE trains both encoder and decoder. For a fixed number of random latent samples, their forward and backward passes set the batch cost. M2 additionally evaluates class-conditioned paths for each possible class on unlabeled examples. Doubling class count can therefore roughly double that part, unlike an ordinary single-output-head classifier.
+
+**Optional math:** The exact unlabeled-class sum is approximately $`O(BCF)`$ plus classifier work. Here $`B`$ is batch size, $`C`$ class count, and $`F`$ now means one class-conditioned inference/generation evaluation.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** In permutation-invariant MNIST recognition with **100 labeled training examples**, images first produce M1 latent features; M2 uses those features to infer digit class and style; the class posterior supplies the digit decision. Table 1 reports **3.33% error with standard deviation 0.14 percentage points for M1+M2**, whereas **M2 alone reports 11.97% with standard deviation 1.71**. The headline combined-model result must not be assigned to M2 alone. The technical fit versus direct classification is that unlabeled images can teach reusable variation before scarce labels identify classes. This is a research comparison, not proof of a deployed document-processing system, and no business KPI is reported. [Original model definitions and MNIST table](https://arxiv.org/html/1406.5298v2).
+**Evidence status: Research benchmark.** The MNIST study uses **100 labeled training examples** in the permutation-invariant task. This task treats each image as a flat pixel list, without building neighboring-pixel structure into the model. M1 first produces hidden features. M2 uses them to infer digit class and style, and its inferred class probabilities select the digit.
 
-**Notable vendor implementations/libraries:** The authors' [NIPS 2014 semi-supervised code](https://github.com/dpkingma/nips14-ssl). Modern probabilistic-programming or tensor libraries can express these objectives, but a generic VAE example does not automatically implement M2's class marginalization and additional classification term.
+Table 1 reports **3.33% error with standard deviation 0.14 percentage points for M1+M2**. In contrast, **M2 alone reports 11.97% with standard deviation 1.71**. Do not assign the combined result to M2 alone. The approach fits the idea that many unlabeled images can teach useful variation before scarce labels name the classes. It is research, not evidence of a deployed document-processing system, and no business KPI is reported. [Original model definitions and MNIST table](https://arxiv.org/html/1406.5298v2).
 
-**Architecture diagram description:** The source's M1 uses `input -> two 600-unit hidden layers -> mean/log-variance of 50-dimensional z`, with decoder `z -> 600 -> 600 -> input likelihood parameters`. M2 uses 50-dimensional $`z`$ and one 500-unit hidden layer in its component MLPs: `x -> q(y|x)`; `(x,y) -> q(z|x,y)`; `(y,z) -> p(x|y,z)`. These are dense networks, not an unspecified convolutional backbone.
+**Notable vendor implementations/libraries:** The authors provide [NIPS 2014 semi-supervised code](https://github.com/dpkingma/nips14-ssl). Modern tensor and probability-model libraries can express these calculations. A generic VAE example does not automatically include M2's average over unknown classes or its extra classification loss.
 
-**Activation functions used and why:** Softplus provides smooth hidden nonlinearities in the reported MLPs. Softmax normalizes the class posterior, sigmoid constrains MNIST Bernoulli likelihood parameters to valid probabilities, and Gaussian inference uses separate mean/variance parameterizations. Positive variance must be enforced; it is not a categorical activation.
+**Architecture diagram description:** M1 uses `input -> two 600-unit hidden layers -> mean/log-variance of 50-dimensional z`, with decoder `z -> 600 -> 600 -> input likelihood parameters`. Its output describes the center and spread of the hidden-code distribution. M2 also uses 50-dimensional `z`, with one 500-unit hidden layer in each component MLP: `x -> q(y|x)`; `(x,y) -> q(z|x,y)`; `(y,z) -> p(x|y,z)`. These are dense networks. The three paths predict class, infer hidden information, and generate an input, respectively.
 
-**Loss function(s):** M1 minimizes the ordinary negative VAE bound: expected negative reconstruction log-likelihood plus latent KL, before fitting its downstream classifier. For M2, let $`\operatorname{ELBO}_l(x,y)`$ be the labeled variational bound. The unlabeled bound is
+**Activation functions used and why:** Softplus gives smooth hidden-layer responses, and softmax normalizes class probabilities. The MNIST Bernoulli model treats each pixel as a binary outcome; sigmoid keeps its probability between zero and one. Each Gaussian hidden coordinate has a bell-shaped distribution with separate mean and variance outputs. Variance must stay positive. This is different from choosing a class activation.
+
+**Loss function(s):** M1 balances reconstruction likelihood with a KL penalty that keeps hidden-code distributions near their prior, a chosen starting distribution. It then trains a separate classifier. For M2, the objective combines labeled and unlabeled generative bounds with extra cross-entropy on known class labels. A **variational bound**, or ELBO, is a computable lower estimate of the data's log probability. Training maximizes that bound, or equivalently minimizes its negative.
+
+**Optional math:** Let $`\operatorname{ELBO}_l(x,y)`$ be the labeled bound for input $`x`$ and class $`y`$. With inferred class probabilities $`q_\phi(y\mid x)`$, M2's unlabeled bound is:
 
 $$
 \operatorname{ELBO}_u(x)=
@@ -832,122 +1022,140 @@ $$
 +H(q_\phi(y\mid x)).
 $$
 
-Minimize negative labeled/unlabeled bounds plus a weighted labeled cross-entropy for $`q_\phi(y\mid x)`$. The **positive entropy in this ELBO** must not be confused with adding positive entropy to a minimized entropy-minimization loss.
+Here $`\phi`$ denotes inference-network weights and $`H`$ is entropy. The sum averages each possible class's bound; the entropy term accounts for uncertainty over the unknown class. Minimize negative labeled/unlabeled bounds plus weighted labeled cross-entropy for $`q_\phi(y\mid x)`$. The **positive entropy in this ELBO** is not the same as a positive entropy penalty in a minimized loss. Negating the bound changes that sign. M1's negative bound is expected negative reconstruction log-likelihood plus latent KL.
 
-**Optimization algorithm(s):** Stochastic variational gradient updates. The cited paper contains an optimizer inconsistency: Section 3.2 says experimental results used AdaGrad, while its detailed implementation discussion describes a momentum/bias-corrected RMSProp variant with **constant learning rate 0.0003**. This volume preserves that source discrepancy rather than inventing a uniquely specified Adam recipe.
+**Optimization algorithm(s):** Training uses gradient estimates with random latent samples. **The source is inconsistent about its optimizer.** Section 3.2 says experimental results used AdaGrad. The detailed implementation discussion instead describes a momentum/bias-corrected RMSProp variant with **constant learning rate 0.0003**. We retain both statements rather than invent one unambiguous Adam recipe.
 
-**Regularization techniques:** Latent KL penalties, priors, stochastic latent sampling, and the reported M2 parameter prior/weight penalty. The MNIST procedure also samples binary inputs from normalized pixel intensities. Batch normalization and dropout are not assumed merely because later VAE implementations use them.
+**Regularization techniques:** Hidden-code KL penalties, prior distributions, random latent sampling, and M2's reported parameter prior/weight penalty. For MNIST, normalized pixel intensities also provide probabilities for sampling binary inputs. Do not assume batch normalization or dropout merely because later VAE code uses them.
 
-**Backpropagation considerations:** Reparameterize $`z=\mu+\sigma\odot\epsilon`$ to obtain low-variance pathwise gradients. For M2's small class vocabulary, enumerate labels and differentiate the weighted sum rather than sampling an unobserved class with an unnecessary score-function estimator.
+**Backpropagation considerations:** Make a random hidden sample by scaling and shifting fixed noise. This lets gradients pass through its learned mean and scale with less sampling noise. With M2's small class set, explicitly consider all classes and differentiate their weighted sum instead of randomly choosing an unknown label.
 
-**Parameter count / scaling behavior:** No single count applies to M1, raw-input M2, and stacked M1+M2. A dense layer from $`a`$ inputs to $`b`$ outputs contributes $`(a+1)b`$ parameters, and a diagonal Gaussian head has separate mean and variance outputs. Stacking changes M2's input dimension, so adding two raw-input model counts would be misleading.
+**Optional math:** The reparameterization is $`z=\mu+\sigma\odot\epsilon`$. Here $`z`$ is a latent sample, $`\mu`$ the learned mean, $`\sigma`$ the learned standard-deviation vector, $`\epsilon`$ standard Gaussian noise, and $`\odot`$ element-by-element multiplication. Gradients follow this explicit path through the sample. For the class sum, listing every class avoids an unnecessary score-function estimator, a noisier way to estimate gradients by sampling labels.
 
-**Training paradigm:** M1 representation pretraining followed by a classifier, joint generative/discriminative M2 training, or the explicitly staged M1+M2 combination. A downstream TSVM also changes the transductive/inductive evaluation question.
+**Parameter count / scaling behavior:** M1, raw-input M2, and stacked M1+M2 do not share one parameter count. A Gaussian head needs separate mean and variance outputs. Stacking changes the input width of M2, so simply adding counts for two raw-input models is misleading.
 
-**Hardware/parallelism considerations:** MLP training is accelerator-friendly. Enumerating class-conditioned branches can be vectorized, but memory and compute grow with class count; large-label-vocabulary applications require additional approximations not part of this entry.
+**Optional math:** A dense layer with $`a`$ input units and $`b`$ output units has $`(a+1)b`$ parameters: $`ab`$ connection weights and $`b`$ biases. A diagonal Gaussian head provides both mean and variance values for each latent dimension.
+
+**Training paradigm:** Choose the stated setup: M1 feature pretraining then a classifier; joint class-and-generation learning in M2; or staged M1+M2. If the later classifier is a TSVM, check again whether evaluation sees the target inputs during training.
+
+**Hardware/parallelism considerations:** GPUs can train these MLPs efficiently. Class-conditioned branches can be processed together, but memory and computing grow with class count. Approximations for very large class sets are beyond this entry.
 
 ### 2.6.2 Semi-supervised GAN with a K+1 classifier
 
-**Name:** Semi-supervised GAN using $`K+1`$ categories: $`K=C`$ real classes plus a generated/fake category.
+**In plain English:** Teach a classifier both the known classes and the difference between real and generated examples. A generator supplies extra training examples, while a few true labels teach the real class names.
 
-**Category & sub-category:** Semi-supervised learning; generative adversarial feature learning with a classification discriminator.
+**Name:** Semi-supervised GAN with K+1 categories. Here K equals the number C of real classes; the extra category is generated, or fake, data.
 
-**Originating paper/vendor/year:** The representative formulation is Tim Salimans and colleagues' [*Improved Techniques for Training GANs*, NeurIPS 2016](https://arxiv.org/html/1606.03498v1). A related independent proposal is Augustus Odena's [*Semi-Supervised Learning with Generative Adversarial Networks*, 2016](https://arxiv.org/abs/1606.01583).
+**Category & sub-category:** Semi-supervised learning; a generator and a real/fake classifier also learn features for labeled classification.
 
-**Core mechanism:** Train the discriminator to classify labeled real examples, recognize unlabeled observations as belonging to some real class, and recognize generated examples as fake. The generator supplies additional structure around the real-data distribution. In the successful reference SSL setup, **feature matching** trains the generator to match mean intermediate discriminator features of real data. Photorealistic generation and good semi-supervised classification are not identical goals; the paper explicitly finds that a technique improving sample appearance need not give the best classifier.
+**Originating paper/vendor/year:** The representative method is Tim Salimans and colleagues' [*Improved Techniques for Training GANs*, NeurIPS 2016](https://arxiv.org/html/1606.03498v1). A related independent proposal is Augustus Odena's [*Semi-Supervised Learning with Generative Adversarial Networks*, 2016](https://arxiv.org/abs/1606.01583).
 
-**Inputs/outputs and typical data types:** Labeled real images, unlabeled real images, and random generator inputs. Outputs are real-class predictions and generated samples. The fake category is trained against this generator's outputs; it is not a generally validated unknown-class or OOD detector.
+**Core mechanism:** A GAN has a **generator**, which makes examples, and a **discriminator**, which judges them. Here the discriminator learns known real classes from labeled examples. It also learns that unlabeled real inputs belong to some real class and generated inputs belong to the fake class.
 
-**Strengths and limitations:** Can learn useful features without hand-specifying every invariance and offers a generative output in addition to classification. Alternating optimization is harder to stabilize than a single classification objective. Mode collapse, discriminator dominance, and generator artifacts can affect the learning signal.
+The successful reference setup trains the generator with **feature matching**: make its outputs produce the same average intermediate discriminator features as real data. This shapes the classifier's learning without requiring the most realistic-looking images. The paper finds that a technique improving image appearance need not produce the best semi-supervised classifier.
 
-**Computational complexity / scalability notes:** Training requires real and generated discriminator passes, generator passes, and separate gradient updates. Per-step cost depends on both networks and the update ratio. The generator can be discarded for class inference; classification cost is therefore not the full training-system cost.
+**Inputs/outputs and typical data types:** Use labeled real images, unlabeled real images, and random generator inputs. Outputs include real-class predictions and generated samples. The fake category is learned against this generator's outputs. It is not a generally validated detector of unknown classes or out-of-distribution inputs.
+
+**Strengths and limitations:** Generated examples can help learn useful features without hand-designing every harmless input change. The system also produces samples. But alternating two learning processes is harder to stabilize than one classification loss. The generator may make too little variety, called **mode collapse**. An overly strong discriminator or artificial image artifacts can also spoil the learning signal.
+
+**Computational complexity / scalability notes:** Each training step runs the discriminator on real and generated inputs, runs the generator, and performs separate updates. Cost depends on both networks and how often each is updated. Ordinary class prediction can discard the generator, so inference costs less than the whole training setup.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** For permutation-invariant MNIST recognition with **100 labeled examples**, the discriminator receives digit vectors while a generator supplies synthetic vectors. Real/fake discrimination shapes its features, labeled cross-entropy names the digit classes, and the real-class argmax supplies a recognition decision. The original Table 1 reports **93 incorrectly classified test images on average, standard deviation 6.5, out of the 10,000-image test set**, averaged over ten seeds. This is the single-model row, not the distinct ten-model ensemble row. Feature matching fits the goal of learning class-useful representations even when generated samples are not maximally realistic. No production OCR performance or business KPI is reported. [MNIST experiment and feature-matching discussion](https://arxiv.org/html/1606.03498v1).
+**Evidence status: Research benchmark.** The permutation-invariant MNIST task uses flat digit vectors and **100 labeled examples**. The discriminator receives real digit vectors, and the generator makes synthetic vectors. Real/fake learning shapes features; labeled cross-entropy teaches digit names. The highest real-class score gives the recognition decision.
 
-**Notable vendor implementations/libraries:** OpenAI's historical [improved-gan repository](https://github.com/openai/improved-gan). The detailed neural fields here describe its public [MNIST feature-matching script](https://github.com/openai/improved-gan/blob/master/mnist_svhn_cifar10/train_mnist_feature_matching.py), not an undocumented commercial checkpoint.
+Original Table 1 reports **93 incorrectly classified test images on average, standard deviation 6.5, out of the 10,000-image test set**, averaged over ten seeds. This is the single-model row, not the separate ten-model ensemble row. Feature matching fits the goal of learning useful class features, even when generated samples are not the most realistic. No production OCR performance or business KPI is reported. [MNIST experiment and feature-matching discussion](https://arxiv.org/html/1606.03498v1).
 
-**Architecture diagram description:** The inspected reference code uses discriminator `784 -> 1000 -> 500 -> 250 -> 250 -> 250 -> 10 real logits`; the fake logit is implicitly fixed to zero, giving an equivalent $`K+1`$ distribution. Its generator is `100-dimensional noise -> 500 -> 500 -> 784`. These are concrete script settings, not a claim that every experiment in the paper used this exact generator.
+**Notable vendor implementations/libraries:** OpenAI's historical [improved-gan repository](https://github.com/openai/improved-gan) contains the research code. The neural details here describe its public [MNIST feature-matching script](https://github.com/openai/improved-gan/blob/master/mnist_svhn_cifar10/train_mnist_feature_matching.py), not an undocumented commercial checkpoint.
 
-**Activation functions used and why:** ReLU supplies piecewise-linear discriminator features; softplus supplies smooth generator nonlinearities, and sigmoid bounds image-output intensities. The real-class decision uses normalized logits; the implicit fake category can be computed through a log-sum-exp normalization.
+**Architecture diagram description:** The inspected script uses discriminator `784 -> 1000 -> 500 -> 250 -> 250 -> 250 -> 10 real logits`. A logit is a raw class score. The fake logit is implicitly fixed to zero, yielding an equivalent K+1-class distribution without a separately learned fake output. The generator is `100-dimensional noise -> 500 -> 500 -> 784`. These are script settings, not a claim that every paper experiment used exactly this generator.
 
-**Loss function(s):** Labeled cross-entropy over real classes, real-versus-fake terms on real and generated observations, and generator feature matching $`\lVert\mathbb E_x h(x)-\mathbb E_z h(G(z))\rVert_2^2`$. A generic minimax GAN generator loss is not a substitute for the feature-matching configuration associated with this example.
+**Activation functions used and why:** ReLU gives the discriminator nonlinear features by zeroing negative responses. Softplus gives the generator smooth hidden responses, and sigmoid bounds output image intensities. Normalized real-class logits select the digit. A log-sum-exp calculation safely normalizes scores including the implicit fake category.
 
-**Optimization algorithm(s):** The public MNIST script alternates Adam-family updates, uses learning rate **0.003** without an explicit decay schedule in that script, and sets first-moment coefficient 0.5. This reports the inspected implementation, not a universal GAN optimizer prescription.
+**Loss function(s):** Use labeled cross-entropy over real classes, real-versus-fake losses on real and generated examples, and generator feature matching. A generic GAN minimax generator loss is not a substitute for the feature-matching setup behind this example.
 
-**Regularization techniques:** Weight normalization and Gaussian noise in the discriminator, normalization in the generator, and feature matching. Do not assume that every technique discussed in *Improved Techniques*, such as minibatch discrimination, was simultaneously used for its best SSL result.
+**Optional math:** The feature-matching loss is $`\lVert\mathbb E_x h(x)-\mathbb E_z h(G(z))\rVert_2^2`$. Here $`x`$ is a real input, $`z`$ random noise, $`G`$ the generator, and $`h`$ the discriminator's intermediate features. Each $`\mathbb E`$ averages over the relevant inputs. The squared norm measures the difference between real and generated average features.
 
-**Backpropagation considerations:** For a discriminator update, generated inputs should not update generator parameters. For a generator update, gradients pass through discriminator features to generator outputs while discriminator parameters remain fixed. Detach the real feature target as appropriate to the alternating objective.
+**Optimization algorithm(s):** The public MNIST script alternates Adam-family updates. It uses learning rate **0.003**, with no explicit decay schedule in that script, and first-moment coefficient 0.5 for smoothing gradients. These are inspected code settings, not a universal GAN recipe.
 
-**Parameter count / scaling behavior:** Training stores $`p_D+p_G`$; classification uses $`p_D`$. The displayed discriminator has approximately 1.54M affine parameters by arithmetic from its layer sizes, with normalization state in addition. The classifier and generator may scale independently.
+**Regularization techniques:** Weight normalization and Gaussian noise in the discriminator, normalization in the generator, and feature matching. Do not assume every technique in *Improved Techniques* was used together for its best semi-supervised result. For example, minibatch discrimination, which lets a discriminator use information across examples, is not automatically part of this configuration.
 
-**Training paradigm:** Joint labeled classification, unlabeled real/fake learning, and generator training. This is not an unsupervised GAN merely evaluated with an external classifier afterward.
+**Backpropagation considerations:** A discriminator update must not update generator weights through generated inputs. During a generator update, gradients pass through the fixed discriminator's features into generator outputs. Hold the real-feature target fixed as appropriate for this alternating objective.
 
-**Hardware/parallelism considerations:** A GPU supports the reference MLP setup; image-scale CNN variants need more memory and throughput. Distributed feature-mean estimates and the discriminator/generator update ratio must be controlled for comparable training.
+**Parameter count / scaling behavior:** Training stores both networks, while classification uses only the discriminator. Its displayed layers have approximately 1.54M connection weights and biases by arithmetic, plus normalization state. These weights and biases are the affine parameters. The two networks can grow independently.
+
+**Optional math:** If discriminator and generator counts are $`p_D`$ and $`p_G`$, training holds $`p_D+p_G`$ learned parameters, while class inference uses $`p_D`$.
+
+**Training paradigm:** Train labeled classification, real/fake learning from unlabeled data, and the generator together. This is not an unlabeled GAN that is later tested using a separate external classifier.
+
+**Hardware/parallelism considerations:** A GPU supports the reference MLP setup. Larger CNN image versions need more memory and throughput. Across devices, control how feature means are averaged and how often discriminator and generator updates occur.
 
 ### 2.6.3 Ladder Networks
 
+**In plain English:** Teach a network to classify the few labeled examples while also cleaning noise from its internal features. Unlabeled examples can then train several layers, not just the final class output.
+
 **Name:** Semi-supervised Ladder Network.
 
-**Category & sub-category:** Semi-supervised learning; joint classification and layerwise denoising reconstruction.
+**Category & sub-category:** Semi-supervised learning; learning classes and removing noise from features at each layer together.
 
-**Originating paper/vendor/year:** Antti Rasmus and colleagues, [*Semi-Supervised Learning with Ladder Networks*, NIPS 2015](https://arxiv.org/html/1507.02672v2), extending the earlier Ladder architecture associated with Harri Valpola.
+**Originating paper/vendor/year:** Antti Rasmus and colleagues, [*Semi-Supervised Learning with Ladder Networks*, NIPS 2015](https://arxiv.org/html/1507.02672v2). It extends the earlier Ladder architecture associated with Harri Valpola.
 
-**Core mechanism:** Run clean and corrupted encoders with shared weights. A top-down decoder receives lateral connections from corrupted representations at each layer and reconstructs the corresponding clean representations. Labeled examples contribute classification loss at the noisy encoder's output; all examples contribute denoising losses. Lateral information allows each layer to reconstruct local detail without forcing the topmost representation to preserve everything about the input.
+**Core mechanism:** Pass each input through clean and noise-corrupted encoders that share weights. A decoder works downward from higher layers. At each level, it receives both a top-down signal and a sideways link from that level's noisy features. It tries to reconstruct the matching clean features. Known labels train the noisy encoder's class output; all examples train the denoising losses. Sideways information helps restore local details without requiring the topmost features to retain everything about the input.
 
-**Inputs/outputs and typical data types:** Labeled and unlabeled feature vectors or images. During training, outputs include class probabilities and layerwise reconstructions; ordinary classification uses only the clean encoder. This is not a latent-variable likelihood model in the same sense as M2.
+**Inputs/outputs and typical data types:** Use labeled and unlabeled vectors or images. Training produces class probabilities and reconstructed features at multiple layers. Ordinary classification keeps only the clean encoder. Unlike M2, this is not the same kind of latent-variable likelihood model.
 
-**Strengths and limitations:** Provides learning signals throughout the network when label gradients are scarce, without requiring separate layerwise pretraining. Its decoder, normalization, corruption levels, and per-layer cost weights make implementation more delicate than a simple classification wrapper. Reconstruction can preserve irrelevant variation unless the supervised objective shapes the representation appropriately.
+**Strengths and limitations:** Unlabeled inputs send learning signals throughout the network when true labels are scarce. There is no need to pretrain each layer separately. But the decoder, normalization, noise levels, and layer-specific loss weights require care. Reconstruction can preserve irrelevant detail unless labeled learning guides the features toward the task.
 
-**Computational complexity / scalability notes:** Training includes clean and corrupted encoder computation plus the denoising decoder. For fixed architecture and corruption, cost remains linear in examples per epoch with a larger constant. Storing activations for several paths can dominate memory; classifier inference discards the decoder.
+**Computational complexity / scalability notes:** Training runs both clean and noisy encoders plus the denoising decoder. With fixed design and noise, work grows roughly with the number of examples per epoch, but exceeds a simple classifier's work. Saving intermediate values for several paths can dominate memory. Class prediction discards the decoder.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** In permutation-invariant MNIST recognition, the fully connected Ladder model uses **100 labels in the supervised training objective** and reports **1.06% test error with standard deviation 0.37 percentage points**. Pixel vectors enter clean and noisy encoders, the decoder learns to denoise intermediate representations, and the clean encoder's final class maximum assigns a digit. Crucially, the authors used **10,000 labeled validation images for model and hyperparameter development**; final runs used all 60,000 training images with training labels restricted as specified. They increased the 100-label evaluation to forty runs because occasional failures affected the average. The technical fit is obtaining lower-layer learning signals from unlabeled handwriting, not merely improving a pixel reconstruction score. No deployed OCR system or business KPI is reported. [Section 4.1 and Table 1](https://arxiv.org/html/1507.02672v2).
+**Evidence status: Research benchmark.** In permutation-invariant MNIST recognition, the dense Ladder model uses **100 labels in the supervised training objective**. It reports **1.06% test error with standard deviation 0.37 percentage points**. Flat pixel vectors enter clean and noisy encoders. The decoder learns to clean intermediate features, and the clean encoder's highest class score chooses the digit.
 
-**Notable vendor implementations/libraries:** The authors' [Ladder research implementation](https://github.com/CuriousAI/ladder). A stacked denoising autoencoder without lateral/top-down denoising at each level is not the same architecture.
+**The authors used 10,000 labeled validation images for model and hyperparameter development.** Thus this was not a complete development process using only 100 known answers. Final runs used all 60,000 training images, with training labels restricted as stated. Occasional failures affected the average, so the authors increased the 100-label evaluation to forty runs. The method fits the goal of teaching lower layers from unlabeled handwriting, not just producing a better pixel reconstruction score. No deployed OCR system or business KPI is reported. [Section 4.1 and Table 1](https://arxiv.org/html/1507.02672v2).
 
-**Architecture diagram description:** The reference encoder is `784 -> 1000 -> 500 -> 250 -> 250 -> 250 -> 10`. Clean and noise-corrupted copies share weights. At each level, `top-down decoder signal + lateral corrupted activation -> denoising function -> reconstructed clean activation`; training compares these paired representations.
+**Notable vendor implementations/libraries:** The authors provide a [Ladder research implementation](https://github.com/CuriousAI/ladder). A stack of denoising autoencoders without sideways and top-down denoising at each level is not the same design.
 
-**Activation functions used and why:** ReLU supplies nonlinear encoder features, and softmax supplies a normalized class distribution for cross-entropy. The denoising functions use sigmoid and affine components to condition estimated mean and scale on top-down signals. Their role is reconstruction, not another categorical output at every layer.
+**Architecture diagram description:** The encoder is `784 -> 1000 -> 500 -> 250 -> 250 -> 250 -> 10`. Clean and noisy copies share weights. At every level, `top-down decoder signal + lateral corrupted activation -> denoising function -> reconstructed clean activation`. "Lateral" means the sideways connection at the matching layer. Training compares each reconstructed feature set with its clean counterpart.
 
-**Loss function(s):** Noisy-encoder supervised cross-entropy plus weighted mean-squared denoising errors across layers, with the source's normalization of clean targets and reconstructed quantities. Cost multipliers differ by layer; replacing the normalized reconstruction objective with an arbitrary raw-activation MSE changes the method.
+**Activation functions used and why:** ReLU makes encoder features nonlinear, and softmax gives class probabilities for cross-entropy. Denoising functions use sigmoid and affine parts, which scale and shift values. Top-down signals control estimated means and scales for reconstruction. These are not extra class outputs at every layer.
 
-**Optimization algorithm(s):** Adam with learning rate **0.002 for 100 epochs**, followed by **50 epochs of linear decay to zero** in the MNIST experiments. Minibatch size is 100. The model is trained jointly, not by a mandatory sequence of isolated autoencoder fits.
+**Loss function(s):** Combine noisy-encoder labeled cross-entropy with weighted mean-squared denoising errors at several layers. The source normalizes both clean targets and reconstructed quantities in a specific way. Different layers have different weights. Replacing this with arbitrary MSE on raw activations changes the method.
 
-**Regularization techniques:** Gaussian corruption, batch normalization, and layerwise denoising. For the reported 100-label configuration, the paper gives noise standard deviation 0.3 and cost weights 1000 at the input level, 10 at the first hidden level, and 0.1 at higher levels.
+**Optimization algorithm(s):** MNIST runs use Adam with learning rate **0.002 for 100 epochs**, followed by **50 epochs of linear decay to zero**. Minibatch size is 100. All parts train together; separate autoencoder fits are not a required sequence.
 
-**Backpropagation considerations:** Shared encoder weights receive supervised and denoising learning signals. Clean/noisy alignment and consistent variance normalization are essential; incorrect normalization can create trivial scaling solutions or unstable gradients. Lateral and layerwise losses provide shorter learning paths than relying only on the final classifier.
+**Regularization techniques:** Gaussian corruption, batch normalization, and layer-by-layer denoising. For the reported 100-label setup, the paper gives noise standard deviation 0.3. Cost weights are 1000 at the input level, 10 at the first hidden level, and 0.1 at higher levels.
 
-**Parameter count / scaling behavior:** The listed encoder has approximately **1.54M affine parameters**, calculated from its widths, plus normalization parameters. Training adds decoder matrices and per-unit denoising parameters; only the encoder is needed for normal inference.
+**Backpropagation considerations:** Shared encoder weights receive both class and denoising gradients. Keep clean and noisy features aligned and normalize variances consistently. Otherwise, the model may reduce the loss merely by changing scales, or gradients may become unstable. Sideways links and layer losses give shorter routes for learning signals than the final classifier alone.
 
-**Training paradigm:** Joint semi-supervised classification and self-supervised denoising from random initialization. The reconstruction component does not remove the labeled classification signal from the overall method.
+**Parameter count / scaling behavior:** The listed encoder has approximately **1.54M affine parameters**, meaning connection weights and biases, calculated from its widths. Normalization adds parameters too. Training also adds decoder matrices and denoising parameters for individual units. Ordinary prediction needs only the encoder.
 
-**Hardware/parallelism considerations:** GPU training benefits from batching all paths, but retains more intermediate state than a classifier alone. Distributed normalization and per-layer losses should use consistent batch definitions; inference is substantially simpler than the training graph.
+**Training paradigm:** Start from random weights and jointly learn semi-supervised classification and self-supervised denoising. Clean features provide reconstruction targets, but the whole method still includes true class labels.
+
+**Hardware/parallelism considerations:** GPUs benefit from batching the paths, but training stores more intermediate state than a classifier alone. Across devices, use consistent batches for normalization and layer losses. Prediction is much simpler than the training graph.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| Semi-supervised VAE M1 / M2 | Vectors or images with useful latent generative structure | Explicit class-conditioned probabilistic learning | Likelihood mismatch, inference approximation, and class-sum cost | MNIST M1+M2 with 100 training labels |
-| K+1 semi-supervised GAN | Images where generated examples can aid feature learning | Couples classification with generative feature constraints | Unstable alternating optimization and misleading realism proxies | MNIST feature-matching GAN with 100 labels |
-| Ladder Network | Images or vectors benefiting from hierarchical denoising | Unlabeled learning signals at multiple layers | Decoder and normalization complexity | MNIST with 100 training labels and a separate large validation budget |
+| Semi-supervised VAE M1 / M2 | Vectors or images with useful hidden structure for generation | Connects class learning with a model of how inputs arise | Generating well may not aid classification; approximations and class sums cost work | MNIST M1+M2 with 100 training labels |
+| K+1 semi-supervised GAN | Images where generated examples can help teach features | Links classification to feature learning from generated data | Alternating updates can be unstable; realism is not classification quality | MNIST feature-matching GAN with 100 labels |
+| Ladder Network | Images or vectors helped by denoising at several layers | Unlabeled examples teach multiple layers | Decoder and normalization need careful implementation | MNIST with 100 training labels and a separate large validation budget |
 
 ## Evidence and reproduction boundaries
 
-All 22 worked examples in this volume are **research benchmarks**, not verified production deployments. Their datasets address concrete recognition, document-classification, or scientific classification tasks, but no unreported business outcome has been supplied. "No business KPI reported" does not mean an algorithm has never been deployed; it means the cited evidence does not establish such an outcome.
+All 22 worked examples are **research benchmarks**, not verified production deployments. They address real kinds of recognition, document classification, and scientific classification problems. But the cited evidence supplies no unreported business outcome. "No business KPI reported" does not mean a method has never been used in production. It means this evidence does not establish that result.
 
-Exact metrics above were checked against the linked primary papers or their original-paper copies. Qualitative graph-based results are described without inventing point estimates from plots. Parameter counts explicitly identified as arithmetic are calculations from stated layer sizes, not claims that a vendor published a checkpoint with exactly that count. These checks do not constitute independent retraining of the experiments.
+The exact metrics retain the checks against linked primary papers or copies of the original papers. Graph results described through curves stay qualitative where no exact number was established. Counts marked as arithmetic come from the stated layer sizes. They do not claim that a vendor released a checkpoint with exactly that count. These checks are not independent reruns of the experiments.
 
-Reproduction needs particular care with historical code: branches can change, older framework dependencies may be unavailable, and a public script need not identify every setting behind a published result. Record a commit and complete configuration before claiming numerical reproduction. The M1/M2 paper's conflicting optimizer descriptions, the GAN script-versus-paper architectural distinction, validation-label costs, private JFT data, and best-checkpoint reporting are disclosed rather than filled in with guessed details.
+Take care when reproducing older code. Repository branches can change, older framework dependencies may be unavailable, and public scripts may not identify every setting behind a paper's score. Record a code commit and the full configuration before claiming numerical reproduction. Keep the known limitations visible: conflicting M1/M2 optimizer descriptions, GAN script-versus-paper architecture details, labels used for validation, private JFT images, and best-checkpoint reporting. Do not fill these gaps with guesses.
 
 ## Coverage and continuation manifest
 
 - **2.1.1-2.1.4:** Self-training/Pseudo-Label, co-training, tri-training, and Noisy Student.
 - **2.2.1-2.2.2:** Transductive/semi-supervised SVM and Laplacian SVM/manifold regularization.
-- **2.3.1-2.3.2:** Hard-clamped harmonic label propagation and normalized, soft-clamped label spreading.
+- **2.3.1-2.3.2:** Harmonic label propagation with fixed known labels and normalized label spreading with soft label retention.
 - **2.4.1-2.4.6:** Entropy minimization, Pi Model, temporal ensembling, Mean Teacher, VAT, and UDA.
 - **2.5.1-2.5.5:** MixMatch, ReMixMatch, FixMatch, FlexMatch, and FreeMatch.
 - **2.6.1-2.6.3:** Semi-supervised VAE M1/M2, K+1 semi-supervised GAN, and Ladder Networks.
-- **Total:** 22 scoped entries, six category comparison tables. Neural deep dives describe concrete reference instantiations, not universal architectures for the wrapper names.
+- **Total:** 22 scoped entries and six category comparison tables. The 16 neural deep dives explain specific reference implementations, not a required architecture for every use of a method name.
 - **Related volumes:** [Supervised classical methods](01-supervised-classical.md), [supervised neural architectures](02-supervised-neural.md), [unsupervised classical methods](04-unsupervised-classical.md), [unsupervised neural and self-supervised learning](05-unsupervised-neural.md), [foundation models and their training stages](06-foundation-models.md), [cross-cutting comparisons](09-comparative-guide.md), and [glossary](10-glossary.md).
-- **Further non-required depth not included:** semi-supervised regression and structured prediction; formal generalization and graph-convergence proofs; missing-view and missing-not-at-random label theory; open-set and long-tailed evaluation suites beyond the failure modes discussed here; federated SSL; continuous-stream cache/teacher management; active annotation policies; and full augmentation-policy search algorithms. Trainable graph representation architectures are distinct from the two fixed-graph inference entries and should be read alongside the related neural volumes.
+- **Further non-required depth not included:** predicting numerical values or structured outputs with semi-supervised methods; formal proofs about generalization or graph convergence; theory for missing views or labels whose absence depends on the data; full tests for unknown classes or highly unequal class sizes beyond the failure modes discussed here; learning across separate data holders, called federated SSL; managing caches or teachers in continuous streams; policies for choosing new examples to label; and complete searches for image-change policies. Networks that learn graph representations differ from the two fixed-graph methods here. Read about them in the related neural volumes.

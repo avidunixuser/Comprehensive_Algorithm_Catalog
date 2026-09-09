@@ -1,30 +1,39 @@
 # 1. Supervised Learning Algorithms: Neural Architectures
 
-This chapter continues [supervised learning](01-supervised-classical.md) with neural architectures, from a single trainable decision boundary to distributed mixtures of translation experts. Its evidence policy is dated **2026-09-08**. Historical papers and explicitly identified implementations are reference points, not assertions about the latest available model.
+This chapter continues [supervised learning](01-supervised-classical.md) with neural networks. It moves from a single learned decision rule to huge translation networks. The evidence policy is dated **2026-09-08**. Papers and named software versions are reference points, not claims about the newest models.
 
-An architecture is not a supervision category. Here the representative training signal is an externally supplied class, numerical target, annotation, translation, or same/different pair. A recurrent network can also learn from unlabelled text; a graph network can propagate through unlabelled nodes; a vision Transformer can learn by reconstructing masked patches. Those uses belong with the corresponding training objectives in [semi-supervised learning](03-semi-supervised.md), [unsupervised neural learning](05-unsupervised-neural.md), and [foundation-model pretraining](06-foundation-models.md).
+A neural network passes information through **layers**, or stages of calculation. Features are input details, such as pixel brightness or a sound measurement. Each layer uses **weights**, numbers learned during training, to combine those details. Weights are often stored in matrices, rectangular tables of numbers. A **bias** is another learned number that shifts the result. An **activation function** changes a layer's result so the network can learn more than straight-line relationships.
 
-The worked examples distinguish research and documentation benchmarks from deployed applications. A published accuracy is not a business outcome. Results from different training sets, checkpoint recipes, crops, ensembles, or evaluation scripts are not automatically comparable. Benchmark numbers are attributed to the cited sources; models were not retrained for this chapter. Library availability establishes implementability, not use inside a vendor's commercial products.
+Training starts with examples and known answers, called labels or targets. A **loss** measures how far the network's output is from those answers. Training sends an error signal backward through the layers. This process, **backpropagation**, calculates gradients: slopes showing how small weight changes affect the loss. An **optimizer** uses those slopes to choose weight updates that aim to reduce the loss. Its learning rate controls the step size. A batch is a group of examples processed together; an epoch is one pass through the training data.
 
-Unless redefined locally, $`n`$ is the number of training examples, $`B`$ the batch size, $`d`$ a feature or hidden width, $`p`$ trainable parameters, $`T`$ sequence length, $`L`$ layers, and $`E`$ training epochs. Image height and width are $`H,W`$; $`q`$ denotes a convolutional kernel side. Graph entries use $`V`$ vertices and $`m`$ edges, avoiding confusion between edges and training epochs. Arithmetic counts describe a stated pass, not elapsed time or energy.
+Deeper networks sometimes use **residual shortcuts**. These carry a block's input around its calculations and add it to the block's output. The block can then learn a correction rather than rebuild everything. Shortcuts also give backward error signals a more direct path. A **GPU**, or graphics processing unit, can perform many similar calculations at once. This helps with large networks, but memory use and data transfers still matter.
+
+The network's design does not determine its kind of supervision. Here, training uses supplied classes, numbers, annotations, translations, or same/different labels. The same designs can learn differently. An RNN can learn from unlabelled text. A graph network can use both labelled and unlabelled nodes. An image Transformer can learn to rebuild hidden image patches. Those objectives belong in [semi-supervised learning](03-semi-supervised.md), [unsupervised neural learning](05-unsupervised-neural.md), and [foundation-model pretraining](06-foundation-models.md).
+
+Worked examples separate research tests, documentation demonstrations, and real applications. Accuracy on training examples is not accuracy on new examples. Different datasets, saved weight sets (**checkpoints**), crops, model combinations (**ensembles**), and scoring scripts can produce different scores. A higher research score is not proof of business value. This chapter reports cited results; it does not retrain the models. Available software is not evidence that a vendor uses it in a product.
+
+The math is optional and its symbols are explained nearby. In general, n counts training examples, B is batch size, d is a feature or hidden width, and p counts learned parameters. T is sequence length, L counts layers, and E counts epochs. Image dimensions are H and W; q is a filter's side length. Graph sections use V for nodes and m for edges. Work estimates count calculations for the stated task, not seconds or energy use.
 
 ## 1.5 Neural foundations
 
-The perceptron learns a boundary in the supplied representation. An MLP also learns intermediate representations. That distinction explains both the extra expressive power and the more difficult optimization of multilayer networks.
+A perceptron learns one decision boundary using the features it receives. An MLP also learns new combinations of those features inside the network. This makes an MLP more flexible, but harder to train.
 
 ### 1.5.1 Perceptron
+**In plain English:** A perceptron combines input numbers and chooses a class. It is a cheap first check of whether a simple decision rule is enough.
 
-**Name:** Perceptron; the representative implementation is a linear, supervised classifier, extended to multiple classes by one-versus-rest classifiers.
+**Name:** Perceptron. This entry uses a linear classifier. For several classes, it trains one rule per class against all the others.
 
-**Category & sub-category:** Supervised learning; neural foundations; single-layer threshold networks and online linear classification.
+**Category & sub-category:** Supervised learning; neural foundations. It learns a straight decision boundary and can update after each example.
 
-**Originating paper/vendor/year:** Frank Rosenblatt's [1958 perceptron paper](https://doi.org/10.1037/h0042519) is the canonical origin. The modern numerical implementation below is documented by [scikit-learn](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.Perceptron.html), not a reconstruction of the historical hardware.
+**Originating paper/vendor/year:** Frank Rosenblatt's [1958 perceptron paper](https://doi.org/10.1037/h0042519) is the standard historical reference. The example uses modern [scikit-learn software](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.Perceptron.html), not a rebuild of the original hardware.
 
-**Core mechanism:** A binary unit computes $`s=w^\top x+b`$ and predicts its sign. For labels $`y\in\{-1,+1\}`$, a mistake or nonpositive signed margin triggers $`w\leftarrow w+\eta yx`$, $`b\leftarrow b+\eta y`$. Correctly classified examples normally cause no update. This is error correction, not probability estimation. Under bounded inputs and a positive separating margin, the classical mistake bound is proportional to the squared radius-to-margin ratio. Without separability, cycling and persistent mistakes are possible.
+**Core mechanism:** The model multiplies each input by its weight, adds the results and a bias, then checks the sign. A wrong answer, or an answer exactly on the boundary, triggers a weight update. An ordinary correct answer does not. This corrects mistakes; it does not estimate reliable probabilities.
 
-**Inputs/outputs and typical data types:** Numeric vectors, including sparse text features or flattened image pixels, become class labels and decision scores. A score is not a calibrated probability; multiclass scores come from separate binary problems.
+**Optional math:** The score is $`s=w^\top x+b`$. Here x is the input vector, w the weights, and b the bias. The product $`w^\top x`$ multiplies matching components and adds them. With label $`y\in\{-1,+1\}`$ and positive step size $`\eta`$, update when $`ys\leq0`$: $`w\leftarrow w+\eta yx`$, $`b\leftarrow b+\eta y`$. If bounded inputs can be separated with a positive gap, a classical mistake bound scales with the squared input-radius-to-gap ratio. If no such boundary exists, mistakes and repeated cycling can continue.
 
-**Architecture diagram description:**
+**Inputs/outputs and typical data types:** Numeric lists, sparse text features, or flattened pixels go in. A class and a decision score come out. Sparse means most entries are zero. Separate binary rules supply the multiclass scores. A score is not a calibrated probability: it does not promise that predicted chances match observed frequencies.
+
+**Architecture diagram description:** The main path makes a decision. The error path changes the weights after a labelled example.
 
 ```text
 feature vector x -> weighted sum w.x + b -> threshold -> binary label
@@ -33,45 +42,50 @@ feature vector x -> weighted sum w.x + b -> threshold -> binary label
 multiclass: parallel one-versus-rest units -> largest score
 ```
 
-**Activation functions used and why:** A hard threshold implements the decision. Its discontinuity is intentional: the model is defined by a separating hyperplane rather than a smooth probability surface.
+**Activation functions used and why:** A hard threshold chooses one side of the boundary. It jumps between answers rather than changing smoothly. That jump is part of this model's definition.
 
-**Loss function(s):** The perceptron criterion can be written $`\max(0,-ys)`$, with a chosen update convention at zero margin. Unlike the SVM hinge loss, it does not demand a unit margin.
+**Loss function(s):** The loss penalizes scores on the wrong side, without requiring a large safety gap. **Optional math:** $`\max(0,-ys)`$ uses label y and score s; the update rule must specify what happens at zero. Unlike an SVM's hinge loss, this loss does not require a unit margin.
 
-**Optimization algorithm(s):** The classical algorithm uses a fixed positive step size. Scikit-learn's wrapper fixes `loss="perceptron"` and a constant learning-rate schedule; the documented default multiplier is `eta0=1`. Epoch limits and tolerance stopping are implementation controls, not a proof of convergence on noisy data.
+**Optimization algorithm(s):** The original rule uses a fixed positive step size. Scikit-learn fixes `loss="perceptron"` and a constant learning rate, with default multiplier `eta0=1`. Limits on epochs and small-improvement stopping control runtime. They do not prove the model will settle on noisy data.
 
-**Regularization techniques:** None is required by the original rule. The library optionally supports L1, L2, or elastic-net penalties. Feature scaling, validation-based stopping, and limiting passes are practical controls, but change the fitted result.
+**Regularization techniques:** The original rule needs no penalty on weights. The library offers L1, L2, and elastic-net penalties, which discourage large weights in different ways. Scaling features, stopping based on validation results, and limiting passes can also help. These choices change the learned model.
 
-**Backpropagation considerations:** There is no hidden-layer backpropagation and no useful ordinary derivative through the hard decision. The mistake update directly adjusts the linear weights.
+**Backpropagation considerations:** There are no hidden layers to send error signals through. The hard threshold has no useful ordinary derivative for training. The mistake rule directly changes the weights instead.
 
-**Parameter count / scaling behavior:** A binary model has $`d+1`$ parameters. A $`c`$-class one-versus-rest implementation has approximately $`c(d+1)`$, independent of training-set size.
+**Parameter count / scaling behavior:** Model size depends on input width, not the number of examples. **Optional math:** With d input features, a binary model has $`d+1`$ parameters. With c one-versus-rest class rules, it has about $`c(d+1)`$.
 
-**Training paradigm:** Explicit class labels supervise online or repeated-pass learning. Learning a representation without labels is not part of this formulation.
+**Training paradigm:** Known class labels guide updates, either one example at a time or over repeated passes. This version does not learn features without labels.
 
-**Hardware/parallelism considerations:** CPUs usually suffice. Sparse updates exploit nonzero features; independent one-versus-rest models can run in parallel. Sequential online updates are not identical to arbitrary parallel batch updates.
+**Hardware/parallelism considerations:** A CPU, the computer's general-purpose processor, is usually enough. Sparse inputs let updates skip zero features. Class-specific rules can run in parallel, but arbitrary batch updates do not reproduce the same sequence of online updates.
 
-**Strengths and limitations:** It is an inexpensive diagnostic baseline with inspectable coefficients. It cannot solve XOR in its original two-dimensional representation and lacks calibrated uncertainty. Hand-engineered nonlinear features can help, but then the representation, not the threshold alone, supplies the nonlinearity.
+**Strengths and limitations:** The model is inexpensive, and its weights are easy to inspect. It cannot solve XOR using the original two input coordinates. XOR means choosing "yes" when exactly one of two inputs is on, but not both. Added nonlinear features can help, but those features provide the extra flexibility, not the threshold alone. Its scores also lack calibrated uncertainty.
 
-**Computational complexity / scalability notes:** A dense binary pass costs $`O(nd)`$; $`E`$ passes cost $`O(End)`$, with $`O(d)`$ model memory. Multiclass one-versus-rest adds a factor $`c`$. Sparse costs depend on nonzeros, not merely nominal feature dimension.
+**Computational complexity / scalability notes:** Doubling examples or input features roughly doubles a dense pass's work. **Optional math:** With n examples, d features, and E passes, costs are $`O(nd)`$ per pass and $`O(End)`$ overall, with $`O(d)`$ model memory. For c class rules, multiply work by c. Sparse costs instead depend on how many entries are nonzero.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Illustrative (not a claimed deployment).** For handwritten-character recognition, scikit-learn's [documented digits example](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.Perceptron.html) fits the public 8-by-8 digit vectors and reports `score(X, y) = 0.939...`. This is **training accuracy on the same data**, not held-out performance. Pixels enter ten linear scorers; their largest score selects a digit for a recognition pipeline. My rationale for starting here rather than with an MLP is to test whether the supplied features already separate classes cheaply. As a separate toy update, $`x=(1,2), y=+1, w=(0,0), b=0,\eta=1`$ gives $`w=(1,2),b=1`$. Neither the tutorial score nor this calculation establishes production OCR quality.
+**Evidence status: Illustrative (not a claimed deployment).** Scikit-learn's [digits example](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.Perceptron.html) recognizes handwritten digits from 8-by-8 pixel images. It reports `score(X, y) = 0.939...`. This is **training accuracy on the same data**, not a test on unseen images. Ten linear scorers read the pixels; the largest score chooses the digit. The reason to try this before an MLP is to check whether simple, cheap boundaries suffice.
 
-**Notable vendor implementations/libraries:** Scikit-learn `Perceptron` and `SGDClassifier` expose the same underlying linear machinery. They are software implementations, not evidence of a commercial deployment.
+**Optional math:** A toy update uses $`x=(1,2), y=+1, w=(0,0), b=0,\eta=1`$. Here x is the input, y its label, w the initial weights, b the bias, and eta the step size. The update gives $`w=(1,2),b=1`$. Neither this calculation nor the tutorial score proves production-quality optical character recognition (OCR).
+
+**Notable vendor implementations/libraries:** Scikit-learn's `Perceptron` and `SGDClassifier` use the same underlying linear tools. Their availability shows how to implement the method, not where it is commercially deployed.
 
 ### 1.5.2 Multilayer perceptron (MLP)
+**In plain English:** An MLP learns useful combinations of input details before choosing an answer. Hidden layers let it handle patterns that one straight boundary cannot separate.
 
-**Name:** Multilayer perceptron; a fully connected feed-forward network. The worked instantiation has one 40-unit hidden layer.
+**Name:** Multilayer perceptron, or fully connected feed-forward network. Information moves forward through connected layers. The example has one hidden layer of 40 units.
 
-**Category & sub-category:** Supervised learning; neural foundations; dense nonlinear classification and regression.
+**Category & sub-category:** Supervised learning; neural foundations. Dense layers learn nonlinear rules for classes or numerical predictions.
 
-**Originating paper/vendor/year:** Multilayer networks predate their widespread practical training. Rumelhart, Hinton, and Williams' [1986 backpropagation paper](https://doi.org/10.1038/323533a0) popularized learning internal representations by reverse differentiation; it should not be credited as the invention of every component of the MLP.
+**Originating paper/vendor/year:** Rumelhart, Hinton, and Williams' [1986 backpropagation paper](https://doi.org/10.1038/323533a0) helped make hidden-layer learning widely used. Multilayer networks already existed. The paper did not invent every part of an MLP.
 
-**Core mechanism:** Each layer forms $`h_\ell=\phi(W_\ell h_{\ell-1}+b_\ell)`$. Hidden nonlinearities let successive layers carve and recombine regions of input space; the last layer maps that representation to a target. Without nonlinearities, a stack of affine layers collapses to one affine transformation. Training adjusts early features according to their eventual contribution to output error, unlike a perceptron with fixed input features.
+**Core mechanism:** Each layer combines the previous layer's outputs, then applies an activation. Hidden layers learn intermediate features; the last layer turns them into an answer. Backward error signals show earlier layers how their features affected that answer. Without nonlinear activations, all the layers together would still make just one linear-plus-bias transformation.
 
-**Inputs/outputs and typical data types:** Fixed-length numeric vectors become class probabilities, multilabel scores, or continuous predictions. Flattening an image permits MLP processing but discards explicit spatial adjacency.
+**Optional math:** $`h_\ell=\phi(W_\ell h_{\ell-1}+b_\ell)`$. Here h is a layer's output, the index ell identifies its layer, W contains weights, b contains biases, and phi is the activation. The previous layer supplies the input.
 
-**Architecture diagram description:**
+**Inputs/outputs and typical data types:** Fixed-length numeric lists become class probabilities, several label scores, or numerical predictions. An image can be flattened into such a list, but this removes its explicit row-and-column arrangement.
+
+**Architecture diagram description:** The hidden layer learns 40 combinations of the 784 pixels. The final layer scores ten digits.
 
 ```text
 MNIST 28x28 pixels -> flatten/scale -> 784 inputs
@@ -79,54 +93,59 @@ MNIST 28x28 pixels -> flatten/scale -> 784 inputs
                    -> digit probabilities -> selected digit
 ```
 
-**Activation functions used and why:** The [scikit-learn example](https://scikit-learn.org/stable/auto_examples/neural_networks/plot_mnist_filters.html) uses the classifier's default ReLU hidden activation and multiclass softmax output. ReLU avoids positive-side saturation; softmax makes competing digit scores a normalized distribution. A regression variant normally uses a linear output.
+**Activation functions used and why:** The [scikit-learn example](https://scikit-learn.org/stable/auto_examples/neural_networks/plot_mnist_filters.html) uses default ReLU hidden units. ReLU keeps positive inputs and replaces negative ones with zero, so positive responses do not flatten out. Softmax turns the ten output scores into probabilities that sum to one. This alone does not make them calibrated. A numerical-regression version usually leaves the output linear.
 
-**Loss function(s):** Multiclass cross-entropy with an L2 penalty for this example. Squared error is a different supervised regression instantiation, not its classification loss.
+**Loss function(s):** This classifier uses cross-entropy: it penalizes giving the correct digit too little probability. An L2 penalty also discourages large weights. Squared prediction error belongs to a different, regression version of the model.
 
-**Optimization algorithm(s):** The example explicitly selects SGD, initial learning rate 0.2, eight epochs, and the implementation's constant schedule. Default SGD momentum is 0.9 with Nesterov acceleration. The short run is deliberately stopped before convergence for documentation resource limits; it is not an optimized MNIST recipe.
+**Optimization algorithm(s):** The example uses stochastic gradient descent (SGD), an initial rate of 0.2, a constant schedule, and eight epochs. SGD updates from batches rather than the entire dataset. Its default momentum is 0.9, with Nesterov acceleration; these use recent update directions to guide steps. Documentation resource limits end the run before it settles. This is not a tuned MNIST recipe.
 
-**Regularization techniques:** `alpha=1e-4` specifies the L2 penalty. Pixel intensities are divided by 255. The example does not add dropout or batch normalization. Its held-out partition measures generalization but does not make early termination equivalent to validation-tuned early stopping.
+**Regularization techniques:** `alpha=1e-4` sets the L2 penalty. Dividing pixels by 255 scales the inputs. There is no dropout, which would randomly disable units during training, or batch normalization, which would rescale intermediate values using batch statistics. A held-out test partition measures new-example performance; it does not turn the short run into validation-tuned early stopping.
 
-**Backpropagation considerations:** Reverse-mode differentiation applies the chain rule through every dense layer. ReLU units can become inactive; saturating alternatives can produce small gradients. Initialization and input scaling matter, and gradient descent has no general guarantee of finding the globally best nonlinear classifier.
+**Backpropagation considerations:** The chain rule links each layer's weight changes to the final loss. Some ReLU units can stay inactive. Other activations can flatten out and send very small error signals backward. Starting weights and input scaling matter. Gradient descent does not guarantee the best possible nonlinear classifier.
 
-**Parameter count / scaling behavior:** The displayed 784-40-10 network has $`784(40)+40+40(10)+10=31,810`$ parameters, calculated including biases. In general $`p=\sum_\ell(d_{\ell-1}+1)d_\ell`$; doubling adjacent widths approximately quadruples their matrix size.
+**Parameter count / scaling behavior:** Wider connected layers need many more weights. **Optional math:** Including biases, the 784-40-10 network has $`784(40)+40+40(10)+10=31,810`$ parameters. In general, $`p=\sum_\ell(d_{\ell-1}+1)d_\ell`$: p is total parameters and d is each layer's width. Doubling both adjacent widths roughly quadruples their weight matrix.
 
-**Training paradigm:** Label-supervised digit classification from random initialization. Autoencoders and self-supervised MLP-based objectives are separate uses, discussed in [unsupervised neural learning](05-unsupervised-neural.md).
+**Training paradigm:** This model starts with random weights and learns from digit labels. Autoencoders and label-free MLP objectives are different uses; see [unsupervised neural learning](05-unsupervised-neural.md).
 
-**Hardware/parallelism considerations:** Small models run comfortably on a CPU. Larger batches and widths map well to GPU matrix multiplication; weights, activations, gradients, and optimizer buffers all consume memory.
+**Hardware/parallelism considerations:** Small MLPs run well on a CPU. Larger layers and batches suit GPU matrix multiplication, which combines many weighted sums at once. Memory must hold weights, layer outputs, backward signals, and optimizer records.
 
-**Strengths and limitations:** MLPs are flexible baselines for engineered features and modest nonlinear problems. They do not automatically exploit image translation, sequence order, or graph symmetry, and can be less sample-efficient than architectures that encode those structures.
+**Strengths and limitations:** MLPs are useful starting points for prepared features and modest nonlinear problems. They do not build in image location, sequence order, or graph structure. Networks designed for those structures may learn from fewer examples.
 
-**Computational complexity / scalability notes:** Dense inference is $`O(p)`$ per example; a training epoch is approximately $`O(np)`$, with an implementation-dependent backpropagation constant. Training stores batch activations in addition to $`O(p)`$ parameters and optimizer state.
+**Computational complexity / scalability notes:** More weights or examples increase work roughly in proportion. **Optional math:** For p parameters and n examples, one prediction costs $`O(p)`$ and a training epoch about $`O(np)`$. Backpropagation adds an implementation-dependent multiplier. Training also stores batch outputs beyond the $`O(p)`$ weights and optimizer state.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** Scikit-learn's [MNIST weight-visualization study](https://scikit-learn.org/stable/auto_examples/neural_networks/plot_mnist_filters.html) addresses digit recognition using OpenML `mnist_784`, version 1. Its random-state-0 split uses **30% training and 70% testing**, not MNIST's conventional 60,000/10,000 split. The displayed test accuracy is **0.953061**, versus training accuracy **0.986429**, after eight epochs. A normalized 784-pixel vector activates learned stroke-like combinations and produces a ten-way prediction that could feed a document-recognition stage. My rationale relative to the perceptron is learning nonlinear feature combinations; this does not establish superiority under a controlled matched-split comparison. No business KPI or deployed document workflow is reported.
+**Evidence status: Research benchmark.** Scikit-learn's [MNIST study](https://scikit-learn.org/stable/auto_examples/neural_networks/plot_mnist_filters.html) uses OpenML `mnist_784`, version 1. Its random-state-0 split is **30% training and 70% testing**, not the usual MNIST 60,000/10,000 split. After eight epochs, it reports **0.953061 test accuracy** and **0.986429 training accuracy**.
 
-**Notable vendor implementations/libraries:** Scikit-learn `MLPClassifier`/`MLPRegressor`, PyTorch `Linear`, and Keras `Dense`. Optimizer and normalization defaults differ across these libraries.
+A scaled 784-pixel image activates learned stroke combinations and produces one of ten digit choices. This could be a stage in document recognition. The reason to try an MLP over a perceptron is its learned nonlinear combinations. These differently split examples are not a controlled comparison proving one model better. No deployed document workflow or business result is reported.
+
+**Notable vendor implementations/libraries:** Scikit-learn provides `MLPClassifier` and `MLPRegressor`; PyTorch provides `Linear`; Keras provides `Dense`. Their default optimizers and normalization choices differ.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| Perceptron | Fixed or sparse feature vectors | Cheap online linear baseline | Requires suitable feature-space separation | Scikit-learn digits demonstration; reported score is in-sample |
-| MLP | Fixed-length numeric vectors | Learns nonlinear feature combinations | No built-in spatial or relational structure | MNIST documentation benchmark with a nonstandard 30/70 split |
+| Perceptron | Fixed-length or mostly zero feature lists | Cheap rule that updates after mistakes | Needs features a straight boundary can separate | Scikit-learn digits demo; score uses the training data |
+| MLP | Fixed-length numeric lists | Learns new combinations of input details | Does not build in location or relationships | MNIST documentation test with an unusual 30/70 split |
 
 ## 1.6 Convolutional families
 
-Convolution shares a local detector across positions. The families below change receptive fields, connectivity, channel mixing, or scaling strategy. None guarantees perfect translation invariance: padding, stride, pooling, and boundary handling all affect equivariance.
+A convolution is a small learned pattern detector that moves across an image. It might respond to a stroke or texture. The same weights check every position. Each detector produces a **feature map**, a grid of responses; a stack of these maps forms channels. Later layers combine small patterns into larger ones.
+
+Pooling shrinks a map by summarizing nearby values. Stride is how far a detector moves each step; padding adds border values. These choices affect what happens when an object moves in the image. Shared detectors do not guarantee identical predictions at every position. The families below change detector sizes, connections, channel mixing, or overall network size.
 
 ### 1.6.1 Generic convolutional neural network (CNN)
+**In plain English:** A CNN searches images for small patterns, then combines them to recognize larger shapes. Sharing each detector across the image keeps the model relatively small.
 
-**Name:** Convolutional neural network; instantiated here as the small supervised MNIST classifier in the Keras example.
+**Name:** Convolutional neural network. The example is Keras's small, supervised MNIST digit classifier.
 
-**Category & sub-category:** Supervised learning; convolutional families; local, weight-shared visual feature extraction.
+**Category & sub-category:** Supervised learning; convolutional families. Local image detectors share their learned weights across positions.
 
-**Originating paper/vendor/year:** CNNs have multiple historical precursors; LeCun and colleagues' [1998 document-recognition paper](https://leon.bottou.org/papers/lecun-98h) is a foundational trainable formulation. The executable representative is Francois Chollet's [Simple MNIST convnet](https://keras.io/examples/vision/mnist_convnet/), originally published as an example in 2015 and presented in a Keras 3-compatible form at the evidence date.
+**Originating paper/vendor/year:** CNNs have several historical roots. LeCun and colleagues' [1998 document-recognition paper](https://leon.bottou.org/papers/lecun-98h) is a foundational reference. This example uses Francois Chollet's [Simple MNIST convnet](https://keras.io/examples/vision/mnist_convnet/), first published in 2015 and shown in Keras 3-compatible form at the evidence date.
 
-**Core mechanism:** A kernel slides across a feature map, detecting the same local pattern at each valid location. Multiple kernels learn different patterns; nonlinearities and further layers combine them into more contextual features. Pooling reduces spatial resolution. Shared weights make this more constrained than connecting every pixel to every hidden unit, an advantageous bias when nearby pixels form reusable strokes or textures.
+**Core mechanism:** Small filters check each image region for learned patterns. ReLU changes their responses, further filters combine them, and pooling reduces map size. The final layer uses these features to choose a digit. This uses fewer separate connections than linking every pixel to every hidden unit. It is useful when nearby pixels form reusable strokes or textures.
 
-**Inputs/outputs and typical data types:** Regular grids, here 28-by-28 single-channel images, become image-level class probabilities. One-dimensional and three-dimensional convolutions adapt the mechanism to signals or volumes, but have different shapes and costs.
+**Inputs/outputs and typical data types:** Here, 28-by-28 grayscale images enter and digit probabilities leave. Other CNNs use one-dimensional signals or three-dimensional volumes. Those versions have different shapes and costs.
 
-**Architecture diagram description:**
+**Architecture diagram description:** Two convolution-and-pooling stages produce 1,600 values. The final classifier turns them into ten digit scores.
 
 ```text
 28x28x1 -> Conv3x3(32), ReLU -> MaxPool2
@@ -134,45 +153,48 @@ Convolution shares a local detector across positions. The families below change 
          -> Flatten(1600) -> Dropout(0.5) -> Dense(10), softmax
 ```
 
-**Activation functions used and why:** ReLU makes the local feature hierarchy nonlinear and inexpensive to evaluate. Softmax makes the final outputs competing digit probabilities. Pooling is a reduction operation, not an additional learned activation.
+**Activation functions used and why:** ReLU supplies a cheap nonlinear change after each convolution. Softmax turns final scores into competing digit probabilities. Max-pooling keeps the largest response in a region; it is a size-reduction step, not another learned activation.
 
-**Loss function(s):** Categorical cross-entropy on one-hot digit labels in the cited implementation. It evaluates the probability assigned to the annotated digit, rather than merely counting correct argmax predictions.
+**Loss function(s):** Categorical cross-entropy penalizes low probability for the labelled digit. Labels are one-hot lists: the correct class is marked and the others are not. The loss measures more than whether the largest score happens to be correct.
 
-**Optimization algorithm(s):** Adam, batch size 128, and 15 epochs. The example passes `optimizer="adam"`, using Keras's default initial rate of 0.001 rather than specifying a custom schedule. No learning-rate decay schedule is introduced by the example.
+**Optimization algorithm(s):** Adam adapts weight-update sizes using recent gradients. This example uses batches of 128 and 15 epochs. `optimizer="adam"` selects Keras's default initial rate of 0.001. The example adds no learning-rate decay schedule.
 
-**Regularization techniques:** Dropout 0.5 before the final dense layer, intensity scaling to [0,1], and a 10% validation reservation from the training data. This particular network has neither batch normalization nor synthetic geometric augmentation.
+**Regularization techniques:** Dropout 0.5 randomly disables half the inputs to the final dense layer during training. Pixels are scaled to [0,1], and 10% of training images are reserved for validation. There is no batch normalization or synthetic geometric image augmentation here.
 
-**Backpropagation considerations:** Shared kernels accumulate gradients from all their spatial uses. Max-pooling sends gradients through winning positions; ReLU blocks gradients for negative preactivations. Layer geometry and padding must remain consistent between training and inference.
+**Backpropagation considerations:** Every place that uses a shared filter contributes to that filter's update. Max-pooling sends error signals through the positions it selected. ReLU blocks signals where its input was negative. Padding and layer shapes must match between training and later predictions.
 
-**Parameter count / scaling behavior:** The example reports **34,826 trainable parameters**. A standard convolution has $`q^2C_{\rm in}C_{\rm out}`$ kernel weights plus optional biases, independent of image area; a flattened dense head does depend on the final area.
+**Parameter count / scaling behavior:** The example reports **34,826 trainable parameters**. **Optional math:** A square convolution has $`q^2C_{\rm in}C_{\rm out}`$ weights, plus any biases. Here q is filter side, and the C terms count input and output channels. Larger images do not directly add filter weights, but they can enlarge a flattened dense head.
 
-**Training paradigm:** Supervised learning from digit labels, initialized and trained on the designated training subset. This is not an autoencoder or a self-supervised visual representation objective.
+**Training paradigm:** Digit labels supervise learning on the chosen training subset. This model neither rebuilds its inputs as an autoencoder nor learns from a label-free image objective.
 
-**Hardware/parallelism considerations:** Convolutions parallelize across images, locations, and channels. Optimized GPU kernels help large workloads; for this small network, transfer and launch overhead can matter more than theoretical peak arithmetic throughput.
+**Hardware/parallelism considerations:** GPUs can process different images, positions, and channels together. For this small model, moving data and starting GPU operations can matter more than peak calculation speed.
 
-**Strengths and limitations:** The model efficiently learns local image features. Downsampling can discard small details, and a fixed flattened head constrains input geometry. Robustness to handwriting styles outside MNIST must be measured, not inferred from parameter sharing.
+**Strengths and limitations:** The network learns local image structure efficiently. Pooling can discard small details, and its flattened head expects a fixed shape. It still needs tests on handwriting styles beyond MNIST.
 
-**Computational complexity / scalability notes:** A dense convolution costs $`O(BH_{\rm out}W_{\rm out}q^2C_{\rm in}C_{\rm out})`$ per forward pass. Summing over layers, then accounting for backward operations and $`E`$ epochs, is necessary; "CNNs are linear-time" without these dimensions is misleading.
+**Computational complexity / scalability notes:** Larger maps, filters, and channel counts all add work. **Optional math:** One dense convolution costs $`O(BH_{\rm out}W_{\rm out}q^2C_{\rm in}C_{\rm out})`$. B is batch size; H and W are output dimensions; q is filter side; C counts channels. Total training adds every layer, backward operations, and E epochs. Calling all CNNs "linear-time" hides these choices.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** Keras's [documented MNIST run](https://keras.io/examples/vision/mnist_convnet/) reports **0.9919000268 test accuracy**, about **99.19%**, on the conventional **10,000-image test set**. Of the 60,000 supplied training images, 6,000 are reserved by `validation_split=0.1`. A scanned digit is normalized, transformed into local stroke features, and assigned its highest-probability numeral; a document system would still need segmentation and confidence handling. My rationale relative to flattening directly into an MLP is reusable local structure. This is an educational benchmark, not measured automation of a bank or postal operation, and its split differs from the MLP example above.
+**Evidence status: Research benchmark.** Keras's [MNIST run](https://keras.io/examples/vision/mnist_convnet/) reports **0.9919000268 test accuracy**, about **99.19%**, on the conventional **10,000-image test set**. From 60,000 training images, `validation_split=0.1` reserves 6,000 for validation.
 
-**Notable vendor implementations/libraries:** Keras/TensorFlow convolutional layers, PyTorch `Conv1d/2d/3d`, and accelerator convolution libraries such as NVIDIA cuDNN. These supply operators, not one universal CNN recipe.
+The model scales a digit image, detects strokes, and selects the highest-probability digit. A document system would still need to locate characters and handle uncertain answers. Reusable local structure is the reason to try this instead of a flattened MLP. This educational test does not measure bank or postal automation. Its split also differs from the MLP example.
+
+**Notable vendor implementations/libraries:** Keras/TensorFlow and PyTorch `Conv1d/2d/3d` provide convolution layers. NVIDIA cuDNN supplies optimized GPU operations. These are building blocks, not one standard CNN training recipe.
 
 ### 1.6.2 LeNet
+**In plain English:** LeNet combines small stroke detectors to recognize handwritten characters. It shows how a compact image network can become part of a larger document-reading system.
 
-**Name:** LeNet, focusing on the historical LeNet-5 architecture and distinguishing it from simplified teaching reproductions.
+**Name:** LeNet, focusing on historical LeNet-5. Simplified teaching versions are not necessarily the same network.
 
-**Category & sub-category:** Supervised learning; convolutional families; small document and handwritten-character recognizers.
+**Category & sub-category:** Supervised learning; convolutional families. Small CNNs recognize document characters and handwriting.
 
-**Originating paper/vendor/year:** Yann LeCun, Leon Bottou, Yoshua Bengio, and Patrick Haffner, [Gradient-Based Learning Applied to Document Recognition](https://leon.bottou.org/papers/lecun-98h), Proceedings of the IEEE, 1998. Earlier LeNet-family systems preceded this paper; 1998 identifies the detailed reference, not the first convolutional network.
+**Originating paper/vendor/year:** Yann LeCun, Leon Bottou, Yoshua Bengio, and Patrick Haffner describe it in [Gradient-Based Learning Applied to Document Recognition](https://leon.bottou.org/papers/lecun-98h), Proceedings of the IEEE, 1998. Earlier LeNet systems already existed. This date identifies the detailed reference, not the first CNN.
 
-**Core mechanism:** LeNet alternates learned local feature detectors and subsampling, progressively combining strokes into character-level evidence. LeNet-5's C3 layer connects selected, rather than all, earlier feature maps. Its learned subsampling stages are not identical to a modern parameter-free average-pooling layer. The final historical classifier measures distances from a learned feature vector to class prototypes, illustrating that a CNN need not end in today's usual softmax linear head.
+**Core mechanism:** Learned filters find local strokes. Smaller maps then help later layers combine them into character features. The C3 layer connects only selected earlier maps, not every map. Its shrinking stages also have learned values, unlike modern parameter-free average pooling. At the end, the historical network compares features with class prototypes and picks a low-distance answer. It does not use today's usual softmax head.
 
-**Inputs/outputs and typical data types:** Centered, normalized grayscale character images, represented in a 32-by-32 input field, become ten digit-associated scores. Recognition of an entire cheque additionally requires locating fields and resolving character segmentation.
+**Inputs/outputs and typical data types:** Centered, scaled grayscale characters occupy a 32-by-32 input field. The model outputs ten digit-related scores. Reading a whole cheque also requires finding fields and deciding where characters begin and end.
 
-**Architecture diagram description:**
+**Architecture diagram description:** C names convolution layers; S names subsampling stages; F6 is a dense feature layer. The final RBF scores measure distance to prototypes.
 
 ```text
 32x32 -> C1: 6 maps, 5x5 -> S2: subsample
@@ -181,45 +203,48 @@ Convolution shares a local detector across positions. The families below change 
       -> lowest-energy digit
 ```
 
-**Activation functions used and why:** The historical feature units use scaled hyperbolic tangents; the output uses Euclidean radial-basis-function distances. Bounded feature responses suit the prototype coding. Modern ReLU/softmax "LeNet" examples are useful adaptations, not evidence that the original used those operations.
+**Activation functions used and why:** Historical feature units use scaled tanh, a smooth function whose output stays within bounds. This suits the prototype representation. The output uses Euclidean radial-basis-function distances. ReLU/softmax teaching versions are useful adaptations, not the original operations.
 
-**Loss function(s):** The original discussion includes squared-error and discriminative, likelihood-related criteria for the distance-based outputs. A competitive criterion lowers the correct class energy relative to alternatives. Replacing that head with logits normally entails supervised cross-entropy; the head and loss must be changed together.
+**Loss function(s):** The paper discusses squared-error and likelihood-related losses for the distance scores. A competitive loss pushes the correct class's energy below the others. If a modern version replaces distances with ordinary class scores, it usually also changes the loss to cross-entropy.
 
-**Optimization algorithm(s):** The historical training uses backpropagation with stochastic, curvature-aware learning procedures discussed in the paper; there is no family-wide learning-rate schedule. For an explicitly reproducible **different** recipe, [Dive into Deep Learning 1.0.3](https://d2l.ai/chapter_convolutional-neural-networks/lenet.html) trains its sigmoid/average-pooling LeNet adaptation with SGD at 0.1 for ten epochs on Fashion-MNIST. That schedule is not attributed to the historical cheque system.
+**Optimization algorithm(s):** Historical training uses stochastic backpropagation methods that also consider how sharply the loss changes. The family has no single learning-rate schedule. A clearly **different** recipe appears in [Dive into Deep Learning 1.0.3](https://d2l.ai/chapter_convolutional-neural-networks/lenet.html): its sigmoid/average-pooling adaptation uses SGD at 0.1 for ten Fashion-MNIST epochs. That is not the cheque system's schedule.
 
-**Regularization techniques:** Local connectivity and weight sharing constrain the hypothesis space. Normalization and suitable image transformations address handwriting variability. The original architecture does not contain batch normalization or modern dropout.
+**Regularization techniques:** Local connections and shared weights limit what the network can learn, helping avoid memorization. Scaling and suitable image changes address handwriting variation. Original LeNet has neither batch normalization nor modern dropout.
 
-**Backpropagation considerations:** Saturated tanh units weaken gradients, making input scaling and initialization important. Gradients must respect C3's actual connection pattern and the trainable subsampling parameters; silently replacing them changes the model.
+**Backpropagation considerations:** Tanh flattens near its limits, weakening backward signals. Input scaling and starting weights therefore matter. Updates must follow C3's real connections and include the learned subsampling values. Replacing either changes the model.
 
-**Parameter count / scaling behavior:** LeNet-5 is approximately a **60,000-parameter** model. Fully connected C3 replacements and modern heads produce different totals. Weight sharing keeps the convolutional portion small, whereas the final feature-to-class mapping depends on the chosen character vocabulary.
+**Parameter count / scaling behavior:** LeNet-5 has approximately **60,000 parameters**. Connecting all C3 maps or changing the output head changes this count. Shared filters keep the early network small; the final class mapping depends on the character vocabulary.
 
-**Training paradigm:** Supervised character learning. The larger document system can additionally optimize multiple modules against labelled strings; it is not unsupervised pretraining.
+**Training paradigm:** Known character labels guide learning. A larger document system can also train several connected modules using labelled strings. This is not unsupervised pretraining.
 
-**Hardware/parallelism considerations:** The small model is easily accommodated by contemporary CPUs and GPUs. Historical document throughput depended on the complete recognition pipeline, not just neural arithmetic.
+**Hardware/parallelism considerations:** Modern CPUs and GPUs can easily hold the small model. Historical document throughput measured the whole recognition process, not only its neural calculations.
 
-**Strengths and limitations:** LeNet explains how inductive bias makes small-data image learning practical. Its small receptive fields and low-resolution design do not make it a drop-in recognizer for arbitrary photographs or complex page layouts.
+**Strengths and limitations:** LeNet builds useful image assumptions into a small model. Its low-resolution design and limited visible regions do not make it a ready-made solution for arbitrary photographs or complicated pages.
 
-**Computational complexity / scalability notes:** Sum convolution costs $`HWq^2C_{\rm in}C_{\rm out}`$, adjusted for sparse channel connectivity, plus dense-layer matrix products. Running a character network separately on many candidate crops can make segmentation search a larger expense than one network evaluation.
+**Computational complexity / scalability notes:** Reading many possible character crops may cost more than one network pass. **Optional math:** Convolution work includes terms $`HWq^2C_{\rm in}C_{\rm out}`$, adjusted for missing channel connections, plus dense matrix products. H and W are map dimensions, q is filter side, and C counts channels.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Sourced application.** The [publisher's account of the 1998 study](https://proceedingsoftheieee.ieee.org/gradient-based-learning-applied-to-document-recognition/) describes a commercially deployed **graph-transformer cheque-reading system containing CNN character recognizers**. A cheque image enters field extraction and segmentation hypotheses; recognizer scores inform candidate digit strings; globally trained modules select a reading or support rejection. The documented design combines recognition with segmentation rather than assuming characters arrive perfectly cropped. It establishes a real document-processing application, **not that every deployed module was an unchanged LeNet-5**, nor an isolated LeNet accuracy or financial saving. The source reports deployment at substantial daily volume, but this chapter does not convert system throughput into an architecture-specific business KPI.
+**Evidence status: Sourced application.** The [publisher's account](https://proceedingsoftheieee.ieee.org/gradient-based-learning-applied-to-document-recognition/) describes a commercially deployed **graph-transformer cheque-reading system containing CNN character recognizers**. It extracts fields and tries possible character divisions. Recognizer scores guide candidate digit strings; jointly trained modules choose a reading or support rejecting it.
 
-**Notable vendor implementations/libraries:** Historical author implementations and modern PyTorch, Keras, and D2L reproductions. Check activation, pooling, padding, C3 connectivity, and output head before treating two implementations as equivalent.
+The system tackles character recognition and segmentation together, rather than assuming perfect crops. This documents a real application, **not that every deployed module was unchanged LeNet-5**. It supplies neither isolated LeNet accuracy nor a financial saving. The reported substantial daily volume concerns the full system, not an architecture-specific business gain.
+
+**Notable vendor implementations/libraries:** Historical author code and modern PyTorch, Keras, and D2L versions exist. Compare activations, pooling, padding, C3 connections, and the output head before treating versions as equivalent.
 
 ### 1.6.3 AlexNet
+**In plain English:** AlexNet learns several levels of image patterns to recognize objects in photographs. Its large network showed how GPUs could make this kind of training practical.
 
-**Name:** AlexNet; the 2012 ImageNet convolutional architecture, not every later pretrained object carrying that name.
+**Name:** AlexNet, the 2012 ImageNet network. Later models or saved weights with this name may differ.
 
-**Category & sub-category:** Supervised learning; convolutional families; large-scale image classification with GPU-trained deep CNNs.
+**Category & sub-category:** Supervised learning; convolutional families. Deep image classification trained at large scale on GPUs.
 
-**Originating paper/vendor/year:** Alex Krizhevsky, Ilya Sutskever, and Geoffrey Hinton, [ImageNet Classification with Deep Convolutional Neural Networks](https://proceedings.neurips.cc/paper_files/paper/2012/file/c399862d3b9d6b76c8436e924a68c45b-Paper.pdf), NeurIPS, then called NIPS, 2012; University of Toronto.
+**Originating paper/vendor/year:** Alex Krizhevsky, Ilya Sutskever, and Geoffrey Hinton, University of Toronto, [ImageNet Classification with Deep Convolutional Neural Networks](https://proceedings.neurips.cc/paper_files/paper/2012/file/c399862d3b9d6b76c8436e924a68c45b-Paper.pdf), NeurIPS, then called NIPS, 2012.
 
-**Core mechanism:** Five convolutional layers build visual features before three fully connected layers classify them. ReLU permits faster optimization than the saturating alternatives investigated in the paper. Overlapping max-pooling reduces resolution; local response normalization operates across nearby feature channels. Some convolutions are split into groups because the original model is partitioned between two GPUs. This historical engineering constraint is part of the published architecture.
+**Core mechanism:** Five convolution layers build visual features, then three dense layers classify them. ReLU trained faster than the flattening activations tested in the paper. Overlapping max-pooling shrinks maps. Local response normalization (LRN) rescales responses using nearby channels. Some convolutions connect channels in groups because the original network was split across two GPUs. This hardware choice is part of the published design.
 
-**Inputs/outputs and typical data types:** RGB crops from natural photographs become probabilities for 1,000 ImageNet classes. The paper describes 224-by-224 crops; reproductions using 227 pixels or different padding must not be assumed shape-identical.
+**Inputs/outputs and typical data types:** RGB photograph crops become probabilities for 1,000 ImageNet classes. The paper describes 224-by-224 crops. Versions using 227 pixels or different padding do not necessarily have identical shapes.
 
-**Architecture diagram description:**
+**Architecture diagram description:** FC means fully connected, or dense. Selected convolution groups run on separate GPUs in the original.
 
 ```text
 RGB crop -> Conv11/stride4 -> ReLU/LRN/pool
@@ -229,45 +254,48 @@ RGB crop -> Conv11/stride4 -> ReLU/LRN/pool
             [selected convolutional groups split across two GPUs]
 ```
 
-**Activation functions used and why:** ReLU throughout the hidden network; softmax at the output. LRN rescales activations but is not batch normalization, which was not part of this model.
+**Activation functions used and why:** Hidden layers use ReLU; the output uses softmax. LRN rescales activations across channels. It is not batch normalization, which this model did not use.
 
-**Loss function(s):** Multinomial negative log-likelihood, equivalently cross-entropy for the annotated image class, plus weight decay during optimization.
+**Loss function(s):** Class cross-entropy, also called multinomial negative log-likelihood, penalizes low probability for the image label. Training also uses weight decay to discourage large weights.
 
-**Optimization algorithm(s):** SGD with momentum 0.9, batch size 128, and weight decay 0.0005. The initial learning rate is 0.01, manually divided by ten when validation improvement stalls; the paper reports three such reductions.
+**Optimization algorithm(s):** SGD uses momentum 0.9, batch size 128, and weight decay 0.0005. The initial rate is 0.01. When validation improvement stalls, it is manually divided by ten; the paper reports three reductions.
 
-**Regularization techniques:** Dropout 0.5 in the first two fully connected layers, random crops and horizontal reflections, and PCA-based RGB intensity perturbations. Test-time crop averaging is a separate inference procedure, not another training regularizer.
+**Regularization techniques:** The first two dense layers use dropout 0.5. Training changes crops, mirrors images horizontally, and varies RGB intensity using principal-component-based changes. Averaging test crops is a separate prediction procedure, not a training regularizer.
 
-**Backpropagation considerations:** ReLU reduces saturation but does not eliminate dead units or optimization instability. Weight sharing aggregates spatial gradients; cross-GPU communication is necessary at selected connections. The original normalization and group structure must be included when reproducing the result.
+**Backpropagation considerations:** ReLU reduces flattened responses but can still leave units inactive or training unstable. Each shared filter gathers errors from all positions. Some connections need cross-GPU communication. Reproducing the paper requires its normalization and group layout.
 
-**Parameter count / scaling behavior:** Approximately **60 million parameters**, much of the storage in dense layers. Shrinking the classifier can reduce parameters more than it reduces convolutional feature-extraction work.
+**Parameter count / scaling behavior:** AlexNet has about **60 million parameters**, many in its dense layers. A smaller classifier can greatly reduce storage without removing much of the convolution work.
 
-**Training paradigm:** Supervised ImageNet classification. Additional ImageNet Fall 2011 **labelled** pretraining was used for two members of the best 2012 ensemble; that is not self-supervised image learning.
+**Training paradigm:** ImageNet labels supervise training. Two members of the best 2012 ensemble also used **labelled** ImageNet Fall 2011 pretraining. That extra stage was not self-supervised learning.
 
-**Hardware/parallelism considerations:** The published implementation used two NVIDIA GPUs with explicit model partitioning. A modern single accelerator may hold the network, but that does not reproduce historical timing.
+**Hardware/parallelism considerations:** The original used two NVIDIA GPUs with explicitly divided work. A modern single accelerator may fit the model, but does not reproduce its historical timing.
 
-**Strengths and limitations:** AlexNet demonstrated learnable large-scale visual representations and practical GPU training. Its large dense head, early aggressive downsampling, and historical normalization make it an inefficient default for many contemporary tasks.
+**Strengths and limitations:** AlexNet demonstrated large-scale learned image features and useful GPU training. Its heavy dense head, early sharp downsampling, and older normalization often make it an inefficient starting point today.
 
-**Computational complexity / scalability notes:** Add the convolutional costs at each stage and the dense matrix products. Grouped layers reduce channel interactions relative to fully connected convolutions. Ten test crops multiply inference work even for one trained model; ensembles multiply it further.
+**Computational complexity / scalability notes:** Add every convolution and dense layer's work. Grouped convolutions use fewer channel connections. Ten crops mean about ten image passes even for one trained model; averaging several models adds further work.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** For natural-image recognition, the [paper](https://proceedings.neurips.cc/paper_files/paper/2012/file/c399862d3b9d6b76c8436e924a68c45b-Paper.pdf) reports **18.2% top-5 validation error** for its single ILSVRC-2012 CNN and **15.3% top-5 test error** for an ensemble of **seven networks**, including two pretrained on the approximately 15-million-image, 22,000-category Fall 2011 release and then fine-tuned. Five ordinary models gave 16.4%, **not a single model**. The [challenge results](https://image-net.org/challenges/LSVRC/2012/results.html) independently distinguish supplied-only from additional-data entries. RGB crops become averaged class scores and a five-label candidate list; top-5 counts success if the reference label appears anywhere in it. My technical rationale relative to fixed feature pipelines is end-to-end feature learning. No commercial photo-tagging KPI is established.
+**Evidence status: Research benchmark.** The [paper](https://proceedings.neurips.cc/paper_files/paper/2012/file/c399862d3b9d6b76c8436e924a68c45b-Paper.pdf) reports **18.2% top-5 validation error** for one ILSVRC-2012 CNN. Top-5 error means the correct label is missing from the five highest-ranked answers. Its **seven-network ensemble** reports **15.3% top-5 test error**. Two members first trained on the approximately 15-million-image, 22,000-category Fall 2011 release, then were fine-tuned. Five ordinary models gave 16.4%; **that was not a single-model result**. The [challenge results](https://image-net.org/challenges/LSVRC/2012/results.html) also separate supplied-data-only and extra-data entries.
 
-**Notable vendor implementations/libraries:** The authors' CUDA-convnet lineage and torchvision's `alexnet`. Torchvision's implementation is a later architectural adaptation, so its weights and evaluation recipe must be identified separately.
+Each crop produces class scores. Averaging them yields five candidate labels. Learning features from end to end, rather than fixing them by hand, motivates this approach. These scores establish no commercial photo-tagging benefit.
+
+**Notable vendor implementations/libraries:** The authors' CUDA-convnet code and torchvision's `alexnet` belong to this family. Torchvision uses a later adaptation; identify its weights and test procedure separately.
 
 ### 1.6.4 VGG
+**In plain English:** VGG builds an image recognizer by repeating small pattern detectors. Its simple layout makes deeper image features easier to study, but uses substantial memory.
 
-**Name:** VGG, with VGG-16 configuration D as the main reference and VGG-19 configuration E as a deeper variant.
+**Name:** VGG. The main reference is VGG-16 configuration D; VGG-19 configuration E is a deeper version.
 
-**Category & sub-category:** Supervised learning; convolutional families; deep, homogeneous stacks of small convolutions.
+**Category & sub-category:** Supervised learning; convolutional families. Deep stacks repeatedly apply small convolutions.
 
-**Originating paper/vendor/year:** Karen Simonyan and Andrew Zisserman, Oxford Visual Geometry Group, [Very Deep Convolutional Networks for Large-Scale Image Recognition](https://arxiv.org/html/1409.1556v6). The preprint appeared in 2014; the conference publication is ICLR 2015.
+**Originating paper/vendor/year:** Karen Simonyan and Andrew Zisserman of Oxford's Visual Geometry Group wrote [Very Deep Convolutional Networks for Large-Scale Image Recognition](https://arxiv.org/html/1409.1556v6). The preprint appeared in 2014; the ICLR conference paper appeared in 2015.
 
-**Core mechanism:** Repeated 3-by-3 convolutions, interleaved with nonlinearities, enlarge effective receptive fields without using a large spatial kernel at every step. Two stride-one 3-by-3 layers have a 5-by-5 receptive field, but also an intervening nonlinearity. Channels increase as pooling reduces image area. A large dense classifier aggregates the final feature maps. The design's uniformity made depth a comparatively easy experimental variable.
+**Core mechanism:** Repeated 3-by-3 filters combine information from larger regions without using a large filter at each layer. Two such layers moving one pixel at a time see a 5-by-5 region together. They also add an activation between them, unlike one large filter. Pooling shrinks maps as channel counts grow. A large dense head combines the final features. Repeating the same design made depth easier to compare.
 
-**Inputs/outputs and typical data types:** RGB images become 1,000-way class scores; intermediate features can be reused for other visual tasks. Training uses 224-pixel crops, while dense evaluation can operate on larger resized images.
+**Inputs/outputs and typical data types:** RGB images become scores for 1,000 classes. Earlier features can support other image tasks. Training uses 224-pixel crops. Dense evaluation applies the network across a larger resized image rather than only one crop.
 
-**Architecture diagram description:**
+**Architecture diagram description:** The repeated counts specify VGG-16 configuration D. Five pooling stages lead to three dense layers.
 
 ```text
 RGB -> [Conv3x3(64)]x2 -> pool -> [Conv3x3(128)]x2 -> pool
@@ -276,45 +304,50 @@ RGB -> [Conv3x3(64)]x2 -> pool -> [Conv3x3(128)]x2 -> pool
     -> softmax                          [VGG-16 configuration D]
 ```
 
-**Activation functions used and why:** ReLU follows hidden weight layers; softmax closes the classifier. The main VGG-16/19 configurations do not use batch normalization. "VGG16-BN" denotes a subsequent variant, not the same historical model.
+**Activation functions used and why:** ReLU follows the hidden weight layers; softmax produces class probabilities. Main VGG-16/19 versions do not use batch normalization. "VGG16-BN" is a later variant, not the same historical model.
 
-**Loss function(s):** Multinomial logistic loss, or class cross-entropy, with weight decay.
+**Loss function(s):** Class cross-entropy, also called multinomial logistic loss, rewards probability on the correct class. Weight decay discourages large weights.
 
-**Optimization algorithm(s):** Minibatch SGD with momentum 0.9, batch size 256, and initial learning rate 0.01. The rate drops by ten when validation accuracy stalls; the paper describes three drops and 74 training epochs. Some deeper runs initialize layers from a shallower trained configuration.
+**Optimization algorithm(s):** Minibatch SGD uses momentum 0.9, batch size 256, and initial rate 0.01. The rate falls by ten when validation accuracy stalls. The paper describes three drops and 74 epochs. Some deeper runs start certain layers from a trained shallower network.
 
-**Regularization techniques:** Weight decay $`5\times10^{-4}`$, dropout 0.5 in the first two dense layers, random crops and reflections, and scale jittering in designated runs. These are part of the measured recipe, not effects attributable solely to depth.
+**Regularization techniques:** The first two dense layers use dropout 0.5. Training also uses random crops, reflections, and, in selected runs, changes in image scale. **Optional math:** Weight decay is $`5\times10^{-4}`$, meaning 0.0005. These training choices contribute to the score; depth alone does not explain it.
 
-**Backpropagation considerations:** Deep plain stacks are sensitive to initialization and gradient conditioning. The paper's staged initialization is historically relevant; modern initialization improvements should not be silently substituted into a purported reproduction.
+**Backpropagation considerations:** A long stack without shortcuts can be sensitive to starting weights and backward signal size. The paper's use of shallower trained layers is part of its method. Substituting modern starting-weight rules would not reproduce the historical recipe exactly.
 
-**Parameter count / scaling behavior:** The source reports approximately **138 million parameters for VGG-16** and **144 million for VGG-19**. Dense layers dominate storage, while early high-resolution convolutions contribute substantial computation.
+**Parameter count / scaling behavior:** The source reports about **138 million parameters for VGG-16** and **144 million for VGG-19**. Dense layers take much of the weight storage. Early convolutions process large maps and account for substantial calculation.
 
-**Training paradigm:** Supervised ImageNet learning. Feature extraction and supervised fine-tuning reuse that learned representation; using VGG inside an unsupervised objective does not retrospectively change its pretraining signal.
+**Training paradigm:** ImageNet class labels supervise learning. Other labelled tasks can reuse or fine-tune these features. Later using VGG in an unsupervised system does not change how its original weights were learned.
 
-**Hardware/parallelism considerations:** Regular 3-by-3 layers map well to optimized accelerators. Nevertheless, weight storage, dense-layer bandwidth, and large activation tensors can make VGG expensive relative to compact backbones.
+**Hardware/parallelism considerations:** Repeated 3-by-3 convolutions suit optimized accelerators. Large weight arrays, dense-layer data transfers, and intermediate maps can still make VGG expensive compared with compact networks.
 
-**Strengths and limitations:** The architecture is straightforward to inspect and adapt, with multiscale hierarchical features. Parameter-heavy dense heads and the absence of residual shortcuts make large-scale expansion less attractive than in later families.
+**Strengths and limitations:** The regular design is easy to inspect and adapt, and learns features at several scales. Its large dense head and lack of residual shortcuts make further expansion less appealing than in later designs.
 
-**Computational complexity / scalability notes:** Each 3-by-3 layer costs approximately $`O(9BHW C_{\rm in}C_{\rm out})`$. More layers can increase useful receptive field without proportionately increasing kernel size, but feature-map storage and repeated high-channel convolutions remain material costs.
+**Computational complexity / scalability notes:** More layers broaden the visible image region, but also repeat costly calculations. **Optional math:** A 3-by-3 layer costs about $`O(9BHW C_{\rm in}C_{\rm out})`$. B counts images in a batch; H and W are map dimensions; C counts input and output channels. Storing maps and repeating wide layers remain important costs.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** In the [paper's Table 3](https://arxiv.org/html/1409.1556v6), configuration D trained with image-side jittering over [256,512] obtains **25.6% top-1 and 8.1% top-5 error** on the **ImageNet validation set**, evaluated at image-side scale 384. This is a **single model at one test scale with dense evaluation**, not a single 224-pixel crop and not an ensemble. A resized photograph yields a spatial class-score map; spatial and reflected-image scores are aggregated before selecting labels. My rationale relative to AlexNet is a simpler, deeper small-kernel feature hierarchy, not a claim that depth alone explains this result. The study reports recognition accuracy, not commercial image-search value.
+**Evidence status: Research benchmark.** [Table 3](https://arxiv.org/html/1409.1556v6) reports **25.6% top-1 and 8.1% top-5 error** for configuration D on **ImageNet validation**. Top-1 checks the first label; top-5 checks whether the correct label appears among five choices. Training varies image side over [256,512]; evaluation uses side 384. This is **one model, one test scale, and dense evaluation**, not one 224-pixel crop or an ensemble.
 
-**Notable vendor implementations/libraries:** Oxford's released models, torchvision VGG, and Keras VGG16/VGG19. Check whether weights use batch normalization and whether preprocessing follows the original RGB/BGR and mean-subtraction conventions.
+A resized photograph produces a map of class scores. Scores across positions and reflected images are combined to rank labels. Compared with AlexNet, the design offers a simpler stack of small filters. The result does not show that depth alone caused the gain, or establish commercial image-search value.
+
+**Notable vendor implementations/libraries:** Oxford's released models, torchvision VGG, and Keras VGG16/VGG19 provide versions. Check batch normalization and input preparation, including RGB/BGR channel order and mean subtraction.
 
 ### 1.6.5 ResNet
+**In plain English:** ResNet lets each block improve an existing representation instead of replacing it. Shortcut paths carry earlier information forward, making very deep image networks easier to train.
 
-**Name:** Residual network, or ResNet; the original post-activation family, including bottleneck ResNet-50/101/152.
+**Name:** Residual network, or ResNet. This entry covers the original post-activation family, including bottleneck ResNet-50/101/152.
 
-**Category & sub-category:** Supervised learning; convolutional families; residual feature learning.
+**Category & sub-category:** Supervised learning; convolutional families. Residual blocks learn corrections to image features.
 
-**Originating paper/vendor/year:** Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun, Microsoft Research, [Deep Residual Learning for Image Recognition](https://arxiv.org/html/1512.03385v1), 2015 preprint and CVPR 2016 paper.
+**Originating paper/vendor/year:** Microsoft Research's Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun wrote [Deep Residual Learning for Image Recognition](https://arxiv.org/html/1512.03385v1). It appeared as a preprint in 2015 and a CVPR paper in 2016.
 
-**Core mechanism:** A block learns a correction $`F(x)`$ and forms $`y=\operatorname{ReLU}(x+F(x))`$ in the original post-activation design. When dimensions differ, a projection or specified padding aligns the shortcut. A bottleneck reduces channels with 1-by-1 convolution, processes them with 3-by-3 convolution, and expands again. Learning a small correction can be easier than forcing every additional block to relearn a useful transformation from scratch.
+**Core mechanism:** A block calculates a correction, adds the unchanged input through a shortcut, then applies ReLU. If the two paths have different sizes, a learned projection or specified padding aligns them. A bottleneck first reduces channels with a 1-by-1 filter, applies a 3-by-3 filter, then expands channels again. This lets a new block make a small useful change rather than relearn the entire transformation.
 
-**Inputs/outputs and typical data types:** Images become class probabilities or spatial feature maps for downstream detectors and segmenters. The representative classification model ends with global average pooling.
+**Optional math:** $`y=\operatorname{ReLU}(x+F(x))`$. Here x is the block input, F is its learned correction, and y is the output. ReLU comes after the sum in the original post-activation design.
 
-**Architecture diagram description:**
+**Inputs/outputs and typical data types:** Images become class probabilities or feature maps for object finding and pixel labelling. The classifier averages each final feature map across its spatial positions.
+
+**Architecture diagram description:** BN means batch normalization, which rescales layer values using training-batch statistics. The shortcut and correction join by addition.
 
 ```text
 image -> convolutional stem -> residual stages -> global average -> classifier
@@ -323,45 +356,48 @@ block: x -> 1x1/BN/ReLU -> 3x3/BN/ReLU -> 1x1/BN --+
        x ---------------- identity/projection ----------------+ -> add -> ReLU
 ```
 
-**Activation functions used and why:** ReLU and batch normalization in the original blocks, plus softmax for classification. The later pre-activation ResNet moves normalization and activations relative to the addition; it is not identical.
+**Activation functions used and why:** Original blocks use ReLU and batch normalization; classification uses softmax. Later pre-activation ResNets move normalization and activations relative to the sum. They are different designs.
 
-**Loss function(s):** Supervised softmax cross-entropy for ImageNet. Detector or segmentation uses attach different task-specific losses.
+**Loss function(s):** The ImageNet classifier uses softmax cross-entropy. Object detection or pixel segmentation adds losses suited to those different tasks.
 
-**Optimization algorithm(s):** SGD with momentum 0.9, batch size 256, initial learning rate 0.1, and reductions by ten when error plateaus. The paper permits up to 600,000 iterations; this is not necessarily the later standardized "90-epoch ResNet recipe."
+**Optimization algorithm(s):** SGD uses momentum 0.9, batch size 256, and initial rate 0.1. The rate falls by ten when error levels off. The paper allows up to 600,000 iterations. This should not automatically be replaced by a later "90-epoch ResNet recipe."
 
-**Regularization techniques:** Weight decay $`10^{-4}`$, training crops and flips, and batch normalization. The original classification experiments do not use dropout. Batch normalization requires appropriate training/inference statistics.
+**Regularization techniques:** Training uses crops, flips, and batch normalization, but no dropout in the original classification experiments. **Optional math:** Weight decay is $`10^{-4}`$, or 0.0001. Batch normalization must use the correct statistics during training and prediction.
 
-**Backpropagation considerations:** Shortcut paths improve signal and gradient propagation, but do not guarantee every deep model trains. The paper's degradation argument is not simply "all gradients vanished": normalized plain networks could still have worse training error when made deeper.
+**Backpropagation considerations:** Shortcuts help information and backward error signals travel through deep networks. They do not guarantee successful training. The paper's problem was not simply that every gradient vanished: deeper plain networks could have worse training error even with normalization.
 
-**Parameter count / scaling behavior:** ResNet-152 is roughly a **60-million-parameter** model; count varies with head and implementation. Bottlenecks permit deeper models without the parameter growth of equally wide, full 3-by-3 stacks.
+**Parameter count / scaling behavior:** ResNet-152 has roughly **60 million parameters**, depending on the head and implementation. Bottlenecks make depth less costly than equally wide stacks using full-width 3-by-3 layers throughout.
 
-**Training paradigm:** Supervised class learning; labelled transfer tasks reuse the backbone. Contrastive ResNet pretraining is a different objective and belongs in the representation-learning chapters.
+**Training paradigm:** Class labels supervise training; other labelled tasks can reuse the main feature network, or backbone. Contrastive ResNet pretraining uses a different objective and belongs in the representation-learning chapters.
 
-**Hardware/parallelism considerations:** Convolutions use accelerator-friendly dense operations. Shortcuts add relatively little arithmetic but require keeping tensors live; normalization and small batches can become system-level constraints.
+**Hardware/parallelism considerations:** Dense convolution work suits GPUs and other accelerators. Shortcuts add little arithmetic but require keeping earlier values in memory. Normalization and small batches can also limit efficient execution.
 
-**Strengths and limitations:** Residual learning makes deep feature hierarchies practical and widely reusable. Greater depth still increases latency and memory, and residual connections do not eliminate distribution shift, shortcut learning, or overfitting.
+**Strengths and limitations:** Residual blocks make deep, reusable feature networks practical. More depth still adds delay and memory use. Shortcuts do not prevent overfitting, reliance on misleading clues, or failure when new data differ from training data.
 
-**Computational complexity / scalability notes:** A bottleneck's cost is the sum of two channel projections and one reduced-width spatial convolution, approximately $`BHW(Cr+9r^2+rC')`$. It is incorrect to price every layer as a full $`C`$ by $`C`$ 3-by-3 convolution.
+**Computational complexity / scalability notes:** Narrowing the middle of a block reduces the expensive spatial filtering. **Optional math:** Its work is about $`BHW(Cr+9r^2+rC')`$. B is batch size, H and W are map dimensions, C and C' are input/output widths, and r is reduced width. This counts two projections and one narrow 3-by-3 filter, not three full-width spatial filters.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** The [original paper](https://arxiv.org/html/1512.03385v1) reports **4.49% top-5 ImageNet validation error** for a **single ResNet-152**, using its best fully convolutional, multiscale evaluation rather than a single crop. The often-quoted **3.57%** is instead the **six-model ensemble's ILSVRC-2015 test error**. A photograph passes through residual corrections, global pooling, and class scoring; evaluation asks whether its labelled class appears in the top five. The paper's documented motivation is the degradation of deeper plain networks, not deployment in a named Microsoft product. No business outcome is inferred from challenge rank.
+**Evidence status: Research benchmark.** The [original paper](https://arxiv.org/html/1512.03385v1) reports **4.49% top-5 ImageNet validation error** for a **single ResNet-152**. This uses its best fully convolutional, multiscale evaluation, not one crop. The famous **3.57%** instead belongs to the **six-model ensemble on the ILSVRC-2015 test set**.
 
-**Notable vendor implementations/libraries:** Torchvision, Keras applications, and numerous detection frameworks. ResNet-v1, pre-activation variants, and torchvision's bottleneck stride placement differ; select a specific graph and checkpoint.
+The image passes through residual corrections, spatial averaging, and class scoring. Evaluation checks whether the true class is among the five highest scores. The authors sought to fix worsening training error in deeper plain networks. These results do not identify a Microsoft product deployment or a business gain from challenge rank.
+
+**Notable vendor implementations/libraries:** Torchvision, Keras applications, and detection frameworks offer ResNets. ResNet-v1, pre-activation models, and torchvision's placement of bottleneck stride differ. Choose a specific network and checkpoint.
 
 ### 1.6.6 Inception
+**In plain English:** Inception checks an image with several sizes of pattern detector in parallel. It combines their results while using narrow intermediate layers to control the cost.
 
-**Name:** Inception family, anchored to **GoogLeNet/Inception-v1**. Later Inception versions add different factorization and normalization choices.
+**Name:** Inception family, using **GoogLeNet/Inception-v1** as the reference. Later versions change how filters are split and values are normalized.
 
-**Category & sub-category:** Supervised learning; convolutional families; multibranch, multiscale feature extraction.
+**Category & sub-category:** Supervised learning; convolutional families. Several branches gather image patterns at different scales.
 
-**Originating paper/vendor/year:** Christian Szegedy and colleagues, [Going Deeper with Convolutions](https://arxiv.org/html/1409.4842v1), 2014 preprint and CVPR 2015 paper, involving Google and collaborating researchers.
+**Originating paper/vendor/year:** Christian Szegedy and colleagues, Google and collaborating researchers, [Going Deeper with Convolutions](https://arxiv.org/html/1409.4842v1), 2014 preprint and CVPR 2015 paper.
 
-**Core mechanism:** An Inception module processes the same input through several branches and concatenates their channels. One branch uses 1-by-1 convolution, others use reduced-width 3-by-3 or 5-by-5 convolution, and another pools before projection. Bottleneck projections control the cost of large spatial filters. The network can combine local and broader-scale evidence without choosing one kernel size for every feature.
+**Core mechanism:** Each module sends the same input down four paths. One uses a 1-by-1 filter, two use narrowed 3-by-3 or 5-by-5 filters, and one pools before a projection. The outputs are placed side by side as channels, called concatenation. Narrowing channels before large filters controls cost. The next stage can use both local details and broader patterns.
 
-**Inputs/outputs and typical data types:** RGB images yield class probabilities or reusable convolutional feature maps. GoogLeNet's main path has 22 layers when counting parameterized layers along its depth.
+**Inputs/outputs and typical data types:** RGB images become class probabilities or reusable feature maps. GoogLeNet's main path is 22 layers deep when counting layers with parameters.
 
-**Architecture diagram description:**
+**Architecture diagram description:** Four parallel branches join by channel concatenation. Extra classification heads assist training but are absent during prediction.
 
 ```text
                          +-> 1x1 -----------------+
@@ -372,45 +408,50 @@ stem -> repeated modules -> global average -> dropout -> classifier
                          \-> auxiliary heads during training only
 ```
 
-**Activation functions used and why:** ReLU in the convolutional branches and softmax in classification heads. Inception-v1 is not the later batch-normalized Inception-v2/v3 family.
+**Activation functions used and why:** Branches use ReLU; classification heads use softmax. Inception-v1 is not the later batch-normalized Inception-v2/v3 family.
 
-**Loss function(s):** Main supervised cross-entropy plus auxiliary classifier losses, each weighted 0.3 during the original training. Auxiliary heads are removed for inference.
+**Loss function(s):** Training adds the main cross-entropy loss and extra classifier losses, each weighted 0.3. Those auxiliary heads are removed for inference, meaning ordinary predictions after training.
 
-**Optimization algorithm(s):** Asynchronous SGD with momentum 0.9; the documented schedule decreases the learning rate by 4% every eight epochs. The authors explicitly describe changes to training procedures across ensemble members, so a universal initial learning rate for every final member is not reconstructed here. Polyak averaging forms inference parameters.
+**Optimization algorithm(s):** The paper uses asynchronous SGD, where workers update without waiting for every other worker, with momentum 0.9. The learning rate falls by 4% every eight epochs. Procedures changed across ensemble members, so no universal starting rate is reconstructed here. Polyak averaging averages learned parameter values for prediction.
 
-**Regularization techniques:** Crop and scale augmentation, dropout, and auxiliary supervision. The main classifier uses 40% dropout in the architecture table. Global average pooling substantially reduces the need for a huge fully connected head.
+**Regularization techniques:** Training changes crop and image scale, uses dropout, and adds the extra supervised heads. The architecture table lists 40% dropout at the main classifier. Averaging maps across positions avoids a huge fully connected head.
 
-**Backpropagation considerations:** Gradients from the main and auxiliary objectives reach earlier layers through different paths. Concatenated branches must preserve compatible spatial dimensions. Additional supervision assists optimization but also changes the objective compared with a plain sequential CNN.
+**Backpropagation considerations:** Main and auxiliary losses send signals to earlier layers along different routes. Branch outputs need matching spatial dimensions before they can join. The extra heads change the training objective, not only the route for its gradients.
 
-**Parameter count / scaling behavior:** The main network has roughly **seven million parameters**, as indicated by its layerwise counts; auxiliary training heads add parameters. Channel-reduction widths are crucial: removing bottlenecks can make a multibranch design much more expensive.
+**Parameter count / scaling behavior:** Layerwise counts give roughly **seven million parameters** for the main network. Training-only heads add more. Without channel-narrowing bottlenecks, the multiple branches would be much more expensive.
 
-**Training paradigm:** Supervised ImageNet classification. "Sparse" architectural motivation in this paper does not mean token-routed mixture-of-experts training.
+**Training paradigm:** ImageNet labels supervise classification. The paper's motivation for a "sparse" architecture does not mean that a router selects different experts for each token.
 
-**Hardware/parallelism considerations:** Branches expose parallel work, but concatenation, small kernels, and synchronization can limit actual utilization. The paper's distributed training setup is not a universal production implementation recipe.
+**Hardware/parallelism considerations:** Branches can run in parallel. Joining their outputs, waiting for branches, and executing small operations can reduce the gain. The research setup for distributed training is not a universal production recipe.
 
-**Strengths and limitations:** Inception provides multiscale processing with a compact main classifier. Branch widths and topology are more complicated to tune than a homogeneous VGG stack; FLOP savings do not guarantee corresponding latency savings.
+**Strengths and limitations:** Inception combines several image scales with a compact main classifier. Branch sizes and connections are harder to tune than VGG's repeated pattern. Fewer arithmetic operations, often counted as FLOPs, do not guarantee equally faster predictions.
 
-**Computational complexity / scalability notes:** Add each branch's convolution and pooling cost. A 1-by-1 reduction from $`C`$ to $`r`$ changes the following 5-by-5 cost from $`25HWC C'`$ to $`25HWrC'`$, while adding the reduction cost $`HWCr`$.
+**Computational complexity / scalability notes:** Add the cost of every branch, including pooling. **Optional math:** A 1-by-1 reduction from C to r channels changes a later 5-by-5 filter from $`25HWC C'`$ work to $`25HWrC'`$, plus $`HWCr`$ for the reduction. H and W are map dimensions; C' is output width. The saving depends on choosing r smaller than C.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** The [2014 preprint's ILSVRC-2014 result](https://arxiv.org/html/1409.4842v1) is **6.67% top-5 classification error** on the validation and test evaluations for its final submission. That submission averages **seven models** using **144 crops per image**, not one pass through one GoogLeNet. Each crop produces a class distribution; averaging distributions yields the final ranked labels. Multiscale evidence is the authors' architectural motivation, while the extensive evaluation aggregation is separately responsible for part of the final score. The result establishes a recognition benchmark, not a measured Google-product deployment.
+**Evidence status: Research benchmark.** The [2014 preprint](https://arxiv.org/html/1409.4842v1) reports **6.67% top-5 error** on validation and test evaluations for its final ILSVRC-2014 submission. It averages **seven models** and **144 crops per image**. This is not one pass through one GoogLeNet.
 
-**Notable vendor implementations/libraries:** TensorFlow-Slim and torchvision `googlenet` implement this lineage. Inception-v3 factories expose a materially different architecture and must not inherit v1 benchmark claims.
+Each crop supplies class probabilities; averaging them produces ranked labels. Missing the correct label from the first five counts as an error. Multiscale features motivated the design, but extensive score averaging also contributes to the result. The benchmark does not establish a measured deployment inside a Google product.
+
+**Notable vendor implementations/libraries:** TensorFlow-Slim and torchvision `googlenet` implement this family. Inception-v3 builders create a substantially different network and cannot inherit v1's benchmark claims.
 
 ### 1.6.7 EfficientNet
+**In plain English:** EfficientNet grows an image network in several balanced ways instead of only adding layers. It aims to get useful recognition accuracy for a stated amount of computing work.
 
-**Name:** EfficientNet, focusing on the original B0-B7 family rather than EfficientNetV2 or later self-trained checkpoints.
+**Name:** EfficientNet, specifically the original B0-B7 family. EfficientNetV2 and later self-trained checkpoints are separate.
 
-**Category & sub-category:** Supervised learning; convolutional families; compound-scaled mobile inverted-bottleneck networks.
+**Category & sub-category:** Supervised learning; convolutional families. These networks jointly scale depth, channel width, and image resolution.
 
-**Originating paper/vendor/year:** Mingxing Tan and Quoc Le, Google, [EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks](https://proceedings.mlr.press/v97/tan19a.html), ICML 2019. Quantitative details below use the explicitly identified [arXiv v5](https://arxiv.org/html/1905.11946v5) tables.
+**Originating paper/vendor/year:** Mingxing Tan and Quoc Le, Google, [EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks](https://proceedings.mlr.press/v97/tan19a.html), ICML 2019. Numerical details here follow [arXiv v5](https://arxiv.org/html/1905.11946v5).
 
-**Core mechanism:** A searched B0 baseline uses mobile inverted bottlenecks: expand channels, apply depthwise spatial filtering, recalibrate channels with squeeze-and-excitation, and project back. Compound scaling increases depth, width, and input resolution together. With coefficients $`\alpha,\beta,\gamma`$, depth, width, and resolution scale as $`\alpha^\phi,\beta^\phi,\gamma^\phi`$, subject approximately to $`\alpha\beta^2\gamma^2\approx2`$. This balances competing capacity dimensions instead of scaling only layer count.
+**Core mechanism:** A search process chooses the small B0 starting network. Its blocks expand channels, filter each channel separately, adjust each channel's importance, then narrow the output. These are mobile inverted bottlenecks, or MBConv blocks. "Squeeze-and-excitation" means summarizing channels and using those summaries to control their strengths. Larger models add layers, widen channels, and enlarge inputs together.
 
-**Inputs/outputs and typical data types:** RGB images at a model-specific resolution become class probabilities. B0's reference resolution is 224; larger variants require larger inputs and more activation memory.
+**Optional math:** Depth, width, and resolution grow by $`\alpha^\phi,\beta^\phi,\gamma^\phi`$. Alpha, beta, and gamma are chosen growth factors; phi sets the model's scale. The approximate rule $`\alpha\beta^2\gamma^2\approx2`$ balances their estimated computation. It is not a measured timing law.
 
-**Architecture diagram description:**
+**Inputs/outputs and typical data types:** RGB images at a variant's chosen resolution become class probabilities. B0 uses reference resolution 224. Larger variants need larger images and more memory for intermediate maps.
+
+**Architecture diagram description:** Each channel is filtered separately in the depthwise step. A compatible input can also travel along the residual shortcut.
 
 ```text
 image -> stem -> repeated MBConv stages -> 1x1 head -> global average -> classifier
@@ -418,45 +459,48 @@ MBConv: expand -> SiLU -> depthwise -> SiLU -> squeeze/excite -> linear project
          input ---------------- compatible residual shortcut ----------------+
 ```
 
-**Activation functions used and why:** SiLU, also called Swish-1, provides a smooth gated nonlinearity. Squeeze-and-excitation uses sigmoid channel gates; the projection bottleneck is linear. Softmax supplies image-class probabilities.
+**Activation functions used and why:** SiLU, also called Swish-1, smoothly gates a value rather than sharply cutting it off. Sigmoid gates assign channel strengths between zero and one. The narrowing projection stays linear. Softmax produces class probabilities.
 
-**Loss function(s):** Supervised classification cross-entropy. Loss modifications in later distillation or self-training recipes are not part of the architecture definition.
+**Loss function(s):** Image labels guide cross-entropy training. Later teacher-student training or self-training may change the loss; those changes are not part of this architecture's definition.
 
-**Optimization algorithm(s):** The v5 recipe specifies RMSProp with decay 0.9 and momentum 0.9; initial learning rate 0.256 decays by 0.97 every 2.4 epochs. These values describe the paper's training configuration, not a portable rate for arbitrary batch sizes.
+**Optimization algorithm(s):** V5 uses RMSProp, which adjusts steps using recent gradient sizes, with decay 0.9 and momentum 0.9. Its initial learning rate 0.256 is multiplied by 0.97 every 2.4 epochs. These settings belong to the paper's training setup, not arbitrary batch sizes.
 
-**Regularization techniques:** Batch normalization, weight decay $`10^{-5}`$, AutoAugment, stochastic depth with reported survival probability 0.8, and dropout increasing from 0.2 at B0 to 0.5 at B7. A 25,000-image training minival subset supports checkpoint stopping.
+**Regularization techniques:** Training uses batch normalization and AutoAugment's selected image changes. Stochastic depth sometimes skips blocks; the reported survival probability is 0.8. Dropout rises from 0.2 in B0 to 0.5 in B7. A 25,000-image training minival subset guides when to stop and keep a checkpoint. **Optional math:** Weight decay is $`10^{-5}`$, or 0.00001.
 
-**Backpropagation considerations:** Residual paths and normalization assist optimization. Channel gates can suppress gradients, and increasing resolution changes batch-memory constraints. Changing batch size may require revisiting normalization and optimization settings.
+**Backpropagation considerations:** Shortcuts and normalization help backward signals. Channel gates can weaken them. Larger images also restrict batch size through memory use; changing batch size may require new normalization and optimizer settings.
 
-**Parameter count / scaling behavior:** V5 reports **5.3 million parameters for B0** and **66 million for B7**. Scaling width increases many pointwise-convolution weights quadratically; resolution increases activations and computation without directly enlarging most kernel tensors.
+**Parameter count / scaling behavior:** V5 lists **5.3 million parameters for B0** and **66 million for B7**. Widening both sides of pointwise filters can roughly square their weight growth. Larger images mostly increase calculations and stored responses, not filter weights.
 
-**Training paradigm:** The cited B-family experiment is supervised ImageNet training, followed where relevant by supervised transfer. Noisy Student and other additional-data training stages are separate recipes.
+**Training paradigm:** The quoted B-family study uses supervised ImageNet training and, where relevant, supervised transfer to other tasks. Noisy Student and other extra-data stages are different recipes.
 
-**Hardware/parallelism considerations:** Pointwise matrix products and depthwise kernels have different utilization characteristics. Larger resolution can erase apparent parameter-efficiency advantages for memory-limited devices; measured latency must specify runtime and accelerator.
+**Hardware/parallelism considerations:** Channel-mixing matrix products and per-channel filters use hardware differently. Larger images can erase a small-parameter model's memory advantage. Any speed comparison must name the runtime and accelerator.
 
-**Strengths and limitations:** Compound scaling offers a principled accuracy/resource trade-off. The optimal balance is hardware- and workload-dependent, and architecture-search cost is additional to training an already selected B0.
+**Strengths and limitations:** Balanced scaling offers a way to trade accuracy against resources. The best balance depends on the device and task. Searching for B0 costs extra work beyond training a design already chosen.
 
-**Computational complexity / scalability notes:** A depthwise-plus-pointwise block costs terms proportional to $`HWq^2C`$ and $`HWC C'`$, plus expansion and excitation. The approximate compound-cost relation is a design model, not a claim of exactly doubled wall-clock time per scaling step.
+**Computational complexity / scalability notes:** Filtering each channel and mixing channels have different costs. **Optional math:** Their main terms are $`HWq^2C`$ and $`HWC C'`$, plus expansion and channel gating. H and W are map dimensions, q is filter side, and C and C' are channel widths. A scaling step's approximate doubled work does not promise doubled elapsed time.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** In [v5 Table 2](https://arxiv.org/html/1905.11946v5), **EfficientNet-B0** achieves **77.1% top-1 and 93.3% top-5 ImageNet validation accuracy**, using the paper's **single-model, single-crop** evaluation. A 224-pixel photograph passes through scaled bottlenecks and channel gates to produce an object label, suitable as one component of a visual cataloguing workflow. My rationale relative to a uniformly widened CNN is resource-aware scaling; no deployed cataloguing KPI is reported. Version provenance matters: v5 gives B7 **84.3% top-1**, whereas the ICML landing-page abstract says **84.4%**. Those values are not silently treated as one interchangeable checkpoint.
+**Evidence status: Research benchmark.** [V5 Table 2](https://arxiv.org/html/1905.11946v5) gives **EfficientNet-B0 77.1% top-1 and 93.3% top-5 ImageNet validation accuracy**, using **one model and one crop**. Top-1 checks the first choice; top-5 allows any of five. A 224-pixel image passes through bottlenecks and channel gates to choose an object label. This could support visual cataloguing, but no deployed business result is reported.
 
-**Notable vendor implementations/libraries:** Google's EfficientNet implementations, Keras applications, torchvision, and timm. Record the specific weights, preprocessing resolution, and whether additional-data training was used.
+Resource-aware growth, rather than simply widening everything, motivates the comparison. Version differences matter: v5 lists B7 at **84.3% top-1**, while the ICML landing-page abstract says **84.4%**. These are not silently combined into one checkpoint result.
+
+**Notable vendor implementations/libraries:** Google releases, Keras applications, torchvision, and timm offer EfficientNet versions. Record the exact weights, input resolution, and any additional-data training.
 
 ### 1.6.8 ConvNeXt
+**In plain English:** ConvNeXt updates the design and training of a convolutional image network. It tests whether small pattern detectors can remain competitive without using attention layers.
 
-**Name:** ConvNeXt, focusing on the original **ConvNeXt-Tiny**, not ConvNeXt V2.
+**Name:** ConvNeXt, using original **ConvNeXt-Tiny**, not ConvNeXt V2.
 
-**Category & sub-category:** Supervised learning; convolutional families; modernized pure convolutional backbones.
+**Category & sub-category:** Supervised learning; convolutional families. A modern convolution-only network supplies image features.
 
-**Originating paper/vendor/year:** Zhuang Liu and colleagues, [A ConvNet for the 2020s](https://arxiv.org/html/2201.03545v2), CVPR 2022, associated with Meta AI and academic collaborators.
+**Originating paper/vendor/year:** Zhuang Liu and colleagues, Meta AI and academic collaborators, [A ConvNet for the 2020s](https://arxiv.org/html/2201.03545v2), CVPR 2022.
 
-**Core mechanism:** ConvNeXt revisits a ResNet-style hierarchy using design choices also associated with vision Transformers: patch-like downsampling, large depthwise kernels, inverted bottlenecks, layer normalization, and fewer activations. It remains convolutional rather than computing content-dependent self-attention. The paper also modernizes the training recipe before making architectural comparisons, separating part of the recipe effect from the architectural effect.
+**Core mechanism:** ConvNeXt revises a ResNet-style hierarchy. It starts with patch-like downsampling, uses large per-channel filters, expands and narrows channels, and uses fewer activations. Layer normalization rescales each example's internal features rather than relying on other examples in a batch. The model remains convolutional. It does not use attention's input-dependent weighted lookups. The paper improves training before comparing designs, helping separate training effects from architecture effects.
 
-**Inputs/outputs and typical data types:** RGB images become class predictions or hierarchical feature maps. Tiny uses four stages whose reference widths are 96, 192, 384, and 768.
+**Inputs/outputs and typical data types:** RGB images become class predictions or feature maps at several scales. Tiny's four stages have widths 96, 192, 384, and 768.
 
-**Architecture diagram description:**
+**Architecture diagram description:** The stage counts are [3,3,9,3]. LayerScale controls the correction's size before it joins the shortcut.
 
 ```text
 RGB -> 4x4/stride4 stem -> stages [3,3,9,3] -> global average -> linear head
@@ -464,45 +508,48 @@ block: x -> depthwise 7x7 -> LayerNorm -> pointwise expand 4x
          -> GELU -> pointwise project -> LayerScale -> stochastic depth -> +x
 ```
 
-**Activation functions used and why:** GELU provides the block's principal smooth nonlinearity. Layer normalization replaces the batch-dependent normalization used in many older CNNs. The classification output is trained as logits with cross-entropy.
+**Activation functions used and why:** GELU smoothly reduces less useful responses instead of using ReLU's sharp cutoff. Layer normalization controls feature scale. The head produces raw class scores, called logits, for cross-entropy training.
 
-**Loss function(s):** Supervised cross-entropy with label smoothing and the soft targets induced by Mixup/CutMix. These targets differ from a single hard one-hot class but remain label-derived supervision.
+**Loss function(s):** Supervised cross-entropy uses softened labels. Label smoothing avoids assigning all target weight to one class. Mixup blends images and labels; CutMix combines image regions and their labels. The targets still come from supplied labels.
 
-**Optimization algorithm(s):** For ImageNet-1K, AdamW with learning rate 0.004, batch size 4096, and 300 epochs; 20 epochs of linear warmup precede cosine decay. Weight decay is 0.05. Separate ImageNet-22K pretraining/fine-tuning recipes are not the Tiny 1K-only result below.
+**Optimization algorithm(s):** ImageNet-1K training uses AdamW, which separates weight decay from adaptive updates. Settings are learning rate 0.004, batch size 4096, 300 epochs, and weight decay 0.05. The rate rises for 20 warmup epochs, then follows a smooth cosine decline. ImageNet-22K pretraining/fine-tuning is a separate recipe from the Tiny 1K-only result.
 
-**Regularization techniques:** Mixup, CutMix, RandAugment, random erasing, label smoothing, and stochastic depth. LayerScale starts at $`10^{-6}`$; exponential moving average is used in the reported training setup.
+**Regularization techniques:** Training uses Mixup, CutMix, RandAugment image changes, random erasing, label smoothing, and stochastic depth. An exponential moving average keeps a running weighted average of model weights. **Optional math:** LayerScale starts at $`10^{-6}`$, a very small initial multiplier for residual corrections.
 
-**Backpropagation considerations:** Residual connections and small initial residual scales stabilize a deeper network. Normalization layout, stochastic-depth behavior, and mixed-precision handling can affect implementation equivalence; adopting the name without the recipe is insufficient.
+**Backpropagation considerations:** Shortcuts and initially small corrections help deep training stay stable. Normalization placement, block skipping, and numerical precision can change behavior. A matching model name is not enough to reproduce the setup.
 
-**Parameter count / scaling behavior:** The paper reports **29 million parameters for ConvNeXt-T**. Larger family members increase width and stage depth. Large depthwise spatial kernels add only $`q^2C`$ weights, while pointwise expansions dominate much of channel-mixing capacity.
+**Parameter count / scaling behavior:** ConvNeXt-T has **29 million parameters** in the paper. Larger versions increase width and stage depth. **Optional math:** A depthwise filter needs only $`q^2C`$ weights, where q is filter side and C counts channels. Channel-expanding pointwise layers hold much of the remaining capacity.
 
-**Training paradigm:** The reference Tiny result is supervised ImageNet-1K learning. Masked-image pretraining and ConvNeXt V2's changes are separate methods, not implied by the 2022 name.
+**Training paradigm:** This Tiny result uses supervised ImageNet-1K labels. Masked-image learning and ConvNeXt V2 are different methods, not implied by the original 2022 name.
 
-**Hardware/parallelism considerations:** Channels-last layouts and efficient depthwise kernels can be important. Layer normalization and data layout conversion introduce costs not captured by counting multiplications. A FLOP-matched Transformer is not guaranteed to have equal latency.
+**Hardware/parallelism considerations:** Efficient depthwise operations and channels-last memory layout can help. Normalization and data rearrangement take time beyond multiplication counts. Equal FLOPs do not mean equal latency for ConvNeXt and a Transformer.
 
-**Strengths and limitations:** ConvNeXt provides an uncomplicated convolutional alternative to attention backbones with competitive scaling. Its strong results depend partly on substantial augmentation and long training, so architecture-only comparisons can mislead.
+**Strengths and limitations:** ConvNeXt offers a convolution-based alternative to attention networks. Its results also depend on extensive image changes and long training. Comparing only network diagrams can therefore mislead.
 
-**Computational complexity / scalability notes:** A block of width $`C`$ costs approximately $`HW(q^2C+8C^2)`$ for the depthwise and two 4x pointwise projections, ignoring small elementwise terms. Fixed-resolution image inference remains a sequence of dense spatial operations.
+**Computational complexity / scalability notes:** Wider blocks make channel mixing much more expensive. **Optional math:** A block costs about $`HW(q^2C+8C^2)`$, with map dimensions H and W, filter side q, and channel width C. This counts depthwise filtering and two 4x pointwise projections, excluding small elementwise steps. Fixed-resolution prediction remains a sequence of spatial calculations.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** The [paper's ImageNet-1K table](https://arxiv.org/html/2201.03545v2) reports **82.1% top-1 validation accuracy** for **ConvNeXt-T at 224-by-224**, trained on ImageNet-1K, versus **81.3%** for the listed Swin-T configuration. This is a single-model classification comparison, not a claim about the later 22K-pretrained models. A photograph becomes multiresolution convolutional features, then a pooled class decision. The authors' documented question is whether modernized convolutional design and training can compete with hierarchical Transformers. No commercial inspection, search, or sales impact is established by the accuracy difference.
+**Evidence status: Research benchmark.** The [ImageNet-1K table](https://arxiv.org/html/2201.03545v2) reports **82.1% top-1 validation accuracy** for **ConvNeXt-T at 224-by-224**, versus **81.3%** for the listed Swin-T. Top-1 checks the highest-scored class. This compares single classifiers trained on ImageNet-1K, not later 22K-pretrained versions.
 
-**Notable vendor implementations/libraries:** Meta's released ConvNeXt repository, torchvision, and timm. ConvNeXt V2 and differently trained checkpoints should carry their own provenance.
+An image becomes features at several resolutions, then an averaged class decision. The authors ask whether updated convolutional design and training can compete with hierarchical Transformers. The difference does not measure commercial inspection, search, or sales gains.
+
+**Notable vendor implementations/libraries:** Meta's ConvNeXt release, torchvision, and timm offer models. ConvNeXt V2 and differently trained weights need their own source and recipe information.
 
 ### 1.6.9 DenseNet
+**In plain English:** DenseNet keeps earlier image features available to later layers. Instead of repeatedly replacing them, it adds new features to a growing collection.
 
-**Name:** Densely connected convolutional network; the representative is **DenseNet-121 with bottleneck and compression**.
+**Name:** Densely connected convolutional network. The reference is **DenseNet-121 with bottleneck and compression**.
 
-**Category & sub-category:** Supervised learning; convolutional families; dense feature reuse through concatenation.
+**Category & sub-category:** Supervised learning; convolutional families. Concatenation lets later layers reuse earlier features.
 
-**Originating paper/vendor/year:** Gao Huang, Zhuang Liu, Laurens van der Maaten, and Kilian Weinberger, [Densely Connected Convolutional Networks](https://arxiv.org/html/1608.06993v5), 2016 preprint and CVPR 2017 paper. The cited v5 revision is dated 2018.
+**Originating paper/vendor/year:** Gao Huang, Zhuang Liu, Laurens van der Maaten, and Kilian Weinberger wrote [Densely Connected Convolutional Networks](https://arxiv.org/html/1608.06993v5). Its preprint appeared in 2016 and its CVPR paper in 2017. The cited v5 revision is dated 2018.
 
-**Core mechanism:** Inside a dense block, layer $`\ell`$ receives the concatenation of every preceding layer's feature maps and adds $`k`$ new maps, where $`k`$ is the growth rate. Unlike ResNet, it does not sum old and new representations into the same channels. Bottleneck 1-by-1 convolutions limit the input width of 3-by-3 kernels; transition layers compress channels and downsample between blocks.
+**Core mechanism:** Every layer in a dense block reads all earlier feature maps in that block. It adds a small number of new maps to the collection. Unlike ResNet, it keeps old and new channels separate rather than adding them together. A 1-by-1 bottleneck narrows inputs before 3-by-3 filtering. Transition layers shrink maps and compress channel counts between blocks.
 
-**Inputs/outputs and typical data types:** Images become pooled class scores or multistage spatial features. DenseNet-121 uses four dense blocks with 6, 12, 24, and 16 composite layers, and growth rate 32.
+**Inputs/outputs and typical data types:** Images become class scores or feature maps from several stages. DenseNet-121 has four dense blocks containing 6, 12, 24, and 16 composite layers. Its growth rate is 32 new maps per layer.
 
-**Architecture diagram description:**
+**Architecture diagram description:** Brackets collect earlier maps side by side. Each H transformation adds k maps, where k is the growth rate.
 
 ```text
 stem -> dense block -> transition -> dense block -> ... -> global average -> head
@@ -512,45 +559,48 @@ x1 = H1(x0) ---+--> x2=H2([x0,x1]) -+--> x3=H3([x0,x1,x2])
 H: BN/ReLU/1x1 bottleneck -> BN/ReLU/3x3 -> k new maps
 ```
 
-**Activation functions used and why:** Batch normalization and ReLU precede the bottleneck/spatial transformations. The classifier uses softmax cross-entropy. Concatenation preserves feature identities rather than acting as a nonlinear activation.
+**Activation functions used and why:** Batch normalization and ReLU come before the bottleneck and spatial filters. Classification uses softmax cross-entropy. Concatenation preserves separate features; it is not itself an activation.
 
-**Loss function(s):** Supervised class cross-entropy. "Implicit deep supervision" describes shorter gradient paths, not separate labelled auxiliary heads at every layer.
+**Loss function(s):** Supplied class labels guide cross-entropy. The phrase "implicit deep supervision" refers to short backward paths. It does not mean every layer has a separate labelled output head.
 
-**Optimization algorithm(s):** ImageNet training uses SGD with Nesterov momentum 0.9, batch size 256, and 90 epochs. The initial rate 0.1 is divided by ten at epochs 30 and 60.
+**Optimization algorithm(s):** ImageNet training uses SGD with Nesterov momentum 0.9, batch size 256, and 90 epochs. Initial rate 0.1 falls by ten at epochs 30 and 60.
 
-**Regularization techniques:** Weight decay $`10^{-4}`$, image augmentation, and batch normalization. The paper's dropout 0.2 applies to specified small datasets without augmentation; it should not automatically be inserted into the ImageNet recipe.
+**Regularization techniques:** Training uses image changes and batch normalization. **Optional math:** Weight decay is $`10^{-4}`$, or 0.0001. The paper's dropout 0.2 applies to specified small datasets without augmentation, not automatically to its ImageNet recipe.
 
-**Backpropagation considerations:** Direct access to earlier features gives many short gradient routes. Naively materializing concatenations and their normalized copies can consume much more memory than parameter count suggests; memory-efficient implementations recompute selected intermediates.
+**Backpropagation considerations:** Direct access to earlier maps creates many short routes for error signals. Saving repeated concatenations and normalized copies can use far more memory than the weights. Memory-efficient versions recalculate selected intermediate values instead of keeping them all.
 
-**Parameter count / scaling behavior:** DenseNet-121 is approximately an **eight-million-parameter** model. Within a block, the input width grows as $`C_0+\ell k`$. Bottlenecks and transition compression are essential to keeping this growth manageable.
+**Parameter count / scaling behavior:** DenseNet-121 has about **eight million parameters**. **Optional math:** After ell additions, block width grows as $`C_0+\ell k`$, where C0 is starting width and k is growth rate. Bottlenecks and transition compression keep that growth manageable.
 
-**Training paradigm:** Supervised visual classification for the cited result. Dense connectivity can also appear in generative or self-supervised models without changing its connectivity definition.
+**Training paradigm:** The quoted result uses supervised image classification. The same connection pattern can appear in generative or self-supervised models with different objectives.
 
-**Hardware/parallelism considerations:** Feature concatenation increases memory traffic and requires access to multiple earlier tensors. An implementation with fewer weights can still use more training activation memory than a residual network.
+**Hardware/parallelism considerations:** Keeping and joining earlier maps increases memory traffic. Fewer weights than a residual network do not necessarily mean less training memory.
 
-**Strengths and limitations:** DenseNet encourages feature reuse and parameter efficiency. Its accumulating feature history complicates memory planning and can make naive implementations slower than their arithmetic count suggests.
+**Strengths and limitations:** DenseNet reuses features with relatively few parameters. Its growing feature history complicates memory planning. A simple implementation may run slowly despite a modest arithmetic count.
 
-**Computational complexity / scalability notes:** At fixed block resolution and growth rate, summing transformations over increasing input widths can introduce a quadratic-in-block-depth term. Unique produced feature maps grow linearly, whereas repeatedly materialized concatenation buffers may grow quadratically. These are different memory quantities, not a universal quadratic-memory requirement.
+**Computational complexity / scalability notes:** At fixed resolution and growth rate, doubling block depth can roughly quadruple part of the work because each layer reads more maps. Unique new maps grow only linearly. Repeatedly copied concatenation buffers can grow quadratically. These are different quantities; quadratic memory is not unavoidable in every implementation.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** [V5 Table 3](https://arxiv.org/html/1608.06993v5) reports **25.02% top-1 and 7.71% top-5 error** for DenseNet-121 on the **ImageNet validation set with a single 224-pixel crop**. Its **10-crop** errors are instead **23.61% and 6.66%**. An object photograph produces a retained history of low- and high-level features; pooling and the classifier turn that history into a ranked label list. The authors' rationale relative to residual summation is preserving and reusing feature maps. These results do not establish deployed radiology or industrial-inspection performance merely because DenseNet can be adapted to those domains.
+**Evidence status: Research benchmark.** [V5 Table 3](https://arxiv.org/html/1608.06993v5) lists **25.02% top-1 and 7.71% top-5 error** for DenseNet-121 on **ImageNet validation with one 224-pixel crop**. With **10 crops**, errors are **23.61% and 6.66%**. These measure whether the first choice, or any of five choices, contains the correct label.
 
-**Notable vendor implementations/libraries:** The authors' implementations, torchvision DenseNet, and Keras DenseNet. Memory-efficient switches can change speed/memory trade-offs without changing the mathematical prediction.
+The photograph builds a retained collection of simple and complex features. Pooling and a classifier turn it into ranked labels. Preserving features, rather than summing them as ResNet does, motivates the design. These ImageNet results do not establish performance in deployed radiology or industrial inspection.
+
+**Notable vendor implementations/libraries:** Author releases, torchvision DenseNet, and Keras DenseNet offer versions. Memory-efficient settings can exchange extra calculation for less storage without changing the mathematical prediction.
 
 ### 1.6.10 MobileNet
+**In plain English:** MobileNet splits image filtering into two cheaper jobs: finding patterns within channels and mixing channels. It offers smaller networks for devices with limited computing resources.
 
-**Name:** MobileNet, anchored to **MobileNet-v1, width multiplier 1.0, 224-pixel input**. The worked example identifies the 2018-08-02 TensorFlow-Slim checkpoint bundle; v2's inverted residuals and v3's searched blocks are distinct extensions.
+**Name:** MobileNet, specifically **MobileNet-v1, width multiplier 1.0, 224-pixel input**. The example uses the 2018-08-02 TensorFlow-Slim checkpoint bundle. V2's inverted residuals and v3's searched blocks are separate extensions.
 
-**Category & sub-category:** Supervised learning; convolutional families; efficient depthwise-separable visual networks.
+**Category & sub-category:** Supervised learning; convolutional families. Depthwise-separable filters reduce image-processing work.
 
-**Originating paper/vendor/year:** Andrew Howard and colleagues, Google, [MobileNets: Efficient Convolutional Neural Networks for Mobile Vision Applications](https://arxiv.org/html/1704.04861v1), 2017 technical report.
+**Originating paper/vendor/year:** Andrew Howard and colleagues at Google published the technical report [MobileNets: Efficient Convolutional Neural Networks for Mobile Vision Applications](https://arxiv.org/html/1704.04861v1) in 2017.
 
-**Core mechanism:** A standard convolution mixes spatial neighborhoods and channels simultaneously. MobileNet-v1 separates these jobs: a depthwise kernel filters each input channel, and a 1-by-1 pointwise convolution mixes channels. Width multiplier $`\alpha`$ reduces channel counts; resolution multiplier reduces spatial work. These controls offer a family of trade-offs rather than one network guaranteed to fit every device.
+**Core mechanism:** A standard convolution finds spatial patterns and mixes channels in one operation. V1 first filters each channel separately, then uses 1-by-1 filters to mix them. A width multiplier, alpha, reduces channel counts; a resolution multiplier reduces spatial work. These are adjustable trade-offs, not guarantees that every variant fits every device.
 
-**Inputs/outputs and typical data types:** RGB images become class probabilities or compact backbone features. The ImageNet task has 1,000 classes; the released Slim evaluator uses a 1,001-logit indexing convention, so its label mapping must be preserved.
+**Inputs/outputs and typical data types:** RGB images become class probabilities or compact reusable features. ImageNet has 1,000 classes here, but the released Slim evaluator uses 1,001 output scores for its indexing convention. Preserve that label mapping.
 
-**Architecture diagram description:**
+**Architecture diagram description:** The main block separates spatial filtering from channel mixing. Selected strides shrink the image maps.
 
 ```text
 RGB -> standard Conv3x3 -> depthwise/pointwise blocks -> global average -> head
@@ -559,62 +609,69 @@ block: depthwise 3x3 -> BN -> ReLU6 -> pointwise 1x1 -> BN -> ReLU6
 selected depthwise strides downsample the feature map
 ```
 
-**Activation functions used and why:** The v1 paper describes ReLU, while the [released TensorFlow-Slim implementation](https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1.py) specifies clipped ReLU6 after normalized depthwise and pointwise operations. Softmax performs classification. These are identified conventions, not an assumption that every release is identical.
+**Activation functions used and why:** The paper describes ReLU. The [released TensorFlow-Slim code](https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1.py) instead specifies ReLU6, which clips positive responses at six, after normalized depthwise and pointwise steps. Softmax supplies class probabilities. These are distinct, identified conventions.
 
-**Loss function(s):** Supervised image-class cross-entropy. Detection adaptations use additional localization and classification objectives.
+**Loss function(s):** Image-class cross-entropy uses supplied labels. Detection versions need additional losses for object locations as well as classes.
 
-**Optimization algorithm(s):** The original paper specifies RMSProp and asynchronous gradient descent, but does **not enumerate a complete independent learning-rate schedule**. This is the paper-level recipe, not a complete training manifest for the 2018 inference artifact. A subsequently published trainer's defaults do not, by themselves, establish how that particular checkpoint was trained.
+**Optimization algorithm(s):** The paper specifies RMSProp and asynchronous gradient descent, but **does not provide a complete independent learning-rate schedule**. This is not a complete training record for the 2018 saved model. Later trainer defaults do not prove how that checkpoint was trained.
 
-**Regularization techniques:** Batch normalization and reduced image augmentation. The authors specifically use little or no weight decay on depthwise filters, and do not use auxiliary heads or label smoothing in this setup.
+**Regularization techniques:** The setup uses batch normalization and reduced image augmentation. Depthwise filters receive little or no weight decay. The authors do not use auxiliary heads or label smoothing here.
 
-**Backpropagation considerations:** Gradients pass through the separate spatial and channel transformations. The very small depthwise parameter sets can be over-regularized. Aggressively reduced channel widths create representational bottlenecks that optimization alone cannot fix.
+**Backpropagation considerations:** Error signals pass through the separate filtering and mixing steps. Strong penalties can overwhelm the very small depthwise weight sets. Extremely narrow channels also limit what the network can represent; a better optimizer cannot recover missing capacity.
 
-**Parameter count / scaling behavior:** The paper reports **4.2 million parameters** and **569 million multiply-adds**; the released checkpoint table gives **4.24 million parameters**. Pointwise costs scale approximately with $`\alpha^2`$, whereas depthwise costs scale approximately with $`\alpha`$; the first and last layers need separate accounting.
+**Parameter count / scaling behavior:** The paper lists **4.2 million parameters** and **569 million multiply-adds**; the released checkpoint table lists **4.24 million parameters**. **Optional math:** With width multiplier $`\alpha`$, pointwise costs scale roughly as $`\alpha^2`$, while depthwise costs scale as $`\alpha`$. First and last layers require separate counts.
 
-**Training paradigm:** Supervised ImageNet classification in the reference experiment. Transfer or distillation can produce differently trained MobileNet checkpoints and should be described as separate stages.
+**Training paradigm:** The reference uses supervised ImageNet labels. Transfer learning or learning from a teacher model creates a separately trained checkpoint and needs a separate description.
 
-**Hardware/parallelism considerations:** Depthwise convolutions reduce arithmetic but may be memory-bound. Runtime kernels, operator fusion, quantization, batch size, and target hardware determine real latency. "Mobile" in the name does not establish battery savings on an unspecified phone.
+**Hardware/parallelism considerations:** Depthwise filters reduce calculations but may spend much of their time moving data. Runtime support, combining operations, lower-precision numbers, batch size, and device all affect speed. The name "Mobile" alone proves no battery saving.
 
-**Strengths and limitations:** MobileNet supplies clear size and arithmetic controls. Lower width and resolution reduce accuracy, especially when fine details or many distinct channel features are required.
+**Strengths and limitations:** Width and resolution give clear controls over size and work. Reducing them can lower accuracy, especially when the task needs fine detail or many different features.
 
-**Computational complexity / scalability notes:** A depthwise-separable layer costs $`O(BHW(q^2C_{\rm in}+C_{\rm in}C_{\rm out}))`$, versus $`O(BHWq^2C_{\rm in}C_{\rm out})`$ for standard convolution. The arithmetic ratio is approximately $`1/C_{\rm out}+1/q^2`$, not a guaranteed hardware speedup.
+**Computational complexity / scalability notes:** Splitting the two jobs reduces arithmetic, not necessarily elapsed time. **Optional math:** A separated layer costs $`O(BHW(q^2C_{\rm in}+C_{\rm in}C_{\rm out}))`$, versus $`O(BHWq^2C_{\rm in}C_{\rm out})`$ for a standard filter. B is batch size, H and W are map dimensions, q is filter side, and C counts channels. Their approximate work ratio is $`1/C_{\rm out}+1/q^2`$.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** The official [2018-08-02 checkpoint bundle](https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1.md) lists **70.9% top-1 and 89.9% top-5 accuracy** for floating-point `MobileNet_v1_1.0_224`. Its [evaluator](https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1_eval.py) targets all **50,000 ImageNet validation images**, using a [single central crop resized to 224](https://github.com/tensorflow/models/blob/master/research/slim/preprocessing/inception_preprocessing.py). This is not the paper's separate 70.6% record. Images become inexpensive spatial/channel features and a class decision for a possible on-device recognition interface. The authors motivate resource-constrained vision, but neither checkpoint scores nor arithmetic counts establish a named phone deployment or measured energy savings.
+**Evidence status: Research benchmark.** The official [2018-08-02 checkpoint bundle](https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1.md) lists **70.9% top-1 and 89.9% top-5 accuracy** for floating-point `MobileNet_v1_1.0_224`. The [evaluator](https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1_eval.py) targets all **50,000 ImageNet validation images**, using a [single central crop resized to 224](https://github.com/tensorflow/models/blob/master/research/slim/preprocessing/inception_preprocessing.py). Top-1 checks one label; top-5 checks five. This is not the paper's separate 70.6% record.
 
-**Notable vendor implementations/libraries:** TensorFlow-Slim, Keras MobileNet, and mobile inference runtimes. Verify v1 versus v2/v3, activation conventions, resolution, width multiplier, and checkpoint evaluation protocol.
+The image becomes low-cost spatial and channel features, then a class choice. That could serve an on-device recognition interface. Limited-resource vision motivates the design, but the score and work count prove neither a named phone deployment nor measured energy savings.
+
+**Notable vendor implementations/libraries:** TensorFlow-Slim, Keras MobileNet, and mobile runtimes support this family. Check generation, activation, resolution, width multiplier, and the saved model's evaluation procedure.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| Generic CNN | Regular image grids | Shared local feature learning | Sensitive to resolution and distribution shift | Keras MNIST classification benchmark |
-| LeNet | Small grayscale characters | Compact document-recognition features | Full documents require additional modules | CNN recognizers inside the published commercial cheque-reading system |
-| AlexNet | Natural RGB photographs | Early successful large-scale learned features | Heavy dense head; historical implementation constraints | ILSVRC-2012, with single-model and ensemble results separated |
-| VGG | Images requiring reusable hierarchical features | Simple repeated small-kernel design | Large parameter and compute footprint | ImageNet dense, single-scale evaluation |
-| ResNet | Images and multistage visual backbones | Residual learning supports depth | Depth still increases latency and memory | ResNet-152 ImageNet validation benchmark |
-| Inception | Images with multiscale structure | Parallel receptive fields with bottlenecks | Branch complexity and inference aggregation costs | GoogLeNet ILSVRC-2014 ensemble benchmark |
-| EfficientNet | Images under a stated compute budget | Joint depth/width/resolution scaling | Hardware-dependent efficiency | B0 ImageNet single-crop benchmark |
-| ConvNeXt | Images and dense-prediction backbones | Strong modern pure-convolutional design | Results depend on substantial training recipes | ConvNeXt-T ImageNet-1K benchmark |
-| DenseNet | Images benefiting from feature reuse | Parameter-efficient concatenated features | Activation traffic and naive memory overhead | DenseNet-121 single-crop ImageNet benchmark |
-| MobileNet | Resource-constrained visual inputs | Depthwise/pointwise factorization | Arithmetic savings need not equal latency savings | Explicitly versioned MobileNet-v1 ImageNet validation checkpoint |
+| Generic CNN | Images arranged as pixel grids | Reuses small learned pattern detectors | Can fail at new resolutions or on unfamiliar images | Keras MNIST digit-recognition test |
+| LeNet | Small grayscale character images | Compact learned stroke features | Whole documents need extra processing stages | CNNs within the published commercial cheque reader |
+| AlexNet | Natural RGB photographs | Learns large-scale image features | Heavy dense head and older hardware-driven choices | ILSVRC-2012; single-model and ensemble scores kept separate |
+| VGG | Images needing reusable features at several scales | Simple repeated small filters | Many weights and calculations | ImageNet test using dense evaluation at one scale |
+| ResNet | Images and reusable multistage features | Shortcuts help train deeper networks | Depth still costs time and memory | ResNet-152 ImageNet validation test |
+| Inception | Images with both small and large patterns | Several filter sizes with narrowed channels | Complex branches and costly score averaging | GoogLeNet ILSVRC-2014 ensemble test |
+| EfficientNet | Images with a stated computing budget | Balances layers, widths, and resolution | Efficiency depends on the device | B0 ImageNet single-crop test |
+| ConvNeXt | Images and tasks needing spatial feature maps | Updated convolution-only design | Strong results also need substantial training | ConvNeXt-T ImageNet-1K test |
+| DenseNet | Images where earlier features remain useful | Reuses features with relatively few weights | Retained maps can cost memory and data movement | DenseNet-121 ImageNet single-crop test |
+| MobileNet | Images processed with limited resources | Splits filtering into cheaper steps | Fewer calculations do not guarantee lower delay | Versioned MobileNet-v1 ImageNet validation checkpoint |
 
 ## 1.7 Recurrent and sequence architectures
 
-Sequence models differ in how they retain context, align inputs with targets, and expose parallelism. Predicting a translated sentence or an annotated phoneme sequence is supervised, even when the decoder predicts its output one token at a time.
+A sequence has an order, such as sound frames or words in a sentence. A recurrent network carries a **state**, a list of numbers, from one step to the next. This lets later calculations use earlier information. The state is not human memory. Other sequence models retrieve weighted information from earlier representations instead.
+
+These models differ in what context they keep, how they match inputs to outputs, and which calculations can run together. Supplied translations or phoneme labels still provide supervision, even when a model generates its answer one token at a time. A token is a word or smaller text unit. A phoneme is a speech-sound category.
 
 ### 1.7.1 Vanilla recurrent neural network (RNN)
+**In plain English:** An RNN reads a sequence in order and carries a changing numerical state. It can use earlier input when labelling later input, but may struggle to keep distant information.
 
-**Name:** Vanilla RNN, with tanh recurrent units. The measured representative is the three-level bidirectional tanh network in a supervised speech-recognition comparison.
+**Name:** Vanilla RNN with tanh units. The measured speech model has three stacked levels, each reading both forward and backward.
 
-**Category & sub-category:** Supervised learning; recurrent and sequence architectures; recurrent state without explicit memory gates.
+**Category & sub-category:** Supervised learning; recurrent and sequence architectures. It carries state without separate memory-control gates.
 
-**Originating paper/vendor/year:** Jeffrey Elman's [Finding Structure in Time](https://doi.org/10.1207/s15516709cog1402_1), 1990, is a canonical simple-recurrent-network reference, not the origin of every recurrent architecture. The supervised experiment here comes from Graves, Mohamed, and Hinton's [2013 speech-recognition study](https://arxiv.org/html/1303.5778v1).
+**Originating paper/vendor/year:** Jeffrey Elman's [Finding Structure in Time](https://doi.org/10.1207/s15516709cog1402_1), 1990, is a standard simple-RNN reference, not the origin of every recurrent design. This supervised example comes from [Graves, Mohamed, and Hinton's 2013 speech study](https://arxiv.org/html/1303.5778v1).
 
-**Core mechanism:** At each step, $`h_t=\tanh(W_xx_t+W_hh_{t-1}+b)`$. Reusing $`W_h`$ makes the state depend on the ordered history without adding new parameters for every time step. A bidirectional model also processes the sequence backwards and combines both representations; stacking recurrent layers adds depth across representations, distinct from recurrence across time.
+**Core mechanism:** At each step, the same layer combines the new input with its previous state. Tanh transforms that combination into the next state. Sharing weights allows different sequence lengths without adding weights per step. A bidirectional network also reads backward and combines both streams. Stacking levels adds another kind of depth: each level processes features from the previous one.
 
-**Inputs/outputs and typical data types:** Ordered acoustic feature vectors, sensor observations, or symbol embeddings become sequence labels or one final label. The speech instance uses 123-component acoustic vectors and phoneme-plus-blank output scores.
+**Optional math:** $`h_t=\tanh(W_xx_t+W_hh_{t-1}+b)`$. Here t is the step, x is input, h is carried state, Wx and Wh are learned matrices, and b is the bias. Tanh bounds the new values.
 
-**Architecture diagram description:**
+**Inputs/outputs and typical data types:** Ordered sound features, sensor readings, or numeric symbol representations become labels at multiple steps or one final label. This speech model uses 123-component sound vectors and scores for phonemes plus a blank symbol.
+
+**Architecture diagram description:** The first line shows carried state. The speech version stacks three forward/backward levels before turning frame scores into phonemes.
 
 ```text
 x1 -> tanh state h1 -> tanh state h2 -> ... -> tanh state hT
@@ -623,45 +680,50 @@ speech instance: forward + backward streams, stacked three levels
                 -> frame softmax -> CTC decoding -> phoneme sequence
 ```
 
-**Activation functions used and why:** Tanh bounds the recurrent state and supplies nonlinearity; softmax normalizes competing phoneme/blank scores. There are no sigmoid input, forget, or output gates.
+**Activation functions used and why:** Tanh keeps state values bounded and makes their update nonlinear. Softmax gives competing phoneme/blank probabilities. This simple cell has no sigmoid input, forget, or output gates.
 
-**Loss function(s):** Connectionist temporal classification, or CTC, sums the probabilities of valid frame-level paths that collapse to the labelled phoneme sequence. It avoids requiring a fixed ground-truth alignment for every acoustic frame.
+**Loss function(s):** Connectionist temporal classification (CTC) learns from the final phoneme sequence without needing a label for every sound frame. It adds the probabilities of valid frame-by-frame paths that reduce to that sequence after repeats and blanks are handled.
 
-**Optimization algorithm(s):** In the cited comparison, SGD uses learning rate $`10^{-4}`$ and momentum 0.9, with weights initialized uniformly in [-0.1,0.1]. The reported recipe does not introduce a decay schedule for this rate.
+**Optimization algorithm(s):** The comparison uses SGD with momentum 0.9 and uniformly chosen initial weights in [-0.1,0.1]. **Optional math:** Learning rate $`10^{-4}`$ means 0.0001. The reported recipe adds no decay schedule.
 
-**Regularization techniques:** Inputs are normalized using training-set statistics and a separate development set controls model selection. Crucially, this tanh model is trained **without** the Gaussian weight-noise phase used by most LSTM comparators, because it failed to learn with that noise.
+**Regularization techniques:** Inputs use training-set scaling statistics. A separate development set guides model selection. This tanh model uses **no Gaussian weight-noise phase**: it failed to learn with the noise used for most LSTM comparisons.
 
-**Backpropagation considerations:** Backpropagation through time multiplies recurrent Jacobians over many steps, leading to vanishing or exploding gradients. Clipping can limit an explosion but cannot restore forgotten information. Truncating the backward window further limits credit assignment; the full-sequence speech experiment should not be confused with a truncated streaming recipe.
+**Backpropagation considerations:** Training traces error signals backward through the carried states. This is backpropagation through time (BPTT). Repeated transformations can shrink or enlarge signals too much. Clipping caps large signals but cannot restore forgotten information. Cutting the backward history also limits which earlier steps get credit. This full-sequence experiment is not a shortened-history streaming recipe.
 
-**Parameter count / scaling behavior:** One simple recurrent layer has roughly $`dh+h^2+h`$ parameters before its output head. The paper's **CTC-3l-500h-tanh** model has **3.7 million weights**, with 500 hidden units per direction at each level.
+**Parameter count / scaling behavior:** Weights are reused at every step. **Optional math:** A simple layer has roughly $`dh+h^2+h`$ parameters before its head, with input width d and state width h. The paper's **CTC-3l-500h-tanh** has **3.7 million weights**, with 500 hidden units per direction at each level.
 
-**Training paradigm:** Supervised acoustic-to-phoneme sequence learning. The architecture can also predict text from text under a self-supervised objective; that is not this experiment.
+**Training paradigm:** Labelled speech guides sound-to-phoneme learning. Predicting text from unlabelled text would use a different, self-supervised objective with the same general architecture.
 
-**Hardware/parallelism considerations:** Batch examples and matrix operations parallelize, but successive recurrent states remain dependent. Bidirectionality requires future input and therefore prevents immediate causal output for the whole model.
+**Hardware/parallelism considerations:** Examples in a batch and calculations within a step can run together. Successive states still depend on one another. A backward-reading stream needs future input, so the whole bidirectional model cannot provide an equivalent immediate streaming answer.
 
-**Strengths and limitations:** The recurrence is simple and parameter sharing supports variable lengths. Long-range dependencies, optimization sensitivity, and sequential execution are substantial limitations relative to gated or attention-based alternatives.
+**Strengths and limitations:** The simple repeated rule handles varying sequence lengths. Long-distance information, unstable training, and step-by-step execution are major limits compared with gated or attention-based models.
 
-**Computational complexity / scalability notes:** A dense layer costs $`O(T(dh+h^2))`$ per sequence before the head. Full BPTT stores approximately $`O(BTLh)`$ states; CTC adds dynamic programming over input and target lengths, commonly $`O(TU)`$ for target length $`U`$.
+**Computational complexity / scalability notes:** Longer sequences need more state updates and stored training history. **Optional math:** One layer costs $`O(T(dh+h^2))`$ before the head; T is length, d input width, and h state width. Full BPTT stores about $`O(BTLh)`$ values for batch size B and L layers. CTC's path calculation commonly adds $`O(TU)`$ work for target length U.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** On [TIMIT in the 2013 study](https://arxiv.org/html/1303.5778v1), this tanh network obtains **37.6% phoneme error rate** on the **24-speaker core test set**. Training uses the standard 462-speaker set without SA recordings; 50 speakers form the development set. Training/decoding uses 61 phoneme labels, mapped to 39 for scoring, with beam width 100. Acoustic frames become recurrent states, CTC paths, and a phoneme transcription. The roughly parameter-matched three-level LSTM obtains 18.6%, illustrating a concrete limitation rather than an assumed RNN success. Results are single runs with unknown initialization variance; no deployed speech-product KPI is claimed.
+**Evidence status: Research benchmark.** On [TIMIT](https://arxiv.org/html/1303.5778v1), the tanh model has **37.6% phoneme error rate** on the **24-speaker core test set**; lower is better. Training uses the standard 462-speaker set without SA recordings, and 50 speakers form the development set. Training and decoding use 61 phoneme labels, reduced to 39 for scoring. Beam width 100 means decoding keeps a limited set of candidate paths.
 
-**Notable vendor implementations/libraries:** PyTorch `RNN`, Keras `SimpleRNN`, and accelerator recurrent kernels. Bidirectional wrappers and CTC losses are additional components, not automatic properties of every RNN.
+Sound frames produce carried states, CTC paths, and a phoneme transcription. The roughly size-matched three-level LSTM gets 18.6%, exposing a real weakness of this RNN. These are single runs, with unknown variation from starting weights. They establish no deployed speech-product benefit.
+
+**Notable vendor implementations/libraries:** PyTorch `RNN`, Keras `SimpleRNN`, and accelerator recurrent operations supply components. Bidirectional processing and CTC require additional configuration; not every RNN includes them.
 
 ### 1.7.2 Long short-term memory (LSTM)
+**In plain English:** An LSTM carries information through a sequence using learned controls for keeping, adding, and revealing it. These controls can help useful details survive for longer.
 
-**Name:** Long short-term memory network. The supervised representative is a stacked, bidirectional LSTM with CTC; its modern gated cell is distinguished from the first 1997 formulation.
+**Name:** Long short-term memory network. The example stacks bidirectional LSTM levels with CTC. Its refined cell is not identical to the first 1997 version.
 
-**Category & sub-category:** Supervised learning; recurrent and sequence architectures; gated additive memory.
+**Category & sub-category:** Supervised learning; recurrent and sequence architectures. Gates control a carried memory state that updates by addition.
 
-**Originating paper/vendor/year:** Sepp Hochreiter and Jurgen Schmidhuber, [Long Short-Term Memory](https://doi.org/10.1162/neco.1997.9.8.1735), Neural Computation, 1997. Forget gates and other cell refinements followed. The worked instance is from [Graves, Mohamed, and Hinton, 2013](https://arxiv.org/html/1303.5778v1).
+**Originating paper/vendor/year:** Sepp Hochreiter and Jurgen Schmidhuber, [Long Short-Term Memory](https://doi.org/10.1162/neco.1997.9.8.1735), Neural Computation, 1997. Forget gates and other refinements came later. The worked model is from [Graves, Mohamed, and Hinton, 2013](https://arxiv.org/html/1303.5778v1).
 
-**Core mechanism:** A typical modern cell updates $`c_t=f_t\odot c_{t-1}+i_t\odot g_t`$ and exposes $`h_t=o_t\odot\tanh(c_t)`$. Input, forget, and output gates respectively control writing, retaining, and exposing memory. The additive cell path can preserve information and gradients when the forget gate remains near one. The speech paper additionally describes peephole connections from cell state to gates.
+**Core mechanism:** A forget gate chooses how much old state to keep. An input gate controls new information added to it. An output gate controls what other layers can see. These gates are learned numbers, not switches chosen by a person. Adding to the cell state gives information and error signals a more direct route, especially when the forget gate stays near one. The speech model also uses peephole connections, letting gates inspect the cell state.
 
-**Inputs/outputs and typical data types:** Acoustic frames, multivariate time series, or embeddings become a sequence of states and task outputs. The reference uses 123-component speech features and a CTC phoneme head.
+**Optional math:** $`c_t=f_t\odot c_{t-1}+i_t\odot g_t`$ and $`h_t=o_t\odot\tanh(c_t)`$. At step t, c is cell state, h is exposed state, f/i/o are forget/input/output gates, and g is new candidate information. The symbol $`\odot`$ means multiplying matching components.
 
-**Architecture diagram description:**
+**Inputs/outputs and typical data types:** Sound frames, several time-varying measurements, or token vectors become states and task predictions. This model uses 123-component speech features and a CTC phoneme head.
+
+**Architecture diagram description:** The cell carries c separately from the exposed state h. The speech network stacks three bidirectional levels.
 
 ```text
 [x_t,h_(t-1)] -> sigmoid gates i,f,o; tanh candidate g
@@ -669,45 +731,50 @@ c_(t-1) -- multiply f --+-- add i*g --> c_t -- tanh -- multiply o --> h_t
 speech: three bidirectional LSTM levels -> softmax -> CTC -> phonemes
 ```
 
-**Activation functions used and why:** Sigmoid gates lie between zero and one and act multiplicatively; tanh supplies bounded candidate and exposed state values. The cell state itself has an additive update, not simply another tanh recurrence.
+**Activation functions used and why:** Sigmoid sets gate values between zero and one. Tanh bounds candidate and exposed-state values. The cell itself updates by addition; it is not simply another tanh recurrence.
 
-**Loss function(s):** CTC negative log-likelihood for the labelled phoneme sequence. An LSTM trained with frame-aligned cross-entropy or a recurrent transducer has a different objective.
+**Loss function(s):** CTC negative log-likelihood penalizes low probability for the labelled phoneme sequence while allowing different frame alignments. Frame-aligned cross-entropy and recurrent-transducer training are different objectives.
 
-**Optimization algorithm(s):** The 2013 CTC setup uses SGD at $`10^{-4}`$ with momentum 0.9. The reported rate is not replaced here by the Adam recipe common in later tutorials.
+**Optimization algorithm(s):** The 2013 CTC recipe uses SGD with momentum 0.9. **Optional math:** Its rate is $`10^{-4}`$, or 0.0001. Later tutorials' common Adam settings are not substituted here.
 
-**Regularization techniques:** Training-set feature normalization, development-set stopping, and a second training phase with Gaussian **weight noise of standard deviation 0.075**. The noise phase starts from the best development log-probability point of the initial noiseless training.
+**Regularization techniques:** Training uses feature scaling and development-set stopping. A second phase adds Gaussian **weight noise with standard deviation 0.075**. It starts from the initial noiseless run's best development log-probability point, not an arbitrary checkpoint.
 
-**Backpropagation considerations:** BPTT differentiates through gates and the cell path. The latter improves long-range credit assignment, but gate saturation, exploding states, and truncated histories remain possible. Bidirectional gradients depend on both preceding and following input.
+**Backpropagation considerations:** BPTT traces errors through gates and the additive cell path. This helps connect distant inputs to later errors, but gates can still flatten out, states can grow too large, and shortened histories can lose training signals. Bidirectional updates use both earlier and later input.
 
-**Parameter count / scaling behavior:** A basic one-direction cell has roughly $`4h(d+h+1)`$ parameters, with additional terms for peepholes or separate biases. The paper's **CTC-3l-250h** has **3.8 million weights**, not the parameter count of every LSTM.
+**Parameter count / scaling behavior:** Gates add weight matrices. **Optional math:** A basic one-direction cell has about $`4h(d+h+1)`$ parameters, with input width d and state width h. Peepholes or separate biases add terms. The paper's **CTC-3l-250h** has **3.8 million weights**; this is not a universal LSTM count.
 
-**Training paradigm:** Supervised sequence transcription from labelled utterances. No unlabelled-text language-model pretraining is required for this CTC result.
+**Training paradigm:** Labelled utterances supervise sequence transcription. This CTC result requires no unlabelled-text language-model pretraining.
 
-**Hardware/parallelism considerations:** Gate matrix operations can be fused, but time-step dependencies remain. Multiple layers and bidirectionality increase activation storage. Offline bidirectional recognition should not be advertised as an equivalent low-latency streaming system.
+**Hardware/parallelism considerations:** Implementations can combine gate calculations, but one time step still depends on the last. More levels and both reading directions store more intermediate states. Offline bidirectional recognition is not the same as low-delay streaming.
 
-**Strengths and limitations:** Gated memory is effective when relevant information must survive many steps. It costs more operations per step than a simple RNN and remains less parallel across time than teacher-forced Transformer training.
+**Strengths and limitations:** Controlled memory helps retain important details over many steps. Each step costs more than a simple RNN. Across time, it remains less parallel than Transformer training with known target prefixes.
 
-**Computational complexity / scalability notes:** Per sequence, matrix work is $`O(T\,4h(d+h))`$ for one layer, plus output and CTC costs. The factor four is an approximate gate-operation account; actual kernels, projections, directions, and cell variants alter constants.
+**Computational complexity / scalability notes:** Sequence length multiplies the gate work. **Optional math:** One layer costs about $`O(T\,4h(d+h))`$, plus output and CTC work. T is sequence length, d input width, and h state width. The four roughly counts the main gate/candidate calculations; cell variants, projections, directions, and software change the constants.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** [Table 1 of the TIMIT study](https://arxiv.org/html/1303.5778v1) reports **18.6% core-test phoneme error rate** for **CTC-3l-250h**, compared with the 3.7-million-weight tanh model's 37.6%. The split, 61-to-39 label mapping, and beam-100 protocol match the preceding entry, but weight-noise treatment differs. Audio frames enter gated bidirectional layers and produce a decoded phoneme sequence for an acoustic transcription system. The often-quoted **17.7%** belongs to **PreTrans-3l-250h**, a pretrained recurrent-transducer system, not this CTC network. The paper reports single runs, so the observed gap does not provide a confidence interval or establish production speech accuracy.
+**Evidence status: Research benchmark.** [TIMIT Table 1](https://arxiv.org/html/1303.5778v1) gives **18.6% core-test phoneme error rate** for **CTC-3l-250h**, versus 37.6% for the 3.7-million-weight tanh model. Lower error is better. The split, 61-to-39 label mapping, and beam-100 decoding match the preceding entry, but the weight-noise treatment differs.
 
-**Notable vendor implementations/libraries:** PyTorch `LSTM`, Keras `LSTM`, and cuDNN-compatible kernels. Common library cells omit the historical peepholes, so operator names alone do not reproduce the speech architecture.
+Audio frames pass through gated layers in both directions and become a phoneme sequence. The often-quoted **17.7%** belongs to **PreTrans-3l-250h**, a pretrained recurrent-transducer system, not this CTC model. Single runs do not supply a confidence interval or establish production speech accuracy.
+
+**Notable vendor implementations/libraries:** PyTorch `LSTM`, Keras `LSTM`, and cuDNN-compatible operations offer cells. Common versions omit the historical peepholes; the operator name alone does not reproduce this speech model.
 
 ### 1.7.3 Gated recurrent unit (GRU)
+**In plain English:** A GRU carries a state and learns how much of it to keep or replace. It offers memory control with fewer cell parts than a standard LSTM.
 
-**Name:** Gated recurrent unit; the original encoder-decoder formulation introduced by Cho and colleagues.
+**Name:** Gated recurrent unit, using Cho and colleagues' original encoder-decoder form.
 
-**Category & sub-category:** Supervised learning; recurrent and sequence architectures; compact gated recurrence.
+**Category & sub-category:** Supervised learning; recurrent and sequence architectures. A compact recurrent cell uses gates to control state updates.
 
-**Originating paper/vendor/year:** Kyunghyun Cho and colleagues, [Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation](https://arxiv.org/html/1406.1078v3), EMNLP 2014. The paper calls its component a new gated hidden unit; GRU became the standard name.
+**Originating paper/vendor/year:** Kyunghyun Cho and colleagues, [Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation](https://arxiv.org/html/1406.1078v3), EMNLP 2014. The paper calls it a new gated hidden unit; GRU later became the standard name.
 
-**Core mechanism:** A reset gate controls which previous-state components contribute to a candidate, and an update gate blends candidate and old state. Under one convention, $`\tilde h_t=\tanh(Wx_t+U(r_t\odot h_{t-1}))`$, $`h_t=z_t\odot h_{t-1}+(1-z_t)\odot\tilde h_t`$. Unlike an LSTM, it has no separate exposed hidden state and persistent cell state. Encoder and decoder reuse this mechanism to score a target phrase conditioned on a source phrase.
+**Core mechanism:** A reset gate controls which old-state values help form a new candidate. An update gate blends that candidate with the old state. Unlike an LSTM, there is no separate persistent cell state and exposed hidden state. In the original task, an encoder reads a source phrase and a decoder scores a possible translated phrase.
 
-**Inputs/outputs and typical data types:** Token sequences or numerical time series become states, sequence predictions, or conditional phrase scores. The original translation system uses learned word embeddings and a probability over target words.
+**Optional math:** One convention is $`\tilde h_t=\tanh(Wx_t+U(r_t\odot h_{t-1}))`$ and $`h_t=z_t\odot h_{t-1}+(1-z_t)\odot\tilde h_t`$. Here t is the step, x input, h state, the tilde marks a candidate, W/U are learned matrices, r is reset gate, and z is update gate. The symbol $`\odot`$ multiplies matching components.
 
-**Architecture diagram description:**
+**Inputs/outputs and typical data types:** Token sequences or numeric time series become states, predictions, or phrase scores. The translation model learns word vectors, called embeddings, and predicts probabilities over target words.
+
+**Architecture diagram description:** One encoder summarizes the source phrase. A decoder uses that summary and the target prefix to score the next word.
 
 ```text
 source phrase -> embedding -> GRU encoder -> phrase summary
@@ -716,45 +783,50 @@ target prefix -> embedding -> GRU decoder -> maxout/readout -> next-word softmax
 GRU cell: reset-gated candidate + update-gated carry -> new hidden state
 ```
 
-**Activation functions used and why:** Sigmoid reset/update gates, a tanh candidate, and softmax output. The paper's decoder readout contains 500 maxout units pooling pairs of inputs; that readout is not an intrinsic part of every GRU cell.
+**Activation functions used and why:** Reset and update gates use sigmoid; candidates use tanh; word outputs use softmax. The paper's readout has 500 maxout units, each keeping the larger of two inputs. That readout is not part of every GRU cell.
 
-**Loss function(s):** Conditional sequence negative log-likelihood for labelled source/target phrase pairs. The learned conditional score becomes an additional feature in a phrase-based translation system.
+**Loss function(s):** The loss penalizes low probability for labelled source/target phrase pairs. This conditional sequence negative log-likelihood teaches a score that becomes one feature in a larger phrase-based translation system.
 
-**Optimization algorithm(s):** Minibatch stochastic updates use Adadelta with $`\rho=0.95`$, $`\epsilon=10^{-6}`$, and 64 phrase pairs per update. Adadelta supplies an adaptive step mechanism; the paper does not prescribe a conventional fixed-rate decay schedule for this run.
+**Optimization algorithm(s):** Adadelta adapts step sizes from recent updates and gradients, using batches of 64 phrase pairs. **Optional math:** Its controls are $`\rho=0.95`$ for averaging and $`\epsilon=10^{-6}`$ for numerical stability. The paper gives no conventional fixed-rate decay schedule for this run.
 
-**Regularization techniques:** Low-rank word input/output mappings constrain capacity; recurrent matrices are initialized using orthogonal directions obtained from singular vectors. The cited recipe should not acquire undocumented dropout merely because modern GRU libraries offer it.
+**Regularization techniques:** Low-rank word mappings send inputs and outputs through narrower spaces, limiting capacity. Recurrent weights start with orthogonal directions, meaning directions at right angles in that space. These come from a matrix calculation using singular vectors. The cited recipe does not gain undocumented dropout just because modern libraries offer it.
 
-**Backpropagation considerations:** BPTT passes through both gate-controlled paths. Libraries differ over whether reset multiplication occurs before or after a recurrent affine transformation; biases make these genuinely different parameterizations. Gate conventions can also swap the meanings of $`z`$ and $`1-z`$.
+**Backpropagation considerations:** BPTT follows both gated paths. Libraries differ in whether the reset multiplication happens before or after a recurrent linear-plus-bias transformation. Those are genuinely different models. Some definitions also swap the roles of z and one minus z.
 
-**Parameter count / scaling behavior:** The source uses 1,000 hidden units in each encoder and decoder and rank-100 embedding mappings. A simple one-direction GRU has approximately $`3h(d+h+1)`$ cell parameters, before vocabulary embeddings and readout; therefore hidden width alone is not a full checkpoint count.
+**Parameter count / scaling behavior:** Encoder and decoder each have 1,000 hidden units and use rank-100 embedding mappings. **Optional math:** A one-direction cell has about $`3h(d+h+1)`$ parameters, for input width d and state width h. Embeddings and the readout add more, so hidden width alone cannot establish checkpoint size.
 
-**Training paradigm:** Supervised parallel-phrase learning. Additional monolingual language-model features reported in other rows of the translation experiment are separate components.
+**Training paradigm:** Supplied parallel phrases supervise this model. Additional monolingual language-model features in other experiment rows are separate components.
 
-**Hardware/parallelism considerations:** Fewer gate matrices than a standard LSTM can reduce work and memory, but wall-clock gains depend on fused kernels. Recurrence still imposes a sequential critical path.
+**Hardware/parallelism considerations:** Fewer gate matrices can reduce work and memory compared with a standard LSTM. Actual speed depends on how well software combines operations. The sequence still has to advance step by step.
 
-**Strengths and limitations:** GRUs offer useful memory control with a comparatively compact cell. They retain the fixed-summary bottleneck when used in an encoder-decoder without attention and do not universally outperform LSTMs.
+**Strengths and limitations:** GRUs provide useful memory control with a compact cell. A translation encoder without attention still compresses the whole source into one fixed summary. GRUs do not always outperform LSTMs.
 
-**Computational complexity / scalability notes:** A dense cell costs $`O(T\,3h(d+h))`$ per sequence, plus vocabulary/readout computation. Full-softmax output can be significant for large vocabularies even when the recurrent cell is compact.
+**Computational complexity / scalability notes:** Longer sequences add repeated cell work; a large vocabulary can also make output scoring expensive. **Optional math:** One dense cell costs $`O(T\,3h(d+h))`$ per sequence, with length T, input width d, and state width h. This excludes vocabulary and readout calculations.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** On the [paper's WMT-2014 English-to-French **newstest2014** evaluation](https://arxiv.org/html/1406.1078v3), adding the gated encoder-decoder phrase score raises the phrase-based baseline's **test BLEU from 33.30 to 33.87**; development scores are separately reported as 30.64 and 31.20. A source phrase and candidate French phrase enter the model, which supplies a conditional score to the larger decoder's decision among translations. This is **not 33.87 BLEU from a standalone GRU-only end-to-end translator**, nor the higher-scoring row with an additional language model. The documented goal is better phrase representations; business localization quality and translator productivity were not measured.
+**Evidence status: Research benchmark.** On [WMT-2014 English-to-French newstest2014](https://arxiv.org/html/1406.1078v3), adding this phrase score raises **test BLEU from 33.30 to 33.87**. Development scores are separately 30.64 and 31.20. BLEU compares wording with reference translations; it is not a percent-correct score.
 
-**Notable vendor implementations/libraries:** PyTorch `GRU`, Keras `GRU`, and recurrent translation toolkits. Record reset placement, bias layout, bidirectionality, and readout structure when porting weights.
+The model scores a source phrase and a candidate French phrase. The larger translation system uses that score when choosing an answer. This is **not 33.87 BLEU from a standalone GRU-only translator**, nor the higher-scoring row that adds a language model. Better phrase representations were the goal; business localization quality and translator productivity were not measured.
+
+**Notable vendor implementations/libraries:** PyTorch `GRU`, Keras `GRU`, and recurrent translation toolkits provide versions. When moving weights, check reset placement, biases, reading directions, and readout structure.
 
 ### 1.7.4 Sequence-to-sequence with Bahdanau attention
+**In plain English:** This translator looks back at different parts of the source sentence while writing each output word. Learned weights decide how much information to retrieve from each source position.
 
-**Name:** Attentional sequence-to-sequence, specifically Bahdanau additive attention in the original **RNNsearch** translation model.
+**Name:** Sequence-to-sequence with Bahdanau additive attention, specifically the original **RNNsearch** translator.
 
-**Category & sub-category:** Supervised learning; recurrent and sequence architectures; learned source-target alignment.
+**Category & sub-category:** Supervised learning; recurrent and sequence architectures. The model learns which source positions contribute to each target step.
 
-**Originating paper/vendor/year:** Dzmitry Bahdanau, Kyunghyun Cho, and Yoshua Bengio, [Neural Machine Translation by Jointly Learning to Align and Translate](https://arxiv.org/html/1409.0473v7), 2014 preprint and ICLR 2015 paper.
+**Originating paper/vendor/year:** Dzmitry Bahdanau, Kyunghyun Cho, and Yoshua Bengio wrote [Neural Machine Translation by Jointly Learning to Align and Translate](https://arxiv.org/html/1409.0473v7). It appeared as a preprint in 2014 and an ICLR paper in 2015.
 
-**Core mechanism:** A bidirectional encoder supplies one annotation $`h_j`$ per source position. At target step $`i`$, an additive scorer evaluates compatibility, for example $`e_{ij}=v^\top\tanh(W_s s_{i-1}+W_hh_j)`$. Softmax across source positions gives $`\alpha_{ij}`$, and $`c_i=\sum_j\alpha_{ij}h_j`$ becomes the decoder's context. Instead of compressing the entire source into one fixed vector, the decoder repeatedly retrieves different weighted source information.
+**Core mechanism:** A forward/backward encoder stores a feature vector for each source position. Before choosing an output word, the decoder scores how well each vector matches its current needs. Softmax turns those scores into weights. The weighted source vectors form a context vector for that step. This **attention** is a numerical lookup, not human attention or proof of understanding. It avoids forcing the whole sentence through one fixed summary.
 
-**Inputs/outputs and typical data types:** A source-language token sequence becomes a target-language sequence, with soft alignment weights as intermediate quantities. Alignment weights are model computations, not guaranteed human explanations.
+**Optional math:** One scorer is $`e_{ij}=v^\top\tanh(W_s s_{i-1}+W_hh_j)`$. Here i is target step, j source position, s previous decoder state, h source features, and v/Ws/Wh learned weights. Softmax over j gives weights $`\alpha_{ij}`$. The context is $`c_i=\sum_j\alpha_{ij}h_j`$, a weighted sum of source vectors.
 
-**Architecture diagram description:**
+**Inputs/outputs and typical data types:** A source-language token sequence becomes a translated sequence. The intermediate alignment weights describe the model's calculation. They are not guaranteed explanations of a human translator's reasoning.
+
+**Architecture diagram description:** Source features remain available for repeated weighted lookups. The decoder uses each new context alongside the target words already supplied.
 
 ```text
 source tokens -> forward/backward GRU encoder -> h1,h2,...,hS
@@ -763,45 +835,52 @@ previous decoder state -> additive scores -> softmax weights -> context c_i
 target prefix + c_i -> GRU decoder -> maxout/readout -> target-word distribution
 ```
 
-**Activation functions used and why:** Sigmoid/tanh gated recurrent units, tanh in the additive alignment network, softmax over source positions, and a maxout-based output network followed by vocabulary softmax.
+**Activation functions used and why:** The GRUs use sigmoid gates and tanh candidates. Tanh also shapes alignment scores; softmax makes source-position weights sum to one. A maxout readout keeps selected larger responses before vocabulary softmax produces word probabilities.
 
-**Loss function(s):** Conditional target-sequence cross-entropy, summing the negative log-probability of the reference translation's tokens. No ground-truth word alignment is needed.
+**Loss function(s):** Target-sequence cross-entropy penalizes low probability for each reference-translation token, then adds those penalties. Training needs paired sentences but no supplied word-to-word alignment.
 
-**Optimization algorithm(s):** The source uses minibatch SGD with Adadelta, $`\rho=0.95,\epsilon=10^{-6}`$, and 80 sentences per update. The longer RNNsearch-50 run continues until development performance stops improving; it is a separately identified result rather than a universal fixed-epoch schedule.
+**Optimization algorithm(s):** The source uses minibatch SGD with Adadelta and 80 sentences per update. **Optional math:** Adadelta uses $`\rho=0.95,\epsilon=10^{-6}`$ for its averaging and numerical-stability controls. The longer RNNsearch-50 run stops when development performance stops improving. It is a separate result, not a universal fixed-epoch schedule.
 
-**Regularization techniques:** Vocabulary restrictions, initialization, and development monitoring constrain the reported training. The paper's sentence-length restrictions define training variants; they should not be mistaken for a general regularizer or an evaluation exclusion.
+**Regularization techniques:** Vocabulary limits, starting weights, and development checks constrain training. Sentence-length limits define different training versions. They are not general regularizers or permission to exclude hard sentences from evaluation.
 
-**Backpropagation considerations:** Both recurrent BPTT and gradients through the soft alignment weights are required; the training appendix clips global gradient norm at one. Attention opens shorter routes to source annotations, but recurrence remains. A hard argmax alignment would remove ordinary gradients through position selection.
+**Backpropagation considerations:** Error signals pass through both the recurrent history and the soft lookup weights. The appendix clips the global gradient norm at one, capping the overall signal size. Attention creates shorter routes to source features, but recurrent steps remain. Choosing only the largest alignment score as a hard position would remove ordinary gradients through that choice.
 
-**Parameter count / scaling behavior:** RNNsearch uses 1,000 units in each encoder direction and 1,000 decoder units. The complete parameter count additionally depends strongly on vocabulary embeddings, the alignment network, and maxout readout; it is not inferred from those widths alone.
+**Parameter count / scaling behavior:** RNNsearch has 1,000 units in each encoder direction and 1,000 decoder units. Vocabulary embeddings, the alignment network, and maxout readout also need weights. These widths alone do not give the complete parameter count.
 
-**Training paradigm:** Supervised learning from bilingual parallel sentences, with teacher-forced target prefixes during training and beam search during inference. This is not masked-token or next-token pretraining on an unpaired corpus.
+**Training paradigm:** Bilingual sentence pairs supervise training. Teacher forcing supplies the correct earlier target words during training. At prediction time, beam search instead keeps a limited group of candidate translations. This is not masked-token or next-token pretraining on unpaired text.
 
-**Hardware/parallelism considerations:** Encoder annotations can be cached, and their alignment projections reused. Decoder steps remain sequential; beam search multiplies state and scoring work.
+**Hardware/parallelism considerations:** Source vectors and their alignment projections can be calculated once and reused. Output steps remain sequential. Keeping multiple beam candidates multiplies state and scoring work.
 
-**Strengths and limitations:** Content-dependent context alleviates the fixed-vector bottleneck, especially on longer sentences. Word-level vocabulary limits still create unknown-token failures; attention does not guarantee factual or semantically faithful translation.
+**Strengths and limitations:** Repeated lookups reduce the single-summary bottleneck, especially for long sentences. Word-level vocabulary limits can still produce unknown tokens. Attention alone guarantees neither accurate meaning nor faithful translation.
 
-**Computational complexity / scalability notes:** For source length $`S`$, target length $`U`$, and alignment width $`a`$, computing all alignment scores costs approximately $`O(SUa)`$ after reusable projections, in addition to recurrent and vocabulary-output costs. It is incorrect to charge only this alignment term as the entire translator.
+**Computational complexity / scalability notes:** Longer source and target sentences create more source-target comparisons. **Optional math:** With source length S, target length U, and scorer width a, alignment costs about $`O(SUa)`$ after reusable projections. Recurrent steps and vocabulary scoring add further work; alignment is not the entire translator's cost.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** [Table 1](https://arxiv.org/html/1409.0473v7) reports **26.75 BLEU** for **RNNsearch-50** versus **17.82** for **RNNencdec-50** on **all 3,003 WMT-2014 English-to-French news-test-2014 sentences**. The longer-trained starred model reaches 28.45; the separate "No UNK" subset must not replace the full-set result. A source sentence supplies positionwise annotations; while choosing a French word, the decoder weights relevant source positions, predicts a distribution, and extends a beam of candidate translations. Addressing long-sentence compression is the authors' documented motivation. BLEU is a reference-overlap metric, not a demonstrated improvement in commercial translation acceptance or human productivity.
+**Evidence status: Research benchmark.** [Table 1](https://arxiv.org/html/1409.0473v7) gives **26.75 BLEU for RNNsearch-50**, versus **17.82 for RNNencdec-50**, on **all 3,003 WMT-2014 English-to-French news-test-2014 sentences**. The longer-trained starred model reaches 28.45. The separate "No UNK" subset cannot replace the full-set result. BLEU measures wording overlap with references, not percent correct.
 
-**Notable vendor implementations/libraries:** Additive-attention layers in Keras and historical recurrent NMT toolkits implement the mechanism. A generic attention wrapper does not automatically reproduce RNNsearch's encoder, gates, vocabulary, or maxout head.
+For each French word, the decoder weights stored source positions, predicts word probabilities, and extends candidate translations. The authors aim to reduce the damage from compressing long sentences into one vector. The benchmark measures neither commercial translation acceptance nor human productivity.
+
+**Notable vendor implementations/libraries:** Keras additive-attention layers and historical recurrent translation toolkits implement the lookup mechanism. A generic wrapper does not recreate RNNsearch's encoder, gates, vocabulary, and maxout head.
 
 ### 1.7.5 Original encoder-decoder Transformer
+**In plain English:** The original Transformer learns which source words are useful when producing a translation. During training, it can process many positions at once instead of following a strictly word-by-word chain.
 
-**Name:** The original Transformer for supervised sequence transduction, including base and big translation configurations.
+**Name:** Original Transformer for converting one sequence into another. This entry includes base and big translation versions.
 
-**Category & sub-category:** Supervised learning; recurrent and sequence architectures; non-recurrent attention-based encoder-decoder. Placement in this category is about sequence tasks, not an assertion that the Transformer is recurrent.
+**Category & sub-category:** Supervised learning; recurrent and sequence architectures. It is a non-recurrent encoder-decoder placed here because it handles sequences, not because it is an RNN.
 
-**Originating paper/vendor/year:** Ashish Vaswani and colleagues, [Attention Is All You Need](https://arxiv.org/html/1706.03762v7), NeurIPS 2017. The cited arXiv revision retains the historical translation experiments.
+**Originating paper/vendor/year:** Ashish Vaswani and colleagues, [Attention Is All You Need](https://arxiv.org/html/1706.03762v7), NeurIPS 2017. The cited revision retains the historical translation experiments.
 
-**Core mechanism:** Multi-head attention forms $`\operatorname{softmax}(QK^\top/\sqrt{d_k})V`$, allowing each position to aggregate other positions' representations. The encoder uses unrestricted source self-attention; the decoder uses causal target self-attention and cross-attention to the encoder. Positionwise feed-forward networks transform each token, while residual connections and layer normalization stabilize the stack. Sinusoidal positional encodings supply order that attention alone would not know.
+**Core mechanism:** Each position creates a query describing what information to retrieve. Other positions supply keys for matching and values to retrieve. Match scores become weights for averaging values. Several attention heads perform different learned lookups. These are numerical operations, not human attention.
 
-**Inputs/outputs and typical data types:** Tokenized parallel sentences become conditional target-token distributions and decoded translations. Padding and causal masks serve different purposes.
+The encoder looks across the source sentence. The decoder looks at earlier target positions and retrieves source information. A small feed-forward network then transforms each position separately. Residual shortcuts and layer normalization help the stack train. Sine-wave positional encodings add order information that these lookups alone would lack.
 
-**Architecture diagram description:**
+**Optional math:** Attention computes $`\operatorname{softmax}(QK^\top/\sqrt{d_k})V`$. Q, K, and V collect queries, keys, and values. The transpose makes query-key dot products; dk is key width. Dividing by its square root controls score size. Softmax supplies weights, and multiplying by V retrieves the weighted values.
+
+**Inputs/outputs and typical data types:** Tokenized parallel sentences become target-token probabilities and a decoded translation. A padding mask excludes filler positions. A causal mask hides future target tokens; the two masks serve different purposes.
+
+**Architecture diagram description:** FFN means the small feed-forward network used at each position. Both stacks have six layers, with different lookup types in the decoder.
 
 ```text
 source -> embedding + position -> [self-attention -> FFN] x6 -> encoder states
@@ -811,57 +890,60 @@ target prefix -> embedding + position
 each sublayer: residual addition and original post-layer-normalization
 ```
 
-**Activation functions used and why:** Attention softmax, ReLU in the two-layer feed-forward network, and output softmax. The original does not use the GELU/SwiGLU choices common in later pretrained families.
+**Activation functions used and why:** Softmax supplies attention weights and final word probabilities. The two-layer feed-forward block uses ReLU. The original does not use later families' GELU or SwiGLU activations.
 
-**Loss function(s):** Supervised target-token cross-entropy with label smoothing 0.1. The target tokens are supplied translations conditioned on a source sentence.
+**Loss function(s):** Supplied translation tokens guide cross-entropy, with label smoothing 0.1. The target is the correct translation given the source, not text predicted without a paired source.
 
-**Optimization algorithm(s):** Adam with $`\beta_1=0.9,\beta_2=0.98,\epsilon=10^{-9}`$. The rate is $`d^{-1/2}\min(t^{-1/2},t\,4000^{-3/2})`$: 4,000 warmup steps, then inverse-square-root decay.
+**Optimization algorithm(s):** Adam adapts steps using recent gradients. **Optional math:** Its controls are $`\beta_1=0.9,\beta_2=0.98,\epsilon=10^{-9}`$: two averaging settings and a numerical-stability constant. The rate is $`d^{-1/2}\min(t^{-1/2},t\,4000^{-3/2})`$, with model width d and training step t. It rises for 4,000 warmup steps, then falls in proportion to one over the square root of the step.
 
-**Regularization techniques:** Residual/embedding dropout, layer normalization, and label smoothing. The base dropout rate is 0.1; the big English-German configuration uses 0.3. Final translation models average recent checkpoints, not predictions from independently trained ensembles.
+**Regularization techniques:** Dropout applies to residual and embedding paths; training also uses layer normalization and label smoothing. Base dropout is 0.1; big English-German uses 0.3. Final models average recent saved weights. This is not an ensemble averaging predictions from independently trained models.
 
-**Backpropagation considerations:** Teacher forcing permits parallel computation over target positions during training despite causal masking. Residual paths reduce depth-related optimization difficulties. Autoregressive inference still depends on previously generated tokens.
+**Backpropagation considerations:** During training, correct target prefixes are available. This teacher forcing lets target positions be processed together while the causal mask still blocks future answers. Shortcuts help error signals cross layers. During prediction, generated tokens must still arrive one after another.
 
-**Parameter count / scaling behavior:** Base uses width 512, feed-forward width 2,048, eight heads, and about **65 million parameters**. Big uses width 1,024, feed-forward width 4,096, sixteen heads, and about **213 million**. Both have six encoder and six decoder layers.
+**Parameter count / scaling behavior:** Base uses width 512, feed-forward width 2,048, eight heads, and about **65 million parameters**. Big uses width 1,024, feed-forward width 4,096, sixteen heads, and about **213 million**. Both contain six encoder and six decoder layers.
 
-**Training paradigm:** **Supervised parallel-corpus translation.** BERT, GPT, and T5's base pretraining objectives are treated separately in [foundation models](06-foundation-models.md); a causal decoder does not by itself make the original Transformer experiment unsupervised.
+**Training paradigm:** **Supervised translation from parallel sentences.** [Foundation models](06-foundation-models.md) separately discuss BERT, GPT, and T5 pretraining. A decoder that hides future tokens does not make this original translation experiment unsupervised.
 
-**Hardware/parallelism considerations:** Training attention and feed-forward operations use large parallel matrix products; the reported experiments used eight P100 GPUs. Cached keys/values reduce repeated decoding work but consume memory and do not eliminate sequential token generation.
+**Hardware/parallelism considerations:** Large matrix products let many training calculations run together. The experiments used eight P100 GPUs. Saving prior keys and values reduces repeated decoding work, but uses memory and does not remove sequential token generation.
 
-**Strengths and limitations:** Direct interactions shorten information paths and training parallelizes well. Attention, vocabulary projections, and feed-forward blocks remain expensive, and translation quality is not guaranteed outside the measured domain.
+**Strengths and limitations:** Direct lookups shorten routes between distant positions and support parallel training. Attention, vocabulary scoring, and feed-forward layers remain costly. Translation quality outside the tested domain is not guaranteed.
 
-**Computational complexity / scalability notes:** At length $`T`$, attention interactions cost $`O(T^2d)`$, **but projections cost $`O(Td^2)`$ and the FFN costs $`O(Tdf)`$** for FFN width $`f`$. Encoder-decoder cross-attention adds $`O(SUd)`$. Naively stored attention probabilities use quadratic memory; fused implementations can reduce stored intermediates without removing the dense interaction arithmetic.
+**Computational complexity / scalability notes:** Doubling sequence length roughly quadruples pairwise attention work. Other major costs grow differently. **Optional math:** For length T, model width d, and feed-forward width f, interactions cost $`O(T^2d)`$, **projections $`O(Td^2)`$, and FFNs $`O(Tdf)`$**. Source-target attention adds $`O(SUd)`$ for source length S and target length U. Saving all attention weights takes quadratic memory. Fused implementations can store less without eliminating dense pairwise calculations.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** The [original translation table](https://arxiv.org/html/1706.03762v7) reports **27.3 BLEU for base and 28.4 for big** on **WMT-2014 English-to-German newstest2014**. Evaluation uses beam width four and length penalty 0.6; base averages five checkpoints and big twenty. A German candidate token attends to its English source and earlier German tokens, then beam search selects the translation sequence. The authors' rationale is parallelizable sequence modelling without recurrence. These are supervised research results, not evidence of a particular commercial translation service's architecture or customer impact.
+**Evidence status: Research benchmark.** The [translation table](https://arxiv.org/html/1706.03762v7) reports **27.3 BLEU for base and 28.4 for big** on **WMT-2014 English-to-German newstest2014**. BLEU compares wording with reference translations; it is not percent correct. Evaluation uses beam width four and length penalty 0.6. Base averages five checkpoints; big averages twenty.
 
-**Notable vendor implementations/libraries:** Tensor2Tensor historically, PyTorch `Transformer`, and encoder-decoder translation toolkits. Default normalization order, tokenization, weight tying, and positional representations must be checked.
+A German candidate token retrieves information from the English sentence and earlier German tokens. Beam search then selects a sequence. The goal was parallelizable sequence learning without recurrence. These results establish neither a commercial service's architecture nor customer impact.
+
+**Notable vendor implementations/libraries:** Historical Tensor2Tensor, PyTorch `Transformer`, and translation toolkits offer implementations. Check normalization order, tokenization, shared weights, and positional encodings rather than assuming defaults match.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| Vanilla RNN | Ordered features and short-context sequences | Simple recurrent state sharing | Difficult long-range optimization | TIMIT tanh-RNN comparator, with a reported high phoneme error rate |
-| LSTM | Speech and longer-context time series | Controlled additive memory | Sequential time dependency and gate cost | Bidirectional LSTM-CTC on TIMIT |
-| GRU | Token sequences and compact recurrent models | Gated state with fewer cell components | Recurrence and fixed-summary bottlenecks | Phrase scoring inside the WMT-2014 translation system |
-| Seq2Seq with Bahdanau attention | Paired variable-length sequences | Learns soft source-target alignment | Recurrent decoding and vocabulary limits | RNNsearch English-to-French benchmark |
-| Original Transformer | Parallel text and other sequence transduction | Parallel training with direct attention paths | Attention plus projections/FFNs are costly | Supervised WMT-2014 English-to-German translation |
+| Vanilla RNN | Ordered features with mostly nearby context | Simple shared rule carries state | Distant information is hard to retain and train | TIMIT tanh-RNN comparison with high phoneme error |
+| LSTM | Speech and time series needing longer context | Gates control what the state keeps | Sequential steps and extra gate work | Bidirectional LSTM with CTC on TIMIT |
+| GRU | Token sequences and smaller recurrent models | Controls memory with fewer cell parts | Sequential steps and fixed summaries can limit it | Extra phrase score in the WMT-2014 translation system |
+| Seq2Seq with Bahdanau attention | Paired sequences of different lengths | Retrieves weighted source information at each step | Recurrent decoding and limited vocabulary | RNNsearch English-to-French translation test |
+| Original Transformer | Paired text and other sequence-conversion tasks | Parallel training and direct weighted lookups | Attention, projections, and feed-forward layers cost work | Supervised WMT-2014 English-to-German translation |
 
 ## 1.8 Vision transformers and prediction architectures
 
-The next six entries distinguish a backbone from a prediction system. ViT and Swin primarily specify feature encoders. U-Net predicts a spatial label field; Faster R-CNN, YOLO, and DETR predict objects and their locations. Their scores measure different tasks and must not be placed on one undifferentiated "accuracy" scale.
+A **backbone** extracts reusable image features. A full prediction system also needs a head that turns those features into task answers. ViT and Swin mainly describe backbones. U-Net assigns labels to pixels, called segmentation. Faster R-CNN, YOLO, and DETR find objects and their boxes, called detection. Their scores measure different tasks, so they cannot share one undivided "accuracy" ranking.
 
 ### 1.8.1 Vision Transformer (ViT)
+**In plain English:** ViT splits a picture into patches and lets their features exchange information through weighted lookups. It uses the combined information to choose an image label.
 
-**Name:** Vision Transformer; the worked checkpoint family is **ViT-L/16 with supervised ImageNet-21k pretraining** and ImageNet-1K fine-tuning.
+**Name:** Vision Transformer. The worked model is **ViT-L/16, pretrained with ImageNet-21k labels**, then fine-tuned on ImageNet-1K.
 
-**Category & sub-category:** Supervised learning; vision transformers and prediction architectures; global patch-token image encoders.
+**Category & sub-category:** Supervised learning; vision transformers and prediction architectures. Global attention connects image-patch representations.
 
-**Originating paper/vendor/year:** Alexey Dosovitskiy and colleagues, Google Research, [An Image is Worth 16x16 Words](https://arxiv.org/html/2010.11929v2), 2020 preprint and ICLR 2021 paper.
+**Originating paper/vendor/year:** Alexey Dosovitskiy and colleagues at Google Research wrote [An Image is Worth 16x16 Words](https://arxiv.org/html/2010.11929v2). Its preprint appeared in 2020 and its ICLR paper in 2021.
 
-**Core mechanism:** The image is divided into fixed-size patches, each flattened and linearly embedded. A learned classification token and positional embeddings join the sequence. A Transformer encoder repeatedly mixes information globally through self-attention and transforms features through MLPs. The class-token representation feeds a classifier. Unlike convolution, attention weights depend on the image content; unlike a hierarchical backbone, original ViT largely keeps one patch resolution.
+**Core mechanism:** The image is cut into equal patches. A learned linear mapping turns each flattened patch into a vector. Position vectors tell the model where patches belong. A special learned class token joins them. Encoder layers make weighted lookups across patch vectors, then MLPs transform the results. The final class-token vector supplies the image decision. Unlike fixed convolution filters, lookup weights depend on the image. Original ViT mostly keeps one patch resolution.
 
-**Inputs/outputs and typical data types:** RGB images become class predictions or patch representations. "L/16" specifies the Large configuration and 16-by-16 patches, not a 16-layer network.
+**Inputs/outputs and typical data types:** RGB images become class predictions or patch features. "L/16" means the Large configuration with 16-by-16 patches, not a 16-layer network.
 
-**Architecture diagram description:**
+**Architecture diagram description:** The 24 encoder blocks update patch information and the class token. Each block has attention and MLP branches with shortcuts.
 
 ```text
 image -> 16x16 patches -> linear patch embeddings + learned positions
@@ -870,45 +952,48 @@ block: LayerNorm -> multi-head attention -> residual
        LayerNorm -> MLP/GELU -> residual
 ```
 
-**Activation functions used and why:** GELU in encoder MLPs and softmax within attention. The fine-tuned classifier produces class logits. Its new classification head must match the downstream label set.
+**Activation functions used and why:** MLPs use the smooth GELU activation; attention uses softmax to form lookup weights. Fine-tuning produces class logits, or raw scores. The replacement head must match the new task's labels.
 
-**Loss function(s):** Cross-entropy against supplied image-category targets; the [released training code](https://github.com/google-research/vision_transformer/blob/main/vit_jax/train.py) explicitly computes target-weighted negative log-softmax. The downstream ImageNet-1K task is single-label classification. Masked-patch reconstruction is not the quoted checkpoint's objective.
+**Loss function(s):** Cross-entropy uses supplied image categories. The [released training code](https://github.com/google-research/vision_transformer/blob/main/vit_jax/train.py) computes target-weighted negative log-softmax: it penalizes low probability on target classes. ImageNet-1K assigns one label per image. Rebuilding hidden patches is not this checkpoint's objective.
 
-**Optimization algorithm(s):** For ImageNet-21k, the paper specifies Adam, learning rate $`10^{-3}`$, batch size 4096, 10,000-step warmup, and linear decay. Fine-tuning uses SGD with momentum 0.9, batch size 512, and cosine decay; a learning-rate grid is selected for the downstream task rather than a universal fine-tuning rate.
+**Optimization algorithm(s):** ImageNet-21k training uses Adam, batch size 4096, 10,000 warmup steps, then linear rate decay. **Optional math:** The learning rate is $`10^{-3}`$, or 0.001. Fine-tuning uses SGD with momentum 0.9, batch size 512, and cosine decay. Its starting rate is selected from a grid for the target task, not fixed universally.
 
-**Regularization techniques:** The appendix's **ImageNet-21k** recipe specifies weight decay **0.03** and dropout **0.1**; its JFT recipe uses different values. Fine-tuning uses no weight decay and clips global gradient norm at one. The high-resolution ImageNet runs also use parameter averaging.
+**Regularization techniques:** The appendix's **ImageNet-21k** recipe uses weight decay **0.03** and dropout **0.1**. JFT training uses different settings. Fine-tuning uses no weight decay and clips the overall gradient norm at one. High-resolution ImageNet runs also average parameter values.
 
-**Backpropagation considerations:** Pre-normalized residual blocks assist optimization. Fine-tuning at a different resolution requires interpolating patch positional embeddings while treating the class token separately. That is a model adaptation, not simply reshaping an arbitrary learned sequence.
+**Backpropagation considerations:** Each branch is normalized before its main calculation, helping the residual stack train. Changing image resolution changes the number of patches. Fine-tuning must interpolate patch-position vectors while handling the class token separately. Simply reshaping all positions would not make the same adaptation.
 
-**Parameter count / scaling behavior:** The paper lists **307 million parameters for ViT-L**, with 24 layers, width 1,024, MLP width 4,096, and sixteen heads. Base and Huge are approximately 86 million and 632 million, respectively.
+**Parameter count / scaling behavior:** ViT-L has **307 million parameters**, 24 layers, width 1,024, MLP width 4,096, and sixteen heads. Base and Huge have about 86 million and 632 million parameters respectively.
 
-**Training paradigm:** Supervised large-label-set pretraining followed by supervised task adaptation. See [unsupervised neural models](05-unsupervised-neural.md) for masked-image and other self-supervised Transformer objectives.
+**Training paradigm:** Labelled large-dataset pretraining is followed by labelled task adaptation. [Unsupervised neural models](05-unsupervised-neural.md) cover masked-image and other self-supervised Transformer objectives separately.
 
-**Hardware/parallelism considerations:** Dense attention and MLPs exploit accelerators, but high-resolution fine-tuning greatly increases token count. Reported TPU training resources are specific to the experiments and not general inference requirements.
+**Hardware/parallelism considerations:** Dense attention and MLPs suit accelerators. Higher image resolution creates many more tokens. The paper's TPU training resources describe those experiments, not a universal requirement for making predictions.
 
-**Strengths and limitations:** ViT learns global interactions with few image-specific architectural assumptions. That flexibility can require more data than a convolutional prior, and the original uniform-resolution representation is inconvenient for some dense tasks.
+**Strengths and limitations:** ViT learns whole-image interactions with fewer built-in image assumptions than a CNN. It may therefore require more data. Keeping one patch resolution also makes some pixel-level tasks less convenient.
 
-**Computational complexity / scalability notes:** With patch side $`P`$, token count is approximately $`N=HW/P^2`$. A block costs $`O(N^2d+Nd^2+Ndf)`$. Halving $`P`$ quadruples tokens and increases the quadratic attention term sixteenfold, while linear-in-token terms grow fourfold.
+**Computational complexity / scalability notes:** Smaller patches sharply raise lookup costs. Halving patch side creates four times as many tokens and sixteen times the pairwise attention work. Other token-dependent terms grow fourfold. **Optional math:** $`N=HW/P^2`$ approximately counts patches for image dimensions H/W and patch side P. A block costs $`O(N^2d+Nd^2+Ndf)`$, with feature width d and MLP width f.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** [Table 2](https://arxiv.org/html/2010.11929v2) reports **85.30% +/- 0.02 top-1 ImageNet accuracy** for **ViT-L/16 pretrained on ImageNet-21k**, then fine-tuned for ImageNet-1K; the stated deviation is across three fine-tuning runs, not an ensemble gain. The ImageNet evaluation uses the held-out validation benchmark and the paper's higher-resolution **512-pixel** ViT-L fine-tuning setting. Patch tokens from a photograph exchange information, and the class token selects an object label. The authors investigate whether scale can compensate for weaker convolutional bias. The separate JFT-pretrained Huge result of 88.55% is not this checkpoint, and neither result establishes a deployed visual-search KPI.
+**Evidence status: Research benchmark.** [Table 2](https://arxiv.org/html/2010.11929v2) reports **85.30% +/- 0.02 top-1 ImageNet accuracy** for **ViT-L/16 pretrained on ImageNet-21k** and fine-tuned on ImageNet-1K. Top-1 checks the highest-scored label. The stated variation covers three fine-tuning runs, not an ensemble gain. Evaluation uses the held-out validation benchmark and the paper's higher-resolution **512-pixel** ViT-L fine-tuning setting.
 
-**Notable vendor implementations/libraries:** Google's `vision_transformer` release, timm, and torchvision. A self-supervised or differently pretrained ViT should be identified by weights and objective, not just architecture size.
+Patch features exchange weighted information; the class token supplies the object label. The authors test whether larger-scale learning can make up for fewer built-in convolutional assumptions. The JFT-pretrained Huge score of 88.55% belongs to a different model. Neither result proves a deployed visual-search benefit.
+
+**Notable vendor implementations/libraries:** Google's `vision_transformer`, timm, and torchvision offer models. Record the weights and learning objective, not just size, especially for self-supervised or differently pretrained versions.
 
 ### 1.8.2 Swin Transformer
+**In plain English:** Swin lets nearby image patches share information, then shifts the groups so information can cross boundaries. It builds features at several image scales without comparing every patch at every layer.
 
-**Name:** Swin Transformer, specifically **Swin-Tiny from the original 2021 family**.
+**Name:** Swin Transformer, using **Swin-Tiny from the original 2021 family**.
 
-**Category & sub-category:** Supervised learning; vision transformers and prediction architectures; hierarchical shifted-window attention.
+**Category & sub-category:** Supervised learning; vision transformers and prediction architectures. A hierarchy uses attention inside shifting local windows.
 
-**Originating paper/vendor/year:** Ze Liu and colleagues, Microsoft Research and collaborators, [Swin Transformer: Hierarchical Vision Transformer using Shifted Windows](https://arxiv.org/html/2103.14030v2), ICCV 2021.
+**Originating paper/vendor/year:** Ze Liu and colleagues at Microsoft Research and collaborating groups published [Swin Transformer: Hierarchical Vision Transformer using Shifted Windows](https://arxiv.org/html/2103.14030v2) at ICCV 2021.
 
-**Core mechanism:** Attention is restricted to small nonoverlapping windows. The next block shifts the partition so that tokens can exchange information across former window boundaries. Patch-merging layers reduce spatial resolution and increase channel width, producing a multiscale hierarchy suitable for both classification and dense prediction. A mask prevents cyclic shifting from creating spurious wraparound connections.
+**Core mechanism:** Each small, nonoverlapping window makes weighted lookups only among its own tokens. The next block shifts the grouping, allowing exchanges across the old boundaries. Patch merging reduces spatial detail while widening feature vectors. A mask prevents the software's cyclic shift from wrongly linking opposite image edges.
 
-**Inputs/outputs and typical data types:** Images become hierarchical feature maps and, with a classification head, class probabilities. Detection and segmentation frameworks add their own heads and losses.
+**Inputs/outputs and typical data types:** Images become feature maps at several scales. A classification head turns them into class probabilities. Detection and segmentation systems need separate heads and losses.
 
-**Architecture diagram description:**
+**Architecture diagram description:** Three merge steps connect four stages. Within a stage, ordinary and shifted-window blocks alternate.
 
 ```text
 image -> 4x4 patch embedding -> stage1 -> merge -> stage2 -> merge -> stage3
@@ -917,45 +1002,48 @@ within stages: window attention -> MLP -> shifted-window attention -> MLP
                [LayerNorm and residual paths around each sublayer]
 ```
 
-**Activation functions used and why:** GELU in the feed-forward MLP, softmax inside each attention window, and learned relative-position biases in attention scores. Biases express geometry; they are not another activation.
+**Activation functions used and why:** MLPs use GELU. Softmax normalizes lookup weights within each window. Learned relative-position biases adjust scores based on patch locations; these added geometry values are not separate activations.
 
-**Loss function(s):** Supervised class cross-entropy with the classification training recipe's label smoothing and augmented targets. Detector or segmenter results require separate task objectives.
+**Loss function(s):** Supervised cross-entropy uses label smoothing and targets from augmented images. Detection and segmentation results depend on additional task-specific objectives.
 
-**Optimization algorithm(s):** For ImageNet-1K, AdamW with initial rate 0.001, weight decay 0.05, batch size 1024, and 300 epochs. Twenty warmup epochs precede cosine decay.
+**Optimization algorithm(s):** ImageNet-1K training uses AdamW, initial rate 0.001, weight decay 0.05, batch size 1024, and 300 epochs. The rate warms up for twenty epochs, then follows cosine decay.
 
-**Regularization techniques:** Layer normalization, stochastic depth, image augmentation, and the source's DeiT-style training controls. The paper specifically excludes repeated augmentation and EMA from this 1K setup because they did not improve it.
+**Regularization techniques:** The recipe uses layer normalization, stochastic depth, image changes, and the source's DeiT-style training controls. It specifically excludes repeated augmentation and exponential moving average (EMA) for this 1K setup because they did not improve it. EMA would keep a running weighted average of model weights.
 
-**Backpropagation considerations:** Gradients traverse residual blocks and masked window interactions. Correct padding and cyclic-shift masking are necessary for both forward semantics and gradients; omitting masks creates a different model.
+**Backpropagation considerations:** Error signals cross residual branches and masked window lookups. Padding and shift masks must be correct. Missing masks change both the forward connections and their backward signals.
 
-**Parameter count / scaling behavior:** Swin-T has approximately **28 million parameters**, stage depths [2,2,6,2], and initial width 96. Patch merging roughly doubles channels while quartering token count between stages.
+**Parameter count / scaling behavior:** Swin-T has about **28 million parameters**, stage depths [2,2,6,2], and initial width 96. Between stages, patch merging roughly doubles channel width while reducing token count to one quarter.
 
-**Training paradigm:** The reference result is supervised ImageNet-1K training. Other published Swin results use supervised ImageNet-22K pretraining; self-supervised Swin-based encoders form a separate training category.
+**Training paradigm:** The reference uses supervised ImageNet-1K labels. Other Swin results add supervised ImageNet-22K pretraining. Self-supervised Swin encoders are another training category.
 
-**Hardware/parallelism considerations:** Shared key sets within windows improve locality, but partitioning, shifting, masking, and padding add overhead. Different window sizes and resolutions can alter throughput even with similar arithmetic counts.
+**Hardware/parallelism considerations:** Tokens in one window share key sets, helping nearby memory access. Creating windows, shifting them, masking, and padding all take work. Window size and image resolution can change speed even with similar arithmetic counts.
 
-**Strengths and limitations:** Swin supplies a scalable multiscale backbone without global attention at every layer. Long-range communication requires successive shifted blocks and hierarchy; a single local window does not see the whole image.
+**Strengths and limitations:** Swin supplies multiscale features without global attention in every layer. Distant regions communicate through repeated shifts and merging. One local window does not see the entire image.
 
-**Computational complexity / scalability notes:** For $`N`$ tokens and window side $`M`$, attention interactions cost $`O(NM^2d)`$, not $`O(N^2d)`$. Projections and MLPs still cost $`O(Nd^2+Ndf)`$. "Linear in image size" assumes fixed window size and channel widths; it is not independence from resolution or model width.
+**Computational complexity / scalability notes:** With fixed windows and widths, adding image tokens adds roughly proportional attention work. **Optional math:** For N tokens, window side M, feature width d, and MLP width f, interactions cost $`O(NM^2d)`$, not $`O(N^2d)`$. Projections and MLPs add $`O(Nd^2+Ndf)`$. "Linear in image size" assumes those fixed settings; resolution and width still matter.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** The [original paper](https://arxiv.org/html/2103.14030v2) reports **81.3% top-1 ImageNet-1K validation accuracy** for **Swin-T at 224-by-224**, trained on ImageNet-1K, compared with 79.8% for the listed DeiT-S configuration. An image is progressively partitioned, locally mixed, shifted, and merged before a pooled label decision. The documented motivation is an efficient hierarchical backbone that can also support high-resolution tasks. The paper's stronger detection and 22K-pretrained results involve additional systems or training data and are not attributes of this Tiny classification run. No Microsoft-product deployment is inferred.
+**Evidence status: Research benchmark.** The [paper](https://arxiv.org/html/2103.14030v2) reports **81.3% top-1 ImageNet-1K validation accuracy** for **Swin-T at 224-by-224**, trained on ImageNet-1K. The listed DeiT-S gets 79.8%. Top-1 checks whether the first class choice is correct.
 
-**Notable vendor implementations/libraries:** Microsoft's released Swin code, timm, torchvision, and OpenMMLab integrations. Swin V2, detector backbones, and classification checkpoints have different configuration requirements.
+Windows mix nearby features, shift, and merge before the model chooses an image label. The goal is an efficient hierarchy that can also support high-resolution tasks. Stronger detection and 22K-pretrained results use extra systems or data; they do not describe this Tiny run. No Microsoft-product deployment is implied.
+
+**Notable vendor implementations/libraries:** Microsoft's Swin release, timm, torchvision, and OpenMMLab integrations offer implementations. Swin V2, detection backbones, and classification checkpoints need different settings.
 
 ### 1.8.3 U-Net
+**In plain English:** U-Net gives each image pixel a class, such as membrane or background. It combines broad context with saved fine detail to locate boundaries more precisely.
 
-**Name:** U-Net; the original two-dimensional, valid-convolution biomedical segmentation architecture.
+**Name:** U-Net, the original two-dimensional biomedical segmentation network using valid convolutions, which do not pad the image borders.
 
-**Category & sub-category:** Supervised learning; vision transformers and prediction architectures; convolutional encoder-decoder dense segmentation.
+**Category & sub-category:** Supervised learning; vision transformers and prediction architectures. A convolutional encoder-decoder labels an entire image region.
 
-**Originating paper/vendor/year:** Olaf Ronneberger, Philipp Fischer, and Thomas Brox, University of Freiburg, [U-Net: Convolutional Networks for Biomedical Image Segmentation](https://arxiv.org/html/1505.04597v1), MICCAI 2015.
+**Originating paper/vendor/year:** Olaf Ronneberger, Philipp Fischer, and Thomas Brox of the University of Freiburg published [U-Net: Convolutional Networks for Biomedical Image Segmentation](https://arxiv.org/html/1505.04597v1) at MICCAI 2015.
 
-**Core mechanism:** A contracting path extracts contextual features while reducing resolution. An expanding path upsamples those features and concatenates appropriately cropped, high-resolution encoder features. This combines context with localization rather than classifying every pixel using an independently evaluated sliding window. The original uses valid convolutions, so the predicted tile is smaller than its input; overlap-tile inference and reflected border context cover large images.
+**Core mechanism:** The downward path shrinks maps to gather wider context. The upward path enlarges them again and joins saved, cropped features from earlier high-resolution layers. These skip features help locate details lost during shrinking. This shares work across pixels instead of running a separate window classifier at every position. Valid convolutions make the output tile smaller than the input. Overlapping tiles and reflected border context cover larger images.
 
-**Inputs/outputs and typical data types:** Microscopy images become per-pixel class probabilities and segmentation masks. Three-dimensional medical-volume variants are important extensions but are not the original measured model.
+**Inputs/outputs and typical data types:** Microscopy images become class probabilities at each pixel, then masks marking regions. Three-dimensional medical-volume versions are extensions, not the original measured network.
 
-**Architecture diagram description:**
+**Architecture diagram description:** Saved encoder features join the expanding decoder by concatenation. The original geometry changes a 572-by-572 input into a 388-by-388 output.
 
 ```text
 572x572 image -> [64 -> 128 -> 256 -> 512 -> 1024] encoder channels
@@ -965,45 +1053,48 @@ decoder: up-convolution -> concatenate skip -> two 3x3/ReLU convolutions
        -> 1x1 class projection -> 388x388 probability map
 ```
 
-**Activation functions used and why:** ReLU follows the feature convolutions. A pixelwise softmax represents competing segmentation classes. Upsampling and concatenation recover spatial detail but do not themselves classify pixels.
+**Activation functions used and why:** Feature convolutions use ReLU. Pixelwise softmax supplies competing class probabilities at each location. Enlarging maps and joining skip features restores access to detail, but those steps alone do not classify pixels.
 
-**Loss function(s):** Weighted pixelwise cross-entropy. The weighting emphasizes class balance and separating borders between touching objects, using distances to the nearest two object boundaries. This is not the Dice loss often used in later U-Net implementations.
+**Loss function(s):** Weighted pixelwise cross-entropy gives extra importance to class balance and borders between touching objects. Its border weights use distance to the nearest two object boundaries. This is not the Dice loss common in later U-Nets.
 
-**Optimization algorithm(s):** The source uses SGD with **momentum 0.99** and a batch of one large image tile. The main paper does not give a complete numerical learning-rate schedule; reproducing a particular run requires its solver configuration rather than assuming modern Adam defaults.
+**Optimization algorithm(s):** The original uses SGD with **momentum 0.99**, processing one large image tile per batch. The main paper lacks a complete numerical learning-rate schedule. A reproduction needs the run's solver settings, not assumed modern Adam defaults.
 
-**Regularization techniques:** Strong elastic deformations and image transformations compensate for limited annotated data. Initialization is chosen for rectified layers. The original architecture should not automatically acquire modern batch normalization or a padded-convolution geometry.
+**Regularization techniques:** Strong elastic distortions and other image changes help with few annotated examples. Starting weights are chosen for rectified activations such as ReLU. Original U-Net does not automatically include modern batch normalization or padded convolutions.
 
-**Backpropagation considerations:** Pixelwise gradients flow through both context and skip paths. Valid-convolution cropping must align spatial locations precisely. Boundary weighting increases gradients at narrow separation regions, making label quality and class weighting consequential.
+**Backpropagation considerations:** Every pixel's error can update both context and skip paths. Cropping must align the same image locations correctly. Border weighting strengthens signals at narrow separations, making annotation quality and chosen weights important.
 
-**Parameter count / scaling behavior:** A standard reconstruction of the displayed 64-base-channel, two-class graph is about **31 million parameters**, calculated from its layer dimensions. Different base widths, dimensionality, padding choices, and class heads alter the count.
+**Parameter count / scaling behavior:** Reconstructing the displayed 64-base-channel, two-class network gives about **31 million parameters**, calculated from its dimensions. Changing width, dimensionality, padding, or the output classes can change the count.
 
-**Training paradigm:** Supervised learning from manually annotated segmentation masks, not unsupervised discovery of cells. Pseudo-label or consistency-based U-Nets are separate semi-supervised formulations.
+**Training paradigm:** Human-drawn masks supply supervision. The model is not discovering cells without labels. Pseudo-label and consistency-based U-Nets use different, semi-supervised formulations.
 
-**Hardware/parallelism considerations:** High-resolution feature maps and retained skips dominate training memory. Overlap-tile inference trades redundant border computation for processing images larger than accelerator memory.
+**Hardware/parallelism considerations:** High-resolution maps and saved skips use much of the training memory. Overlap-tile prediction repeats some border calculations in exchange for handling images larger than accelerator memory.
 
-**Strengths and limitations:** U-Net combines local detail and wider context effectively with limited labels. Domain shift between microscopes or tissues, imperfect boundaries, and class imbalance can undermine downstream scientific or clinical use.
+**Strengths and limitations:** U-Net combines wider context with local detail using limited labels. Different microscopes or tissues, inaccurate boundaries, and uneven class counts can undermine later scientific or clinical use.
 
-**Computational complexity / scalability notes:** Sum convolutional work across encoder and decoder resolutions. Skip storage scales with $`B\sum_\ell H_\ell W_\ell C_\ell`$; moving from 2D to 3D adds a depth dimension and substantially increases memory and compute.
+**Computational complexity / scalability notes:** Both contracting and expanding paths require convolution work. Moving from two-dimensional (2D) images to three-dimensional (3D) data adds another spatial dimension. This greatly increases work and memory. **Optional math:** Skip storage scales with $`B\sum_\ell H_\ell W_\ell C_\ell`$. B is batch size; each layer ell has map height H, width W, and C channels.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** On the [ISBI electron-microscopy segmentation challenge](https://arxiv.org/html/1505.04597v1), the Freiburg study uses 30 annotated 512-by-512 training images of Drosophila neuronal tissue and submits predictions for the hidden-label test set. Averaging **seven rotated inputs**, U-Net reports **warping error 0.0003529**, compared with 0.000420 for the cited sliding-window CNN submission. This is a topology-sensitive challenge metric, **not pixel accuracy, Dice, or IoU**. Images become membrane probability maps; thresholded boundaries support separating neuronal structures for scientific tracing. The authors motivate shared dense computation and boundary-sensitive learning. The experiment does not establish clinical diagnostic safety or laboratory labor savings.
+**Evidence status: Research benchmark.** For the [ISBI electron-microscopy challenge](https://arxiv.org/html/1505.04597v1), the study uses 30 annotated 512-by-512 images of Drosophila neuronal tissue for training. Test labels are hidden. Averaging predictions from **seven rotated inputs**, U-Net reports **warping error 0.0003529**, versus 0.000420 for the cited sliding-window CNN.
 
-**Notable vendor implementations/libraries:** Freiburg's original release and U-Net implementations in MONAI, nnU-Net, Keras, and PyTorch ecosystems. nnU-Net is a broader self-configuring pipeline, not merely the original 2015 network.
+Warping error is sensitive to how structures connect; lower is better. It is **not pixel accuracy, Dice, or intersection-over-union (IoU)**. Dice and IoU instead measure region overlap. Images become membrane probability maps, then thresholded boundaries that support tracing neuronal structures. Shared pixel computation and stronger boundary learning motivate the design. This is a research test, not evidence of clinical safety or saved laboratory labor.
+
+**Notable vendor implementations/libraries:** Freiburg's release and MONAI, nnU-Net, Keras, and PyTorch ecosystems provide U-Nets. nnU-Net is a broader system that configures a pipeline, not merely the original 2015 network.
 
 ### 1.8.4 Faster R-CNN
+**In plain English:** Faster R-CNN first suggests regions that may contain objects, then checks and refines them. Both stages reuse the same image features to avoid repeatedly processing each crop.
 
-**Name:** Faster R-CNN; the original region-proposal-network detector, with a VGG-16 backbone in the worked example.
+**Name:** Faster R-CNN, the original region-proposal-network detector. The example uses a VGG-16 backbone.
 
-**Category & sub-category:** Supervised learning; vision transformers and prediction architectures; two-stage object detection with shared visual features.
+**Category & sub-category:** Supervised learning; vision transformers and prediction architectures. Two-stage object detection shares a visual feature network.
 
-**Originating paper/vendor/year:** Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun, [Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks](https://arxiv.org/html/1506.01497v3), NeurIPS 2015, with a later expanded manuscript.
+**Originating paper/vendor/year:** Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun published [Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks](https://arxiv.org/html/1506.01497v3) at NeurIPS 2015. A later manuscript expands the account.
 
-**Core mechanism:** A convolutional backbone computes one shared feature map. A region proposal network, or RPN, predicts objectness and coordinate adjustments for anchors at each location. Selected proposals feed a Fast R-CNN head through region-of-interest pooling, which classifies and refines each region. Shared features avoid recomputing a full CNN for every candidate crop.
+**Core mechanism:** A CNN creates one shared feature map. The region proposal network (RPN) checks preset candidate boxes, called anchors, at each location. It predicts whether they contain objects and how to adjust their coordinates. Selected proposals then enter region-of-interest (RoI) pooling, which produces features of a standard size. A second head classifies each region and refines its box. The whole CNN need not run again for every crop.
 
-**Inputs/outputs and typical data types:** Images and supervised object boxes/classes become a variable-length list of detections. Background is represented explicitly during training.
+**Inputs/outputs and typical data types:** Images, with object boxes and class labels during training, become a variable-length list of labelled boxes. Training also includes an explicit background class.
 
-**Architecture diagram description:**
+**Architecture diagram description:** The RPN and region classifier share VGG features. NMS, explained below, removes overlapping duplicate candidates.
 
 ```text
 image -> shared VGG feature map --+-> RPN: anchors -> objectness/box offsets
@@ -1012,45 +1103,48 @@ image -> shared VGG feature map --+-> RPN: anchors -> objectness/box offsets
                                     -> region head -> class + refined box
 ```
 
-**Activation functions used and why:** ReLU in backbone and region layers; softmax for objectness/class decisions; linear box-regression outputs. Modern feature-pyramid and normalized backbones are separate variants.
+**Activation functions used and why:** Backbone and region layers use ReLU. Softmax supplies object/background and class scores. Box adjustments use linear outputs. Newer normalized backbones and feature-pyramid versions are separate variants.
 
-**Loss function(s):** RPN binary objectness loss plus positive-anchor smooth-L1 regression; detector multiclass cross-entropy plus class-conditioned box regression. Matching rules determine which anchors and regions receive positive or background supervision.
+**Loss function(s):** The RPN learns object/background decisions and box corrections for positive anchors. The detector learns classes and class-specific corrections. Classification uses cross-entropy; box fitting uses smooth-L1, which limits the effect of large coordinate errors. Matching rules choose which candidates receive object or background labels.
 
-**Optimization algorithm(s):** The paper's principal experiments use alternating RPN/detector training. Its PASCAL RPN schedule uses SGD at 0.001 for 60,000 minibatches and 0.0001 for 20,000 more, momentum 0.9, and weight decay 0.0005. Detector fine-tuning has its own Fast R-CNN settings.
+**Optimization algorithm(s):** Main experiments alternate training the RPN and detector. For the PASCAL RPN, SGD uses 0.001 for 60,000 minibatches, then 0.0001 for 20,000 more. Momentum is 0.9 and weight decay 0.0005. Detector fine-tuning follows its own Fast R-CNN settings.
 
-**Regularization techniques:** Labelled ImageNet initialization, weight decay, image transformations, and sampled positive/background anchors and regions. Balancing sampled examples is important because background candidates vastly outnumber objects.
+**Regularization techniques:** The model starts with labelled ImageNet training, then uses weight decay and image changes. It samples positive and background anchors and regions. This balance matters because background candidates greatly outnumber objects.
 
-**Backpropagation considerations:** Losses update shared visual features, but proposal selection, NMS, and original RoI pooling are not a fully smooth geometry pipeline. The paper distinguishes alternating training from approximate joint training, which treats proposal coordinates as fixed for the detector's backward pass.
+**Backpropagation considerations:** Both losses update shared features, but not every step changes smoothly. Proposal selection and non-maximum suppression (NMS) make discrete choices; NMS removes lower-scored boxes that overlap stronger ones. Original RoI pooling also is not fully smooth in box geometry. Approximate joint training treats proposal coordinates as fixed during the detector's backward pass, unlike alternating training.
 
-**Parameter count / scaling behavior:** Total parameters depend on backbone and region head. For a 512-channel feature map, the shared 3-by-3 RPN layer and nine-anchor prediction heads add approximately **2.4 million parameters**, calculated from those dimensions; that is not the whole detector.
+**Parameter count / scaling behavior:** Total size depends on the backbone and head. With a 512-channel map, the shared 3-by-3 RPN layer and nine-anchor prediction heads add about **2.4 million parameters**, calculated from those dimensions. That is not the full detector's count.
 
-**Training paradigm:** Supervised bounding-box and category learning after supervised backbone pretraining. Automatically proposed regions are not unlabelled pseudo-targets.
+**Training paradigm:** Supplied object boxes and categories supervise detection after supervised backbone pretraining. Automatically suggested regions are candidates, not unlabelled pseudo-targets.
 
-**Hardware/parallelism considerations:** Backbone computation is shared, while the region head scales with the retained proposal count. NMS, resizing, and proposal transfers can become latency bottlenecks even when convolution kernels are fast.
+**Hardware/parallelism considerations:** Sharing the backbone saves repeated image processing. Region-head work still rises with retained proposals. Resizing, NMS, and moving proposals can limit speed even when convolution is fast.
 
-**Strengths and limitations:** Two stages permit focused region classification and localization. Anchors, matching thresholds, proposal budgets, and postprocessing introduce complexity, and crowded or small objects remain difficult.
+**Strengths and limitations:** Two stages focus classification and location refinement on promising regions. Anchors, matching thresholds, proposal limits, and postprocessing add complexity. Small objects and crowded scenes remain difficult.
 
-**Computational complexity / scalability notes:** Cost includes the backbone, dense RPN over feature locations and anchors, and $`R`$ region-head evaluations. NMS can be $`O(R^2)`$ in a straightforward implementation. A small RPN does not make the full system constant-time in image resolution or proposal count.
+**Computational complexity / scalability notes:** Work includes the backbone, RPN at every feature location and anchor, and a head evaluation per retained region. **Optional math:** With R proposals, straightforward NMS can cost $`O(R^2)`$. Doubling proposals can therefore quadruple that part. A small RPN does not make image resolution or proposal count irrelevant.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** The [VGG-based experiment](https://arxiv.org/html/1506.01497v3) reports **73.2% mAP on PASCAL VOC 2007 test**, trained on **VOC 2007 plus 2012 trainval**, using **300 RPN proposals** at test time. This is VOC's IoU-0.5 detection evaluation, not COCO's averaged-IoU AP. An image generates shared features and object proposals; region classification and box refinement produce labelled locations for objects such as people, vehicles, or animals. The authors' documented rationale is replacing external proposal computation while sharing image features. It is not evidence that a particular surveillance or vehicle product deploys this detector.
+**Evidence status: Research benchmark.** The [VGG-based experiment](https://arxiv.org/html/1506.01497v3) reports **73.2% mAP on PASCAL VOC 2007 test**, trained on **VOC 2007 plus 2012 trainval**, with **300 RPN proposals** during testing. Mean average precision (mAP) combines detection quality across classes and score thresholds. VOC here uses **IoU 0.5**: box overlap divided by the area covered by either box must meet that threshold. It is not COCO's average across several overlap thresholds.
 
-**Notable vendor implementations/libraries:** Original Caffe releases, Detectron2, torchvision detection, and MMDetection. FPN, RoIAlign, and newer backbones change both the graph and its benchmark identity.
+An image generates shared features and proposals, then class labels and refined boxes for people, vehicles, or animals. The authors sought to replace external proposal generation while sharing image features. This benchmark does not establish use in a specific surveillance or vehicle product.
+
+**Notable vendor implementations/libraries:** Original Caffe releases, Detectron2, torchvision detection, and MMDetection offer versions. Feature pyramids (FPN), RoIAlign, and newer backbones change the network and the identity of its benchmark.
 
 ### 1.8.5 YOLO, original version
+**In plain English:** Original YOLO predicts object boxes and classes in one network pass. Its fixed grid keeps the design simple, but can struggle with small objects close together.
 
-**Name:** **YOLOv1**, the original "You Only Look Once" detector; later YOLO versions are not interchangeable with this entry.
+**Name:** **YOLOv1**, the original "You Only Look Once" detector. Later YOLO generations are not interchangeable with this entry.
 
-**Category & sub-category:** Supervised learning; vision transformers and prediction architectures; single-stage grid-based object detection.
+**Category & sub-category:** Supervised learning; vision transformers and prediction architectures. Single-stage detection predicts objects from a grid.
 
-**Originating paper/vendor/year:** Joseph Redmon, Santosh Divvala, Ross Girshick, and Ali Farhadi, [You Only Look Once: Unified, Real-Time Object Detection](https://arxiv.org/html/1506.02640v5), 2015 preprint and CVPR 2016 paper.
+**Originating paper/vendor/year:** Joseph Redmon, Santosh Divvala, Ross Girshick, and Ali Farhadi wrote [You Only Look Once: Unified, Real-Time Object Detection](https://arxiv.org/html/1506.02640v5). Its preprint appeared in 2015 and its CVPR paper in 2016.
 
-**Core mechanism:** One network predicts a grid of object hypotheses directly from the full image. In the VOC configuration, each of 7-by-7 cells predicts two boxes and a shared distribution over 20 classes. A cell is responsible for an object whose center falls within it. Each box has coordinates and confidence, with confidence intended to combine object presence and overlap quality. There is no learned region-proposal stage.
+**Core mechanism:** One network reads the full image and predicts boxes directly. For VOC, each cell in a 7-by-7 grid predicts two boxes and one shared distribution over 20 classes. The cell containing an object's center is responsible for it. Each box includes coordinates and confidence intended to combine object presence with overlap quality. There is no learned proposal stage.
 
-**Inputs/outputs and typical data types:** A fixed-size RGB image becomes class-scored bounding boxes. The original detector trains at 448-by-448 resolution.
+**Inputs/outputs and typical data types:** Fixed-size RGB images become boxes with class scores. Original detection training uses 448-by-448 images.
 
-**Architecture diagram description:**
+**Architecture diagram description:** Twenty-four convolution layers and two dense layers produce the grid. Each box has five outputs; the cell also supplies twenty class values.
 
 ```text
 448x448 RGB -> 24 convolutional layers with pooling -> two dense layers
@@ -1058,45 +1152,48 @@ image -> shared VGG feature map --+-> RPN: anchors -> objectness/box offsets
            -> class-confidence scores -> threshold/NMS -> labelled boxes
 ```
 
-**Activation functions used and why:** Hidden layers use leaky ReLU with negative slope 0.1; the final prediction layer is linear. Later sigmoid-based, anchor-based, or anchor-free YOLO heads must not be substituted into the v1 description.
+**Activation functions used and why:** Hidden layers use leaky ReLU with negative slope 0.1, keeping a small response for negative input. The output layer is linear. Later sigmoid heads and anchor-based or anchor-free YOLO designs are not substitutions for v1.
 
-**Loss function(s):** Weighted sum-squared errors for coordinates, confidence, and classes. Coordinate weight is five; no-object confidence weight is 0.5. Width and height are compared through square roots, reducing large boxes' dominance. This objective is not identical to optimizing mAP.
+**Loss function(s):** The loss adds weighted squared errors for coordinates, confidence, and classes. Coordinate weight is five; no-object confidence weight is 0.5. Comparing square roots of widths and heights reduces large boxes' influence. This loss does not directly optimize mAP, the final detection score.
 
-**Optimization algorithm(s):** SGD with momentum 0.9, weight decay 0.0005, and batch size 64. The paper warms the rate from $`10^{-3}`$ toward $`10^{-2}`$, then describes 75 epochs at $`10^{-2}`$, 30 at $`10^{-3}`$, and 30 at $`10^{-4}`$.
+**Optimization algorithm(s):** SGD uses momentum 0.9, weight decay 0.0005, and batches of 64. **Optional math:** The paper warms the rate from $`10^{-3}`$ toward $`10^{-2}`$, then lists 75 epochs at $`10^{-2}`$, 30 at $`10^{-3}`$, and 30 at $`10^{-4}`$. These rates mean 0.001, 0.01, and 0.0001 respectively.
 
-**Regularization techniques:** Dropout 0.5 after the first dense layer, random scaling/translations, and exposure/saturation changes. Classification pretraining initializes convolutional features before detection fine-tuning.
+**Regularization techniques:** Dropout 0.5 follows the first dense layer. Training randomly changes image size, position, exposure, and color saturation. Classification pretraining supplies starting convolution features before supervised detection fine-tuning.
 
-**Backpropagation considerations:** High early learning rates can destabilize coordinate predictions, motivating warmup. Assignment to the highest-overlap responsible box and NMS involve discrete decisions; ordinary gradients train the selected prediction losses, not an idealized smooth detector.
+**Backpropagation considerations:** Large starting steps can destabilize coordinates, which motivates warmup. Training chooses the responsible box by highest overlap. This choice and NMS are discrete decisions. Gradients update selected prediction losses, not a fully smooth version of every detector step.
 
-**Parameter count / scaling behavior:** Parameters are the sum of convolutional kernels and dense matrices. A dense mapping from flattened width $`F`$ to hidden width $`h`$ alone has $`Fh+h`$ parameters, so the fixed-grid dense head can be expensive. No unchecked "YOLO-family parameter count" is assigned to this historical graph.
+**Parameter count / scaling behavior:** Total size adds convolution weights and dense matrices. **Optional math:** Mapping F flattened features into h hidden units needs $`Fh+h`$ parameters, including biases. This can make the fixed-grid head expensive. No unchecked family-wide YOLO count is assigned to this historical network.
 
-**Training paradigm:** Supervised image classification pretraining followed by supervised box/category learning. There is no self-supervised language-model objective in the detector.
+**Training paradigm:** Labelled image classification comes first, followed by learning from object boxes and categories. The detector has no self-supervised language-model objective.
 
-**Hardware/parallelism considerations:** One dense network pass exposes parallel work across the image. Preprocessing, NMS, camera acquisition, and hardware still determine end-to-end latency; historical paper FPS is not a guarantee on another device.
+**Hardware/parallelism considerations:** One network pass supports parallel image calculations. Input preparation, NMS, camera capture, and hardware still affect end-to-end delay. Historical frames-per-second (FPS) measurements do not guarantee speed on another device.
 
-**Strengths and limitations:** The detector reasons with full-image context and avoids a separate proposal pipeline. Shared cell-level class predictions and limited boxes per cell make nearby small objects and crowded scenes difficult.
+**Strengths and limitations:** The network uses full-image context without a separate proposal system. Sharing class predictions within cells, and limiting boxes per cell, makes nearby small objects and crowded scenes harder.
 
-**Computational complexity / scalability notes:** Network work is the sum of convolution and dense-head costs at the configured resolution. Grid size controls the number of raw predictions; postprocessing adds candidate-dependent work. Changing input geometry may require changing the original dense head.
+**Computational complexity / scalability notes:** Add all convolution and dense-head work at the configured resolution. A larger grid gives more raw predictions and more possible postprocessing. Changing input shape may also require changing the original dense head.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** [The original paper](https://arxiv.org/html/1506.02640v5) reports **63.4% mAP on VOC 2007 test** for YOLOv1 trained on **VOC 2007+2012 trainval**. The smaller **Fast YOLO** is a different model with 52.7% mAP. A scene image produces 98 box hypotheses and cell-level class scores; confidence combination and NMS select labelled locations. The authors' motivation is unified, fast detection rather than separate region processing. My explanation of its trade-off is that a fixed coarse grid purchases simplicity at the expense of crowded-object representation. These are IoU-0.5 VOC results, not COCO AP or demonstrated road-safety performance.
+**Evidence status: Research benchmark.** The [paper](https://arxiv.org/html/1506.02640v5) reports **63.4% mAP on VOC 2007 test** for YOLOv1 trained on **VOC 2007+2012 trainval**. **Fast YOLO** is a different, smaller model with 52.7% mAP. Mean average precision combines detection results across classes and confidence thresholds. These VOC results use IoU 0.5, an overlap-area measure, not COCO's multi-threshold AP.
 
-**Notable vendor implementations/libraries:** The original Darknet implementation is the historical reference. Current Darknet and Ultralytics releases often implement different YOLO generations with different heads, objectives, training data, and parameter counts.
+The image yields 98 candidate boxes and cell-level class scores. Combined confidence and NMS choose the labelled locations. The goal is unified, fast detection. The coarse grid trades crowded-object detail for simplicity; these scores do not demonstrate road-safety performance.
+
+**Notable vendor implementations/libraries:** Original Darknet is the historical reference. Current Darknet and Ultralytics often supply other YOLO generations with different heads, losses, training data, and parameter counts.
 
 ### 1.8.6 DETR
+**In plain English:** DETR predicts a set of objects using learned output slots. During training, each real object is matched to one slot, reducing the need to remove duplicate boxes afterward.
 
-**Name:** Detection Transformer, or **DETR**, specifically the original ResNet-50-based 2020 model.
+**Name:** Detection Transformer, shortened to **DETR**. This entry uses the original 2020 model with a ResNet-50 backbone.
 
-**Category & sub-category:** Supervised learning; vision transformers and prediction architectures; direct set prediction for object detection.
+**Category & sub-category:** Supervised learning; vision transformers and prediction architectures. A network predicts an object set directly.
 
-**Originating paper/vendor/year:** Nicolas Carion and colleagues, Facebook AI Research, [End-to-End Object Detection with Transformers](https://arxiv.org/html/2005.12872v3), ECCV 2020.
+**Originating paper/vendor/year:** Nicolas Carion and colleagues at Facebook AI Research published [End-to-End Object Detection with Transformers](https://arxiv.org/html/2005.12872v3) at ECCV 2020.
 
-**Core mechanism:** A CNN supplies spatial features to a Transformer encoder. A decoder processes a fixed set of learned object queries, each producing a class and box. During training, Hungarian matching assigns ground-truth objects to predictions; unmatched predictions learn a no-object class. One-to-one matching discourages duplicate predictions, removing the need for the original pipeline to use anchors and NMS.
+**Core mechanism:** A CNN supplies spatial image features to a Transformer encoder. A decoder uses learned object queries, or output slots, to retrieve weighted image information. Each slot predicts a class and box. During training, Hungarian matching chooses a one-to-one pairing of predictions with labelled objects. Unmatched slots learn "no object." This discourages duplicates, so the original system needs neither anchors nor NMS.
 
-**Inputs/outputs and typical data types:** Images and annotated object sets become fixed-size prediction sets, with foreground confidence determining useful detections.
+**Inputs/outputs and typical data types:** Images and annotated object sets train the system. It produces a fixed-size prediction set; foreground scores determine which detections are useful.
 
-**Architecture diagram description:**
+**Architecture diagram description:** A six-layer encoder feeds a six-layer decoder with 100 learned queries. Training matches the resulting slots to labelled objects.
 
 ```text
 image -> ResNet-50 -> projected spatial features + positions -> 6-layer encoder
@@ -1106,58 +1203,65 @@ image -> ResNet-50 -> projected spatial features + positions -> 6-layer encoder
 training: Hungarian assignment -> matched set loss + no-object supervision
 ```
 
-**Activation functions used and why:** ReLU in feed-forward blocks, attention softmax, class softmax, and sigmoid-normalized box coordinates. Positional information distinguishes spatial locations and object queries.
+**Activation functions used and why:** Feed-forward layers use ReLU. Attention softmax forms lookup weights; class softmax scores categories. Sigmoid keeps box coordinates within a normalized range. Position information distinguishes locations and query slots.
 
-**Loss function(s):** Matched classification loss plus L1 and generalized-IoU box losses; unmatched slots receive the downweighted no-object classification loss. Auxiliary losses at intermediate decoder layers aid training.
+**Loss function(s):** Matched objects receive classification loss plus L1 and generalized-IoU box losses. L1 measures coordinate differences; generalized IoU adds a box-overlap-based measure. Unmatched slots receive reduced-weight no-object loss. Extra losses at intermediate decoder layers also assist training.
 
-**Optimization algorithm(s):** AdamW, Transformer learning rate $`10^{-4}`$, backbone rate $`10^{-5}`$, and weight decay $`10^{-4}`$. The main comparison uses **500 epochs with a tenfold rate drop after epoch 400**; the 300-epoch/200-drop ablation recipe is different.
+**Optimization algorithm(s):** AdamW uses separate step sizes for new and pretrained parts. **Optional math:** The Transformer rate is $`10^{-4}`$, backbone rate $`10^{-5}`$, and weight decay $`10^{-4}`$. The main result uses **500 epochs, with a tenfold rate drop after epoch 400**. The 300-epoch experiment with a drop at 200 is a different test of design choices.
 
-**Regularization techniques:** ImageNet-pretrained ResNet with frozen batch-normalization statistics, Transformer dropout, random image resizing/cropping, and gradient control in the released recipe. Longer training is a real cost, not free architectural capacity.
+**Regularization techniques:** ResNet starts with ImageNet weights and fixed batch-normalization statistics. Transformer dropout, random resizing/cropping, and the released recipe's gradient controls support training. The long schedule is a genuine cost, not free extra capacity.
 
-**Backpropagation considerations:** Matching is a discrete assignment; gradients flow through the selected differentiable classification and box losses, not through a continuously differentiable Hungarian solver. Intermediate decoder supervision helps align object queries earlier in training.
+**Backpropagation considerations:** Matching chooses pairs discretely. Error signals then flow through the chosen class and box losses, not through a smooth Hungarian solver. Intermediate decoder losses help slots learn useful assignments earlier.
 
-**Parameter count / scaling behavior:** The reference ResNet-50 DETR has **41 million parameters**, Transformer width 256, and 100 output queries. Increasing query count raises decoder and matching costs; increasing image-feature resolution raises encoder attention costs.
+**Parameter count / scaling behavior:** ResNet-50 DETR has **41 million parameters**, Transformer width 256, and 100 queries. More queries cost more decoder and matching work. Finer image-feature maps cost more encoder attention.
 
-**Training paradigm:** Supervised detection after supervised backbone pretraining. Object queries are learned parameters, not unlabeled training examples or retrieval requests.
+**Training paradigm:** Labelled objects supervise detection after supervised backbone pretraining. Object queries are learned parameters, not unlabelled examples or user retrieval requests.
 
-**Hardware/parallelism considerations:** Encoder and decoder matrix operations parallelize. Original DETR trains for a long schedule and attends globally over image features; dilating the backbone to increase feature resolution increases memory and computation.
+**Hardware/parallelism considerations:** Encoder and decoder matrix calculations run in parallel. Original DETR uses a long training schedule and global image-feature attention. A dilated backbone preserves finer maps, but raises memory and computation needs.
 
-**Strengths and limitations:** Set prediction simplifies postprocessing and handles large objects well in the original comparisons. Small-object performance and slow convergence are weaknesses; later deformable variants address different trade-offs and are separate architectures.
+**Strengths and limitations:** Set prediction simplifies final box selection and performs well on large objects in the original comparison. Weaknesses include small objects and slow training progress. Later deformable versions make different trade-offs and are separate models.
 
-**Computational complexity / scalability notes:** For $`N`$ image tokens and $`Q`$ queries, attention interactions include $`O(N^2d)`$ encoder, $`O(QNd)`$ cross-attention, and $`O(Q^2d)`$ query self-attention. Projections and FFNs add width-dependent costs; straightforward assignment algorithms can add $`O(Q^3)`$ work.
+**Computational complexity / scalability notes:** More image features raise all-pairs encoder work; more output slots raise decoder and matching work. **Optional math:** With N image tokens, Q queries, and width d, attention includes $`O(N^2d)`$ encoder work, $`O(QNd)`$ cross-attention, and $`O(Q^2d)`$ query self-attention. Projections and feed-forward layers add costs. Straightforward matching can take $`O(Q^3)`$ work.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** [The paper's Table 1](https://arxiv.org/html/2005.12872v3) reports **42.0 box AP on COCO 2017 validation** for **ResNet-50 DETR**, trained on COCO train2017 with the 500-epoch schedule. This AP averages IoU thresholds **0.50 through 0.95**, unlike VOC mAP at 0.5. It matches the strengthened Faster R-CNN-FPN+ baseline's 42.0 overall AP while trading weaker small-object AP for stronger large-object AP. A photograph becomes image tokens; queries jointly propose a labelled object set scored without NMS. This is a detection benchmark, not evidence of a named retail, autonomous-driving, or surveillance deployment.
+**Evidence status: Research benchmark.** [Table 1](https://arxiv.org/html/2005.12872v3) reports **42.0 box AP on COCO 2017 validation** for **ResNet-50 DETR**, trained on COCO train2017 for 500 epochs. Average precision (AP) combines detection quality across score thresholds. This COCO score also averages box-overlap (IoU) thresholds **0.50 through 0.95**, unlike VOC mAP at 0.5.
 
-**Notable vendor implementations/libraries:** Meta's original DETR release and implementations in Hugging Face and detection frameworks. Deformable DETR, DINO detectors, and real-time DETR variants need separate provenance.
+DETR matches the strengthened Faster R-CNN-FPN+ baseline's 42.0 overall AP, with weaker small-object AP but stronger large-object AP. Image features feed queries that jointly produce labelled boxes without NMS. This is a benchmark, not evidence of a named retail, autonomous-driving, or surveillance deployment.
+
+**Notable vendor implementations/libraries:** Meta's original release, Hugging Face, and detection frameworks offer DETR versions. Deformable DETR, DINO detectors, and real-time variants require separate source and training records.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| ViT | Images with substantial labelled pretraining data | Global content-dependent patch interactions | High-resolution attention and data requirements | ImageNet-21k-pretrained ViT-L/16 transfer benchmark |
-| Swin | Images requiring multiscale features | Windowed attention with a hierarchy | Locality and window-management overhead | Swin-T ImageNet-1K classification |
-| U-Net | Annotated image grids and microscopy | Context plus precise skip-connected localization | Memory, boundary labels, and domain shift | ISBI neuronal-membrane segmentation |
-| Faster R-CNN | Images with object boxes | Shared proposals and focused region classification | Proposal, matching, and postprocessing complexity | VGG-based VOC 2007 detection |
-| YOLOv1 | Fixed-resolution object-detection images | Unified single-stage prediction | Coarse-grid failures on crowded small objects | Original VOC 2007 benchmark, not a later YOLO version |
-| DETR | Images with annotated object sets | One-to-one set prediction without NMS | Original model's convergence and small-object limitations | COCO 2017 validation box AP |
+| ViT | Images with extensive labelled pretraining data | Weighted lookups connect all image patches | Many data and high-resolution calculations | ImageNet-21k-pretrained ViT-L/16 transfer test |
+| Swin | Images needing features at several scales | Local lookups connect through shifting windows | Distant context takes stages; window handling adds work | Swin-T ImageNet-1K classification test |
+| U-Net | Images with pixel labels, including microscopy | Combines wide context with saved fine detail | Large maps, imperfect boundaries, and unfamiliar data | ISBI neuronal-membrane segmentation test |
+| Faster R-CNN | Images labelled with object boxes | Reuses features to propose and refine regions | Several matching and box-selection steps | VGG-based VOC 2007 detection test |
+| YOLOv1 | Fixed-resolution images for object detection | One network predicts boxes directly | Coarse cells struggle with crowded small objects | Original VOC 2007 result, not a later YOLO |
+| DETR | Images labelled with sets of objects | Matches one prediction to each object without NMS | Original model trains slowly and struggles with small objects | COCO 2017 validation box-AP test |
 
 ## 1.9 Graph networks
 
-Graph supervision has two separate axes: which targets are labelled, and whether evaluation nodes or graphs are visible during training. Inductive does not automatically mean supervised, and transductive does not automatically mean unsupervised. The representatives below use labelled training targets; their original semi-supervised or unsupervised counterparts are explicitly distinguished.
+A **graph** records things and their connections. Nodes represent the things, such as proteins or posts. Edges represent relationships between them. A node can also have features, such as measurements or text-derived numbers. Graph layers combine information along edges rather than across image pixels.
+
+Two questions must stay separate. First, which answers have labels: whole graphs, all training nodes, or only some nodes? Second, can the model see the evaluation graph during training? **Inductive** evaluation uses new nodes or graphs. **Transductive** training already sees evaluation nodes' features and edges, though not their hidden answers. Neither word alone tells us the supervision type. The examples here learn from labelled training targets; related semi-supervised and unsupervised tasks are identified separately.
 
 ### 1.9.1 Graph convolutional network (GCN)
+**In plain English:** A GCN mixes each node's features with its connected neighbors' features. This example then averages the node results to classify an entire protein graph.
 
-**Name:** Graph convolutional network; specifically the Kipf-Welling normalized neighborhood operator, instantiated here in a supervised whole-graph classifier.
+**Name:** Graph convolutional network, using the Kipf-Welling normalized neighbor-combining rule. The example adds a supervised whole-graph classifier.
 
-**Category & sub-category:** Supervised learning; graph networks; normalized message passing followed by graph-level pooling.
+**Category & sub-category:** Supervised learning; graph networks. Nodes share scaled messages along edges, then their outputs are pooled for a graph label.
 
-**Originating paper/vendor/year:** Thomas Kipf and Max Welling, [Semi-Supervised Classification with Graph Convolutional Networks](https://arxiv.org/html/1609.02907v4), 2016 preprint and ICLR 2017 paper. The title correctly describes their original citation-network experiment. The supervised instantiation below is from the [DGL graph-classification tutorial](https://www.dgl.ai/dgl_docs/en/1.1.x/tutorials/blitz/5_graph_classification.html).
+**Originating paper/vendor/year:** Thomas Kipf and Max Welling, [Semi-Supervised Classification with Graph Convolutional Networks](https://arxiv.org/html/1609.02907v4), 2016 preprint and ICLR 2017 paper. The title correctly describes the original citation-network task. The fully supervised example here instead comes from the [DGL graph-classification tutorial](https://www.dgl.ai/dgl_docs/en/1.1.x/tutorials/blitz/5_graph_classification.html).
 
-**Core mechanism:** Add self-loops and normalize adjacency to $`\hat A=\tilde D^{-1/2}(A+I)\tilde D^{-1/2}`$. A layer computes $`H'=\phi(\hat AHW)`$, combining a node's own features with degree-normalized neighboring features. Shared weights permit evaluation on new graphs. A permutation-invariant mean readout turns node representations into one graph prediction; pooling is an additional architectural choice, not part of the original node classifier.
+**Core mechanism:** Add a self-loop so each node keeps its own features alongside neighbors' features. Scale contributions using connection counts, then combine and transform them with shared weights. The same rule can process a new graph. Here, averaging final node vectors gives one graph prediction without depending on node order. This pooling step is an added choice, not part of the original node classifier.
 
-**Inputs/outputs and typical data types:** Node-feature matrices and sparse adjacency lists become node features; the representative outputs one class distribution per protein graph.
+**Optional math:** $`\hat A=\tilde D^{-1/2}(A+I)\tilde D^{-1/2}`$ and $`H'=\phi(\hat AHW)`$. A records edges; I adds self-loops; D-tilde records resulting connection counts. The inverse square roots scale messages. H holds node features, W learned weights, phi the activation, and H-prime new features. A-hat is the scaled connection matrix.
 
-**Architecture diagram description:**
+**Inputs/outputs and typical data types:** Node-feature tables and edge lists enter. Layers produce new node features; this example turns them into one class distribution per protein graph.
+
+**Architecture diagram description:** Two graph layers change three input features into sixteen hidden features, then two class scores. The final mean is over nodes, not across different graphs.
 
 ```text
 protein graph: node features + edges + self-loops
@@ -1166,45 +1270,48 @@ protein graph: node features + edges + self-loops
  -> two graph logits -> predicted graph class
 ```
 
-**Activation functions used and why:** ReLU between the two graph convolutions. The second convolution produces linear logits, pooled before cross-entropy applies its class normalization. Normalized adjacency is a fixed propagation operator, not an activation.
+**Activation functions used and why:** ReLU changes the first layer's output. The second produces linear class scores, averaged before cross-entropy normalizes them. Scaling the graph connections is a fixed sharing rule, not another activation.
 
-**Loss function(s):** Cross-entropy over **labelled training graphs**. There is no loss on unlabelled test nodes and no masked-label citation-network objective in this instantiation.
+**Loss function(s):** Cross-entropy compares predictions with **labels on training graphs**. This example does not train on unlabelled test nodes or hide most node labels as in citation-network experiments.
 
-**Optimization algorithm(s):** The DGL example uses Adam at 0.01, batch size five graphs, and 20 epochs, without an explicit learning-rate decay schedule.
+**Optimization algorithm(s):** The DGL example uses Adam at 0.01, batches of five graphs, and 20 epochs. It specifies no learning-rate decay.
 
-**Regularization techniques:** The displayed tutorial does not introduce dropout or weight decay. Its small hidden layer and normalized aggregation constrain capacity. A rigorous application would separately validate regularization and splitting rather than assuming this minimal demonstration is optimized.
+**Regularization techniques:** The shown tutorial uses neither dropout nor weight decay. Its small hidden layer and scaled averaging limit capacity. A serious application would separately choose regularization and a sound split; the minimal demo is not an optimized recipe.
 
-**Backpropagation considerations:** Gradients flow through node transforms, sparse aggregation, and graph pooling, not through a learned choice of graph edges. Repeated propagation can oversmooth representations; averaging may lose distinctions needed for the graph label.
+**Backpropagation considerations:** Error signals pass through node transformations, edge-based combining, and graph averaging. The model does not learn which edges exist. Repeated mixing can make nodes too alike, called oversmoothing. Averaging may also erase differences needed for the graph label.
 
-**Parameter count / scaling behavior:** For the displayed 3-16-2 network with biases, the count is $`3(16)+16+16(2)+2=\mathbf{98}`$, calculated from the tutorial. The same weights are reused at all vertices and across all graphs.
+**Parameter count / scaling behavior:** All nodes and graphs reuse the same weights. **Optional math:** For the biased 3-16-2 network, $`3(16)+16+16(2)+2=\mathbf{98}`$ trainable parameters, calculated from the tutorial.
 
-**Training paradigm:** Fully supervised, inductive graph classification on disjoint training/test graphs. The original paper's Cora results instead use a small labelled node subset within a graph whose other features and edges are visible; see [semi-supervised learning](03-semi-supervised.md).
+**Training paradigm:** This is fully supervised graph classification, tested on separate new graphs. Original Cora experiments label only a small set of nodes while making the other nodes' features and edges visible. Those settings belong in [semi-supervised learning](03-semi-supervised.md).
 
-**Hardware/parallelism considerations:** Disjoint graphs can be batched as a disconnected union while preserving separate readouts. Sparse aggregation often has less favorable memory locality than dense matrix multiplication.
+**Hardware/parallelism considerations:** Software can batch separate graphs as one disconnected graph while keeping their final averages separate. Sparse edge access often moves through memory less efficiently than dense matrix multiplication.
 
-**Strengths and limitations:** GCNs encode relational structure without imposing a node ordering. Simple smoothing can be unsuitable for heterophilous edges, and a small mean-pooled model cannot distinguish every graph structure or capture arbitrary biochemical interactions.
+**Strengths and limitations:** GCNs use relationships without imposing an arbitrary node order. Simple averaging can fail when edges connect dissimilar nodes. A small mean-pooled network cannot distinguish every structure or capture every biochemical interaction.
 
-**Computational complexity / scalability notes:** A transform-first sparse layer costs $`O(Vd_{\rm in}d_{\rm out}+(m+V)d_{\rm out})`$, with self-loops included. Sparse adjacency needs $`O(V+m)`$ storage; a dense $`V`$ by $`V`$ implementation loses this advantage.
+**Computational complexity / scalability notes:** Sparse storage follows existing edges rather than every possible node pair. **Optional math:** Transforming first costs $`O(Vd_{\rm in}d_{\rm out}+(m+V)d_{\rm out})`$ per layer. V counts nodes, m edges, and d input/output widths; the extra V counts self-loops. Sparse graph storage is $`O(V+m)`$. A dense V-by-V table loses that saving.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** DGL's [PROTEINS demonstration](https://www.dgl.ai/dgl_docs/en/1.1.x/tutorials/blitz/5_graph_classification.html) addresses structural-bioinformatics graph classification using three-component node features and two graph labels. It places the first 80% of dataset indices in training and the remainder in testing; random samplers shuffle **within**, not between, those partitions. The viewed documentation prints **0.273542600896861 test accuracy**, approximately **27.35%**, for one illustrative run. This poor result is retained rather than replaced with an invented improvement. Protein-graph neighborhoods produce pooled logits and a graph class that would require validation before scientific use. My rationale relative to flattened vectors is permutation-aware relational processing. The tutorial is not a robust, seed-averaged biological benchmark or a production discovery claim.
+**Evidence status: Research benchmark.** DGL's [PROTEINS demonstration](https://www.dgl.ai/dgl_docs/en/1.1.x/tutorials/blitz/5_graph_classification.html) uses three features per node and two possible graph labels. The first 80% of dataset indices go to training; the rest go to testing. Random samplers shuffle **within those partitions**, not between them. The documentation prints **0.273542600896861 test accuracy**, about **27.35%**, for one illustrative run. This poor score is preserved, not replaced with an imagined improvement.
 
-**Notable vendor implementations/libraries:** DGL `GraphConv` and PyTorch Geometric `GCNConv`. Normalization, self-loop handling, cached adjacency, and graph readout need explicit configuration.
+Protein-node neighborhoods become averaged class scores and a graph label. Relationships motivate trying a GCN instead of flattening everything into a list. But this result needs validation before scientific use. The tutorial is neither a robust biological benchmark averaged over random seeds nor a production discovery claim.
+
+**Notable vendor implementations/libraries:** DGL `GraphConv` and PyTorch Geometric `GCNConv` supply versions. Set normalization, self-loops, reused adjacency calculations, and whole-graph readout explicitly.
 
 ### 1.9.2 Graph attention network (GAT)
+**In plain English:** A GAT learns how much each connected neighbor should contribute to a node's new features. Here it uses labelled protein graphs to predict several possible functions for each protein.
 
-**Name:** Graph attention network; the original multi-head **GAT**, instantiated for supervised inductive protein-function prediction.
+**Name:** Graph attention network, the original multi-head **GAT**, used for supervised protein-function prediction on unseen graphs.
 
-**Category & sub-category:** Supervised learning; graph networks; learned neighborhood attention.
+**Category & sub-category:** Supervised learning; graph networks. Learned weights control information gathered from connected neighbors.
 
-**Originating paper/vendor/year:** Petar Velickovic and colleagues, [Graph Attention Networks](https://arxiv.org/html/1710.10903v3), 2017 preprint and ICLR 2018 paper. The study includes both semi-supervised citation-network tasks and a supervised inductive PPI task.
+**Originating paper/vendor/year:** Petar Velickovic and colleagues, [Graph Attention Networks](https://arxiv.org/html/1710.10903v3), 2017 preprint and ICLR 2018 paper. The study includes semi-supervised citation tasks and a separately supervised protein-protein interaction (PPI) task.
 
-**Core mechanism:** Transform node features, score connected pairs with an additive attention function, and normalize scores over each node's neighbors. The new state is a weighted sum of transformed neighbor features. Multiple heads learn different neighborhood weighting patterns; hidden heads can be concatenated and output heads averaged. Attention is restricted by graph connectivity rather than computed between every pair of vertices.
+**Core mechanism:** Transform node features, score connected pairs, and turn each node's neighbor scores into weights. The next state is a weighted sum of neighboring features. Several heads learn different weighting rules. Hidden heads can be joined side by side; output heads can be averaged. The lookup follows existing graph edges, not every possible pair. "Attention" here means weighted calculation, not human reasoning.
 
-**Inputs/outputs and typical data types:** A protein-interaction graph with 50 features per node becomes 121 independent function-label scores per node in the PPI experiment.
+**Inputs/outputs and typical data types:** A protein-interaction graph has 50 features per node. The PPI model outputs 121 independent function-label scores for each protein node.
 
-**Architecture diagram description:**
+**Architecture diagram description:** Two hidden layers concatenate four heads each. Six output heads are averaged before separate function probabilities are produced.
 
 ```text
 PPI node features + adjacency
@@ -1213,45 +1320,48 @@ PPI node features + adjacency
  -> GAT: 6 heads x 121 scores -> average -> sigmoid -> function labels
 ```
 
-**Activation functions used and why:** Leaky ReLU in the attention scorer, neighborhood softmax for normalized weights, ELU after hidden layers, and logistic sigmoid at the multilabel output. An output softmax would incorrectly force the 121 biological labels to be mutually exclusive.
+**Activation functions used and why:** The scorer uses leaky ReLU, which retains a small negative response. Softmax makes each neighborhood's weights sum to one. Hidden layers use ELU, which smoothly handles negative values. Output sigmoid scores each function independently. Output softmax would wrongly force the 121 biological labels to compete as mutually exclusive choices.
 
-**Loss function(s):** Multilabel binary cross-entropy on labelled protein nodes in the training graphs. This differs from single-label cross-entropy in the citation-network experiments.
+**Loss function(s):** Binary cross-entropy checks each function label on labelled protein nodes in training graphs. This differs from the single-label class loss used in citation-network tests.
 
-**Optimization algorithm(s):** Adam at 0.005 for PPI, with batches of two graphs. The paper uses validation-based early stopping with patience 100 epochs; it does not prescribe a separate decaying rate for this experiment.
+**Optimization algorithm(s):** PPI training uses Adam at 0.005 with two graphs per batch. Early stopping waits up to 100 epochs without validation improvement. The paper specifies no separate decaying rate for this experiment.
 
-**Regularization techniques:** For PPI, the authors explicitly report **no dropout and no L2 penalty**, finding the labelled training set sufficiently large. They use a skip connection across the intermediate attentional layer. The strong dropout used on small citation datasets must not be copied into this result.
+**Regularization techniques:** The authors explicitly use **no dropout and no L2 penalty** for PPI, judging the labelled training set large enough. A skip connection crosses the intermediate attention layer. Strong dropout from small citation datasets does not belong in this recipe.
 
-**Backpropagation considerations:** Gradients affect both transformed features and normalized neighbor weights. Attention coefficients can become concentrated, and high-degree neighborhoods create large activation workloads. A large coefficient is not, by itself, evidence of a causal biological interaction.
+**Backpropagation considerations:** Errors change both node features and neighbor weights. Some weights can become heavily concentrated. Nodes with many neighbors need more intermediate storage and work. A large learned weight does not prove a causal biological interaction.
 
-**Parameter count / scaling behavior:** For $`a`$ heads of width $`f`$, a simple layer has roughly $`a(df+2f)`$ transform/scoring parameters before biases and skip projections. Parameter count is not proportional to the number of edges, although intermediate attention storage is.
+**Parameter count / scaling behavior:** More heads and wider features add weights, but more edges do not directly add parameters. **Optional math:** A simple layer has about $`a(df+2f)`$ transform/scoring parameters, before biases and skip projections. Here a counts heads, d input width, and f head width. Edge count does affect saved attention values.
 
-**Training paradigm:** Supervised **inductive** node classification: 20 labelled PPI graphs train the model, two graphs validate it, and two unseen graphs test it. The paper's Cora/Citeseer/Pubmed experiments are instead transductive, semi-supervised settings; they are not the example here.
+**Training paradigm:** **Supervised inductive node classification** uses 20 labelled PPI graphs for training, two for validation, and two unseen graphs for testing. Cora/Citeseer/Pubmed experiments instead expose evaluation graph structure during training and use only some node labels. Those are transductive, semi-supervised tasks, not this example.
 
-**Hardware/parallelism considerations:** Graph batching and sparse edge kernels are useful, but variable degrees create irregular work. More heads increase both message traffic and feature storage.
+**Hardware/parallelism considerations:** Batching graphs and using sparse edge operations helps. Uneven neighbor counts create irregular workloads. More heads increase data movement and feature storage.
 
-**Strengths and limitations:** GAT learns which connected neighbors contribute most for its objective, instead of fixing every weight by degree normalization. It remains limited by available edges, original attention expressivity, oversmoothing, and possible graph-distribution shift.
+**Strengths and limitations:** GAT can learn unequal neighbor contributions instead of fixing them through connection counts. Available edges still limit what it sees. The original scoring rule has limits, repeated mixing can blur nodes, and unfamiliar graphs may cause failure.
 
-**Computational complexity / scalability notes:** Sparse per-layer work is approximately $`O(Vadf+maf)`$, plus softmax reductions. Attention coefficient storage is $`O(ma)`$; dense all-pairs attention would require a different $`O(V^2)`$ edge assumption.
+**Computational complexity / scalability notes:** Work follows actual nodes and edges, multiplied by head sizes. **Optional math:** A sparse layer costs about $`O(Vadf+maf)`$, plus softmax reductions. V counts nodes, m edges, a heads, d input width, and f head width. Attention weights need $`O(ma)`$ storage. All-pairs attention would instead assume $`O(V^2)`$ connections.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** The [PPI experiment](https://arxiv.org/html/1710.10903v3) reports **micro-F1 0.973 +/- 0.002** on the **two held-out tissue graphs**, compared with **0.934 +/- 0.006** for the constant-attention control using the same broad architecture. The full dataset contains 24 graphs, with 44,906 training, 6,514 validation, and 5,524 test nodes. Protein attributes and interaction edges enter attention layers; sigmoid scores produce predicted function annotations, evaluated jointly over label decisions. The authors use the constant-attention control to examine the value of learned neighbor weighting. This is not experimentally verified protein function, clinical validation, or a deployed drug-discovery system.
+**Evidence status: Research benchmark.** The [PPI study](https://arxiv.org/html/1710.10903v3) reports **micro-F1 0.973 +/- 0.002** on **two held-out tissue graphs**, versus **0.934 +/- 0.006** for a constant-attention control with the same broad architecture. Micro-F1 combines all label decisions to balance missed labels and false positives; higher is better. The 24 graphs contain 44,906 training, 6,514 validation, and 5,524 test nodes.
 
-**Notable vendor implementations/libraries:** The authors' GAT repository, DGL `GATConv`, and PyTorch Geometric `GATConv`. GATv2 changes the scoring architecture and should not inherit the original PPI result without a new evaluation.
+Protein features and interaction edges become predicted function labels. Comparing learned weights with constant ones tests the value of neighbor weighting. Predictions are not experimentally verified functions. The study establishes neither clinical validation nor a deployed drug-discovery system.
+
+**Notable vendor implementations/libraries:** The authors' release, DGL `GATConv`, and PyTorch Geometric `GATConv` offer GAT. GATv2 changes the scoring rule and cannot inherit the original PPI score without evaluation.
 
 ### 1.9.3 GraphSAGE
+**In plain English:** GraphSAGE learns about a node by sampling its neighbors and combining their features. Sampling helps it handle large graphs and produce features for nodes it has not seen before.
 
-**Name:** GraphSAGE, emphasizing its **supervised mean-aggregator** variant and distinguishing unsupervised random-walk training.
+**Name:** GraphSAGE, focusing on the **supervised mean-aggregator** version, not its unsupervised random-walk training.
 
-**Category & sub-category:** Supervised learning; graph networks; inductive neighborhood sampling and aggregation.
+**Category & sub-category:** Supervised learning; graph networks. Sampled neighborhoods support learning rules that can work on new nodes.
 
-**Originating paper/vendor/year:** William Hamilton, Rex Ying, and Jure Leskovec, Stanford, [Inductive Representation Learning on Large Graphs](https://arxiv.org/html/1706.02216v4), NeurIPS 2017. The cited revision includes corrections and clarifications relative to earlier preprints.
+**Originating paper/vendor/year:** William Hamilton, Rex Ying, and Jure Leskovec, Stanford, [Inductive Representation Learning on Large Graphs](https://arxiv.org/html/1706.02216v4), NeurIPS 2017. The cited revision corrects and clarifies earlier preprints.
 
-**Core mechanism:** Sample a fixed number of neighbors at each aggregation depth. Aggregate their representations, combine that summary with the node's own representation, transform it, and normalize. Learning the aggregation function rather than a free embedding for each node allows new nodes to be encoded from their features and neighborhoods. Mean, pooling, LSTM, and GCN-style aggregators are distinct variants; the GCN-style variant does not use the same self/neighbor concatenation as ordinary GraphSAGE-mean.
+**Core mechanism:** Sample a fixed number of neighbors at each step outward from a node. Summarize their features, join that summary with the node's own features, apply learned weights, and normalize. The model learns this reusable rule instead of storing a separate learned vector for every node. Mean, pooling, LSTM, and GCN-style combining rules are different versions. The GCN-style one does not use ordinary GraphSAGE-mean's separate self/neighbor concatenation.
 
-**Inputs/outputs and typical data types:** Node attributes and graph neighborhoods become embeddings and node-class predictions. Text-derived post features and interaction-derived edges are used in the Reddit benchmark.
+**Inputs/outputs and typical data types:** Node attributes and connections become learned feature vectors and class predictions. Reddit inputs use features derived from post text and edges derived from user interactions.
 
-**Architecture diagram description:**
+**Architecture diagram description:** Sampling collects a small neighborhood. Calculations then move from farther nodes toward the root before classification.
 
 ```text
 root node -> sample neighbors -> sample their neighbors
@@ -1260,55 +1370,58 @@ root node -> sample neighbors -> sample their neighbors
            -> normalize embedding -> supervised classification head
 ```
 
-**Activation functions used and why:** The reported GraphSAGE variants use ReLU, with normalized output embeddings. Classification uses softmax for the single-label Reddit task. Pooling or LSTM aggregators add their own internal transformations.
+**Activation functions used and why:** Reported variants use ReLU and normalize output embeddings, or learned feature vectors. Reddit's single-label classifier uses softmax. Pooling and LSTM versions add their own transformations.
 
-**Loss function(s):** Supervised class cross-entropy for this instance. The paper's **unsupervised** alternative instead uses random-walk positive pairs and negative sampling; those results occupy separate columns in its table.
+**Loss function(s):** This version uses supervised class cross-entropy. The paper's **unsupervised** alternative treats nearby random-walk pairs as positives and sampled other pairs as negatives. Its results appear in separate table columns.
 
-**Optimization algorithm(s):** Adam; the supervised learning-rate search is over 0.01, 0.001, and 0.0001, selected using validation data. The paper specifies two aggregation depths with sample sizes $`S_1=25,S_2=10`$; it does not establish one universal decay schedule for all variants.
+**Optimization algorithm(s):** Adam's learning rate is chosen using validation data from 0.01, 0.001, and 0.0001. **Optional math:** Two aggregation depths use sample counts $`S_1=25,S_2=10`$. S1 and S2 are the respective neighbor budgets. The paper does not establish one decay schedule for every variant.
 
-**Regularization techniques:** Stochastic neighborhood sampling, normalized representations, and validation-selected model size. These do not justify importing the later, specially tuned PPI dropout/normalization recipe into the original Reddit result.
+**Regularization techniques:** Random neighbor sampling, normalized features, and validation-selected model size limit training choices. They do not justify importing a later PPI-specific dropout and normalization recipe into this original Reddit result.
 
-**Backpropagation considerations:** Gradients propagate through sampled message computations and trainable aggregators, not through discrete neighbor selection. Repeatedly sampled vertices may share cached work or appear multiple times, depending on implementation.
+**Backpropagation considerations:** Error signals follow the sampled message calculations and learned combining rules. They do not differentiate through the discrete sampling choice. Repeatedly sampled nodes may share cached calculations or be processed more than once, depending on the implementation.
 
-**Parameter count / scaling behavior:** A mean-aggregator transform on concatenated width $`2d`$ to width $`h`$ has roughly $`2dh`$ weights, plus optional biases and the head. Weights do not grow with the number of indexed vertices; stored features and adjacency still do.
+**Parameter count / scaling behavior:** Shared weights need not grow as more nodes join the graph, though stored inputs and edges do. **Optional math:** A mean transform from concatenated width $`2d`$ to output width h has about $`2dh`$ weights, plus optional biases and the classifier. Here d is each input vector's width.
 
-**Training paradigm:** Supervised inductive node classification in the chosen experiment. Pre-existing GloVe features come from another training process, but the GraphSAGE objective here is label-supervised. Its self-supervised variant is cross-referenced to [representation learning](05-unsupervised-neural.md).
+**Training paradigm:** The chosen task is supervised classification on new nodes. GloVe input features were learned in another process; GraphSAGE itself uses class labels here. See [representation learning](05-unsupervised-neural.md) for its self-supervised alternative.
 
-**Hardware/parallelism considerations:** Minibatch neighborhood construction can bottleneck host memory or graph-store access. GPU kernels accelerate transformed features, but sampling and data transfers remain part of end-to-end cost.
+**Hardware/parallelism considerations:** Building sampled batches can be limited by CPU memory or access to the stored graph. GPUs speed feature transformations, but sampling and transfers still count in total runtime.
 
-**Strengths and limitations:** Sampling controls per-batch neighborhood work and supports unseen nodes. Sampling introduces variance and can miss informative neighbors; deeper receptive fields can expand rapidly despite bounded fanout.
+**Strengths and limitations:** Sampling limits per-batch work and supports new nodes. It also adds randomness and can miss useful neighbors. Several sampling depths can still expand rapidly, even with a fixed neighbor budget at each depth.
 
-**Computational complexity / scalability notes:** For $`B`$ roots and hop fanouts $`s_1,\ldots,s_L`$, the computation graph can contain $`O(B[1+s_1+s_1s_2+\cdots+\prod_\ell s_\ell])`$ node occurrences before deduplication. Each needs feature transformations and aggregation. Calling sampling "constant-time" is only meaningful with fixed depth, fanouts, widths, and data-access assumptions.
+**Computational complexity / scalability notes:** Each sampled neighbor can bring more neighbors, multiplying work across depths. **Optional math:** For B root nodes and L hop budgets $`s_1,\ldots,s_L`$, there can be $`O(B[1+s_1+s_1s_2+\cdots+\prod_\ell s_\ell])`$ node appearances before removing duplicates. Each needs features and transformations. "Constant-time" only makes sense with fixed depth, sample sizes, widths, and data-access assumptions.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** In the [Stanford Reddit experiment](https://arxiv.org/html/1706.02216v4), researchers construct a graph of 232,965 September-2014 posts from 50 communities, connecting posts when the same user comments on both. Features combine title/comment GloVe averages with post statistics. The first 20 days train the model; remaining days supply held-out data, with 30% used for validation. **Supervised GraphSAGE-mean reaches test micro-F1 0.950**, versus the listed raw-feature baseline's 0.585. A new post and its available neighborhood become an embedding and predicted community. The documented aim is inductive representation learning, **not a claim that Reddit selected or deployed this model for ranking**.
+**Evidence status: Research benchmark.** The [Stanford Reddit study](https://arxiv.org/html/1706.02216v4) builds a graph of 232,965 September-2014 posts from 50 communities. Posts connect when the same user comments on both. Features combine averaged title/comment GloVe vectors with post statistics. The first 20 days train the model. Remaining days supply held-out data, with 30% used for validation.
 
-**Notable vendor implementations/libraries:** Stanford's GraphSAGE release, DGL `SAGEConv`, and PyTorch Geometric `SAGEConv`. Sampler ordering, replacement, layer fanouts, normalization, and aggregator type are part of reproducibility.
+**Supervised GraphSAGE-mean reaches test micro-F1 0.950**, versus 0.585 for the listed raw-feature baseline. Micro-F1 combines classification decisions into a score balancing missed and false predictions; higher is better. A new post and its available neighborhood produce a vector and predicted community. This tests learning for unseen nodes, **not a claim that Reddit deployed GraphSAGE for ranking**.
+
+**Notable vendor implementations/libraries:** Stanford's release, DGL `SAGEConv`, and PyTorch Geometric `SAGEConv` offer variants. Reproduction needs the sampling order, replacement rule, per-layer neighbor counts, normalization, and combining method.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| GCN | Labelled graphs with useful neighborhood structure | Simple normalized, permutation-aware aggregation | Smoothing and pooling can discard distinctions | DGL PROTEINS graph-classification demonstration; poor recorded result disclosed |
-| GAT | Graphs where neighbor contributions vary | Learned sparse neighborhood weighting | Irregular edge work and limited attention expressivity | Fully supervised inductive PPI function-label benchmark |
-| GraphSAGE | Large evolving attributed graphs | Encodes unseen nodes with sampled neighborhoods | Fanout expansion, sampling variance, and data movement | Stanford's supervised Reddit community-classification benchmark |
+| GCN | Labelled graphs whose neighbors carry useful information | Simple sharing that does not depend on node order | Mixing and averaging can erase important differences | DGL PROTEINS demo; its poor recorded score is disclosed |
+| GAT | Graphs where neighbors matter by different amounts | Learns weights along existing edges | Uneven edge work and limits of the scoring rule | Fully supervised PPI function prediction on new graphs |
+| GraphSAGE | Large changing graphs with node features | Samples neighbors to handle unseen nodes | Sampling can miss clues; deeper neighborhoods grow | Stanford's supervised Reddit community-classification test |
 
 ## 1.10 Metric and event-based networks
 
-These families are connected by neither topology nor hardware. They are grouped here because their distinctive training or representation choices cut across ordinary classification backbones: Siamese networks learn from relationships between examples, while SNNs communicate through time-dependent spikes.
+These two families do not share one design or hardware type. They appear together because they change how examples are compared or represented. Siamese networks learn relationships between pairs. Spiking neural networks (SNNs) pass time-dependent spike signals. Either choice can sit alongside other kinds of feature networks.
 
 ### 1.10.1 Supervised Siamese networks
+**In plain English:** A Siamese network applies the same learned feature extractor to two inputs, then compares the results. This can help recognize a new class from just one labelled example.
 
-**Name:** Supervised Siamese networks; instantiated by Koch, Zemel, and Salakhutdinov's convolutional same/different classifier for one-shot character recognition.
+**Name:** Supervised Siamese networks. The example is Koch, Zemel, and Salakhutdinov's convolutional same/different classifier for one-shot character recognition.
 
-**Category & sub-category:** Supervised learning; metric and event-based networks; shared-encoder pair comparison.
+**Category & sub-category:** Supervised learning; metric and event-based networks. Two branches share a feature encoder for pair comparison.
 
-**Originating paper/vendor/year:** Bromley and colleagues' [1993 signature-verification work](https://doi.org/10.1142/S0218001493000339) is a foundational Siamese-network reference. The specific architecture and benchmark here come from [Siamese Neural Networks for One-shot Image Recognition](https://www.cs.cmu.edu/~rsalakhu/papers/oneshot1.pdf), the ICML Deep Learning Workshop, 2015, not a main-conference ICML paper.
+**Originating paper/vendor/year:** Bromley and colleagues' [1993 signature-verification work](https://doi.org/10.1142/S0218001493000339) is an early Siamese reference. This architecture and result come from [Siamese Neural Networks for One-shot Image Recognition](https://www.cs.cmu.edu/~rsalakhu/papers/oneshot1.pdf), ICML Deep Learning Workshop, 2015. It was not a main-conference ICML paper.
 
-**Core mechanism:** Two inputs pass through identical encoders with shared parameters. A comparison head operates on their representations and predicts whether they belong to the same class. In the chosen paper it computes componentwise absolute differences and learns a weighted combination followed by a sigmoid. At test time, a query is compared with one labelled support example from each candidate class; the largest similarity selects the class without retraining a new output layer.
+**Core mechanism:** Each input passes through an identical copy of the same encoder, using shared weights. The comparison head takes absolute differences between their feature values, learns how to weight those differences, and applies sigmoid. During testing, a query is compared with one labelled support example per candidate class. The highest similarity chooses the class without retraining a class-specific output layer.
 
-**Inputs/outputs and typical data types:** Pairs of grayscale character images plus same/different labels become similarity probabilities. The one-shot decision uses support-set class labels in addition to the trained comparator.
+**Inputs/outputs and typical data types:** Pairs of grayscale characters and same/different labels guide training. Outputs are similarity probabilities, not automatically trustworthy confidence estimates. One-shot decisions also require the support examples' class labels.
 
-**Architecture diagram description:**
+**Architecture diagram description:** The two branches share both convolution and dense weights. Their outputs join only at the difference calculation.
 
 ```text
 image A -> shared Conv[64,128,128,256] -> shared Dense4096 --+
@@ -1317,45 +1430,48 @@ image B -> shared Conv[64,128,128,256] -> shared Dense4096 --+-> abs difference
 query versus each labelled support image -> highest similarity -> class
 ```
 
-**Activation functions used and why:** ReLU in the convolutional feature extractor, sigmoid in the final feature layer and comparison output. The learned output is a similarity score; a general sigmoid comparator need not satisfy metric axioms such as the triangle inequality.
+**Activation functions used and why:** Convolutions use ReLU; the final feature layer and comparator use sigmoid. This produces a learned similarity score, not necessarily a mathematical distance. For example, it need not obey the triangle inequality, the rule that a direct distance cannot exceed a two-part route.
 
-**Loss function(s):** Binary cross-entropy for same/different labels plus layerwise L2 penalties. Contrastive-margin and triplet losses are important Siamese-family alternatives, **not the loss used for this quoted result**.
+**Loss function(s):** Binary cross-entropy checks same/different labels, with separate L2 weight penalties by layer. Margin-based contrastive and triplet losses are other Siamese-family choices, **not this result's loss**.
 
-**Optimization algorithm(s):** Momentum SGD with minibatches of 128. Layerwise initial rates are selected from a $`10^{-4}`$ to $`10^{-1}`$ search range; all decay by a factor 0.99 per epoch. Momentum starts at 0.5 and ramps to selected layerwise values. Training stops on one-shot validation performance, with a maximum of 200 epochs.
+**Optimization algorithm(s):** Momentum SGD uses batches of 128. Layerwise starting rates are chosen from a range, then all are multiplied by 0.99 each epoch. Momentum begins at 0.5 and rises to selected layerwise values. One-shot validation guides stopping, with a maximum of 200 epochs. **Optional math:** The rate-search range is $`10^{-4}`$ to $`10^{-1}`$, or 0.0001 to 0.1.
 
-**Regularization techniques:** Shared weights, layerwise L2 penalties, affine image distortions, and validation-based stopping. Pair construction and class/writer separation matter as much as ordinary weight regularization.
+**Regularization techniques:** Training uses shared weights, layerwise L2 penalties, affine image distortions such as changes in geometric position, and validation stopping. How pairs are formed, and how classes and writers are separated, matters as much as weight penalties.
 
-**Backpropagation considerations:** Both branches contribute gradients to the **same** encoder weights. Duplicating parameters instead of tying them changes the model. Pair sampling determines which similarities receive training signal and can bias the embedding toward easy comparisons.
+**Backpropagation considerations:** Both branches send error signals into the **same** encoder weights. Giving each branch independent weights changes the model. Pair sampling determines which similarities are taught and can overemphasize easy comparisons.
 
-**Parameter count / scaling behavior:** Weight sharing means two branches do not double stored encoder parameters. The displayed 4,096-unit feature layer is large: with the paper's 6-by-6-by-256 final map, its weight matrix alone contains $`9,216\times4,096`$, about **37.7 million weights**, calculated from the architecture.
+**Parameter count / scaling behavior:** Two branches do not double stored encoder weights. The 4,096-unit final feature layer is large. **Optional math:** From a 6-by-6-by-256 map, its matrix alone has $`9,216\times4,096`$ weights, about **37.7 million**, calculated from the architecture. This is not the entire network's parameter count.
 
-**Training paradigm:** Supervised pair learning, followed by support-based one-shot classification on unseen classes. It is not label-free contrastive pretraining; support labels remain explicit supervision at evaluation.
+**Training paradigm:** Known same/different pairs supervise learning. Testing then uses labelled support examples to classify unseen classes. This is not label-free contrastive pretraining; one-shot support labels still supply information at evaluation.
 
-**Hardware/parallelism considerations:** Pair branches parallelize, and support embeddings can be cached for repeated queries. Training stores activations for both inputs even though their weights are shared.
+**Hardware/parallelism considerations:** The branches can run together. Repeated queries can reuse saved support embeddings. Training still stores intermediate outputs for both inputs even though weights are shared.
 
-**Strengths and limitations:** The comparator can generalize to new categories without a fixed class-specific output head. Success depends on the quality and diversity of training pairs; high benchmark similarity does not establish reliable biometric identification.
+**Strengths and limitations:** The comparator can handle new categories without a fixed output unit per class. Results depend on varied, useful training pairs. Strong character similarity scores do not prove reliable biometric identification.
 
-**Computational complexity / scalability notes:** A pair requires approximately two encoder forward passes plus a linear-in-embedding comparison. With cached support embeddings, a query requires one encoder pass and $`O(kd)`$ comparison work for $`k`$ support classes. Enumerating every pair in $`n`$ examples would be quadratic; sampled pair training need not be.
+**Computational complexity / scalability notes:** One pair needs roughly two encoder passes and a feature-by-feature comparison. Cached support vectors reduce repeated work. **Optional math:** With k support classes and d features per vector, a new query needs one encoder pass and $`O(kd)`$ comparison work. Forming every pair from n examples would grow quadratically; sampled-pair training need not do that.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** The [2015 study's Table 2](https://www.cs.cmu.edu/~rsalakhu/papers/oneshot1.pdf) reports **92.0% accuracy** over **400 trials of 20-way within-alphabet Omniglot one-shot classification**. Its study reserves 30 alphabets for training, ten for validation, and ten for testing, with separated writers; these details should not be replaced by another widely used Omniglot split. A novel character is compared with twenty labelled examples, and the most similar supplies the output class. The authors aim to transfer learned verification features to new classes. This is character recognition, not a measured signature-fraud reduction or deployed identity-verification outcome.
+**Evidence status: Research benchmark.** [Table 2 of the 2015 study](https://www.cs.cmu.edu/~rsalakhu/papers/oneshot1.pdf) reports **92.0% accuracy** across **400 trials of 20-way within-alphabet Omniglot one-shot classification**. Each trial compares a new character with twenty labelled support examples. The study uses 30 alphabets for training, ten for validation, and ten for testing, with separate writers. Other common Omniglot splits cannot replace these details.
 
-**Notable vendor implementations/libraries:** Shared Keras models and PyTorch modules can implement Siamese branches; metric-learning libraries support contrastive and triplet alternatives. A wrapper does not specify the encoder or training objective.
+The most similar support image supplies the class. The goal is to transfer learned pair-comparison features to unseen classes. This is character recognition, not measured signature-fraud reduction or deployed identity verification.
+
+**Notable vendor implementations/libraries:** Shared Keras models and PyTorch modules can form the branches. Metric-learning libraries also support contrastive and triplet losses. A wrapper alone does not identify the encoder or objective.
 
 ### 1.10.2 Spiking neural networks (SNNs)
+**In plain English:** An SNN carries a changing numerical state and sends a spike when that state crosses a threshold. This example learns digit labels using approximate backward signals through those sharp decisions.
 
-**Name:** Spiking neural network; the representative is a **supervised surrogate-gradient leaky-integrate-and-fire network** from snnTorch Tutorial 5.
+**Name:** Spiking neural network, specifically the **supervised surrogate-gradient leaky-integrate-and-fire model** in snnTorch Tutorial 5.
 
-**Category & sub-category:** Supervised learning; metric and event-based networks; temporally evolving spike-based neural computation.
+**Category & sub-category:** Supervised learning; metric and event-based networks. Neurons communicate using spikes over simulated time steps.
 
-**Originating paper/vendor/year:** SNNs are a broad historical family, not one invention. [Neftci, Mostafa, and Zenke's 2019 surrogate-gradient review](https://arxiv.org/abs/1901.09948) explains the training approach. The concrete recipe is [Eshraghian's snnTorch tutorial](https://snntorch.readthedocs.io/en/latest/tutorials/tutorial_5.html), based on the project's published training guidance.
+**Originating paper/vendor/year:** SNNs are a broad historical family, not one invention. [Neftci, Mostafa, and Zenke's 2019 review](https://arxiv.org/abs/1901.09948) explains surrogate-gradient training. The concrete recipe is [Eshraghian's snnTorch tutorial](https://snntorch.readthedocs.io/en/latest/tutorials/tutorial_5.html), based on the project's published guidance.
 
-**Core mechanism:** Each neuron accumulates current in a leaky membrane state and emits a spike when a threshold is crossed. A reset changes subsequent state. The forward spike is discontinuous, so supervised training replaces its unusable ordinary derivative with a smooth surrogate during the backward pass. The example repeats static image-derived current over 25 simulation steps; it does **not** require Poisson encoding or an event camera.
+**Core mechanism:** A neuron adds incoming current to a state that gradually leaks away. This state is called its membrane potential. Crossing a threshold emits a spike, then a reset changes the later state. The sharp spike decision has no useful ordinary training slope. The backward pass therefore uses a smooth substitute, or surrogate, slope. Here, a static image supplies repeated current for 25 simulation steps. It needs neither Poisson random-spike encoding nor an event camera.
 
-**Inputs/outputs and typical data types:** Continuous image-derived currents or genuine event streams can drive SNNs. Here, 784 normalized MNIST pixel values yield output spike trains; the class with the greatest output spike count is selected.
+**Inputs/outputs and typical data types:** SNNs can read continuous currents or genuine event streams. This example takes 784 normalized MNIST pixel values and produces output spike trains. The digit with the largest output spike count wins.
 
-**Architecture diagram description:**
+**Architecture diagram description:** LIF means leaky integrate-and-fire: accumulate input, leak state, emit a spike, and reset. Two learned linear layers drive these states.
 
 ```text
 static MNIST vector, repeated for 25 steps
@@ -1364,54 +1480,57 @@ static MNIST vector, repeated for 25 steps
 each LIF: previous membrane -> leak + input current -> threshold spike -> reset
 ```
 
-**Activation functions used and why:** A Heaviside threshold generates spikes in the forward pass. The tutorial uses the documented arctangent-based surrogate convention for gradients; it does not make the actual emitted spikes continuous. Membrane leak is 0.95 in this example.
+**Activation functions used and why:** A Heaviside threshold makes the forward spike an on/off event. The tutorial uses an arctangent-based smooth curve to supply backward slopes. This does not turn actual spikes into continuous signals. Membrane leak is 0.95 in the example.
 
-**Loss function(s):** Sum of class cross-entropies applied to the **output membrane potentials at every time step**. Evaluation uses output spike counts. It would be incorrect to describe this specific implementation as cross-entropy on spike counts.
+**Loss function(s):** Training sums class cross-entropy applied to **output membrane potentials at every time step**. Evaluation instead uses spike counts. Calling this particular training loss "cross-entropy on spike counts" would be wrong.
 
-**Optimization algorithm(s):** Adam at $`5\times10^{-4}`$, $`\beta_1=0.9,\beta_2=0.999`$, with no explicit rate decay in the displayed one-epoch training loop.
+**Optimization algorithm(s):** The displayed loop trains for one epoch with Adam and no explicit rate decay. **Optional math:** The rate is $`5\times10^{-4}`$, or 0.0005; $`\beta_1=0.9,\beta_2=0.999`$ set Adam's running averages.
 
-**Regularization techniques:** The minimal tutorial does not specify dropout or weight decay. Leak, reset, and a finite simulation horizon constrain dynamics but are not substitutes for measuring generalization.
+**Regularization techniques:** The minimal tutorial specifies neither dropout nor weight decay. Leak, reset, and a fixed simulation length limit state behavior. They do not replace tests on unseen data.
 
-**Backpropagation considerations:** BPTT unrolls membrane dynamics and uses surrogate derivatives at threshold crossings. The resulting gradient is an approximation, not the exact derivative of the discontinuous spike map. Reset differentiation and surrogate scale influence credit assignment and must be stated when changing implementations.
+**Backpropagation considerations:** BPTT traces state changes through time and substitutes slopes at thresholds. These are approximate gradients, not exact derivatives of the sharp spike rule. How software handles reset gradients and surrogate scale affects which earlier steps get credit. Changing implementations requires stating these choices.
 
-**Parameter count / scaling behavior:** With the two biased linear layers and fixed neuron constants, the tutorial has $`784(1000)+1000+1000(10)+10=\mathbf{795,010}`$ trainable parameters, calculated. Membrane states add runtime memory, not necessarily trainable parameters.
+**Parameter count / scaling behavior:** Membrane states need runtime memory but are not necessarily learned weights. **Optional math:** With two biased linear layers and fixed neuron constants, $`784(1000)+1000+1000(10)+10=\mathbf{795,010}`$ trainable parameters, calculated from the tutorial.
 
-**Training paradigm:** Supervised learning from digit labels. Unmodulated spike-timing-dependent plasticity, or **STDP**, is a different local learning rule, defined in the [optimization glossary](10-glossary.md#62-optimization-and-neural-computation) but not separately cataloged in this edition. Neither all SNNs nor all STDP variants share one supervision category.
+**Training paradigm:** Digit labels supervise this network. Unmodulated spike-timing-dependent plasticity (**STDP**) instead changes nearby connections using spike timing. It is a different local learning rule, covered in the [optimization glossary](10-glossary.md#62-optimization-and-neural-computation), not a separate entry in this edition. Neither all SNNs nor all STDP variants share one supervision type.
 
-**Hardware/parallelism considerations:** Sparse spikes can benefit suitable neuromorphic hardware, but a dense GPU simulation still performs time-step operations and stores states. **No energy saving is claimed here:** measured energy depends on hardware, event rates, encoding, precision, memory traffic, simulation horizon, and whether training or inference is measured.
+**Hardware/parallelism considerations:** Sparse spikes may help on suitable neuromorphic chips, hardware designed for this kind of event processing. A dense GPU simulation still performs repeated time-step calculations and stores states. **No energy saving is claimed here.** Measured energy depends on the chip, event rates, input encoding, numerical precision, memory transfers, simulation length, and whether training or prediction is measured.
 
-**Strengths and limitations:** Explicit temporal state is attractive for event-driven data. Surrogate choice, simulation length, conversion overhead, and limited hardware portability complicate fair comparisons with ordinary neural networks.
+**Strengths and limitations:** Explicit state over time can suit event-driven data. Approximate slopes, simulation length, input conversion, and limited hardware portability make fair comparisons with ordinary networks difficult.
 
-**Computational complexity / scalability notes:** This dense two-layer simulation performs roughly $`O(Tp)`$ arithmetic per example and stores $`O(BT H_{\rm neurons})`$ temporal activations for straightforward BPTT. An event-driven implementation instead depends on actual synaptic events; the two cost models are not interchangeable.
+**Computational complexity / scalability notes:** More simulation steps repeat the dense-layer work and add saved history. **Optional math:** This version uses roughly $`O(Tp)`$ arithmetic per example and $`O(BT H_{\rm neurons})`$ saved activations for straightforward BPTT. T counts steps, p weights, B batch size, and H-neurons relevant neuron states. True event-driven work instead follows actual connection events. These are different cost models.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** [Tutorial 5](https://snntorch.readthedocs.io/en/latest/tutorials/tutorial_5.html) reports **9,387 correct classifications out of all 10,000 MNIST test images: 93.87% accuracy** in its displayed run. The final test loader explicitly retains the last partial batch. A static digit drives repeated currents, hidden spikes influence ten output membranes, and accumulated output spikes select the digit. This documents supervised trainability of the chosen spiking instance, not superiority over the CNN above; the recipes are different. It reports no neuromorphic-device energy measurement, sensor deployment, or commercial efficiency KPI.
+**Evidence status: Research benchmark.** [Tutorial 5](https://snntorch.readthedocs.io/en/latest/tutorials/tutorial_5.html) reports **9,387 correct out of all 10,000 MNIST test images: 93.87% accuracy**. The final test loader keeps the last partial batch. Repeated image currents produce hidden spikes, which affect ten output states. Total output spikes choose the digit.
 
-**Notable vendor implementations/libraries:** snnTorch, SpikingJelly, and hardware-oriented neuromorphic software stacks. A model simulated in one library is not automatically executable or energy-efficient on a particular chip.
+This shows that the selected spiking model can learn from labels. It does not show superiority over the CNN above, whose training recipe differs. The tutorial reports no neuromorphic-device energy test, sensor deployment, or commercial efficiency gain.
+
+**Notable vendor implementations/libraries:** snnTorch, SpikingJelly, and hardware-oriented neuromorphic tools support related models. Simulating a model in one library does not prove it can run, or save energy, on a particular chip.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| Supervised Siamese networks | Labelled pairs and few-shot support sets | Shared comparison features can transfer to unseen classes | Pair-selection bias and uncalibrated similarities | Omniglot 20-way one-shot character recognition |
-| Supervised surrogate-gradient SNN | Event streams or explicitly encoded temporal inputs | Trainable spike-based temporal dynamics | Surrogate approximation and hardware-specific efficiency | snnTorch static-MNIST simulation; no energy claim |
+| Supervised Siamese networks | Labelled pairs and small labelled support sets | Shared comparison features can help with new classes | Pair choice can bias scores; probabilities may be uncalibrated | Omniglot 20-way one-shot character test |
+| Supervised surrogate-gradient SNN | Event streams or inputs represented over time | Learns with spikes and carried state | Backward slopes are approximate; efficiency depends on hardware | snnTorch static-MNIST simulation, with no energy claim |
 
 ## 1.11 Supervised mixtures
 
-Mixture-of-experts models are organized by their objective, not by the presence of a router. The 1991 adaptive mixture learns from labelled examples. GShard's model learns from parallel translations. Later sparse language models trained on unpaired text belong in [the model catalog](07-moe-models.md), while [the MoE deep dive](08-moe-deep-dive.md) develops shared routing and systems concepts.
+A mixture of experts combines several smaller networks with a gate, or router, that decides their contributions. Experts are subnetworks, not separate people or chatbots. Their training objective determines the supervision category. The 1991 mixture learns labelled examples; GShard learns paired translations. Later sparse language models trained on unpaired text belong in [the model catalog](07-moe-models.md). The [MoE deep dive](08-moe-deep-dive.md) explains shared routing and computing-system ideas.
 
 ### 1.11.1 Adaptive mixture of local experts
+**In plain English:** This model lets several small networks specialize in different kinds of input. A learned gate combines their predictions and learns which ones tend to work best for each case.
 
-**Name:** Adaptive mixture of local experts, the **Jacobs/Jordan/Nowlan/Hinton 1991** model.
+**Name:** Adaptive mixture of local experts. The reference is the **Jacobs/Jordan/Nowlan/Hinton 1991** model.
 
-**Category & sub-category:** Supervised learning; supervised mixtures; learned input-dependent specialization.
+**Category & sub-category:** Supervised learning; supervised mixtures. Input-dependent weighting encourages different networks to specialize.
 
-**Originating paper/vendor/year:** Robert Jacobs, Michael Jordan, Steven Nowlan, and Geoffrey Hinton, [Adaptive Mixtures of Local Experts](https://www.cs.toronto.edu/~hinton/absps/jacobs.pdf), Neural Computation 3:79-87, 1991. MIT and University of Toronto researchers developed the method; it is not a later language-model vendor architecture.
+**Originating paper/vendor/year:** Robert Jacobs, Michael Jordan, Steven Nowlan, and Geoffrey Hinton, [Adaptive Mixtures of Local Experts](https://www.cs.toronto.edu/~hinton/absps/jacobs.pdf), Neural Computation 3:79-87, 1991. Researchers at MIT and the University of Toronto developed it, not a later language-model vendor.
 
-**Core mechanism:** Several experts receive the same input, while a gating network outputs mixing probabilities $`g_i(x)`$. Training encourages experts to specialize on cases where their predictions are relatively successful. The paper contrasts error on an averaged prediction with objectives based on individual expert errors and a probabilistic mixture. Under the mixture likelihood, target-conditioned responsibilities determine how strongly each expert learns from a case; the gate learns which experts tend to succeed in that input region.
+**Core mechanism:** All experts read the same input. A gate assigns mixing probabilities, and training encourages each expert to handle cases where it performs relatively well. The paper distinguishes scoring an averaged prediction from scoring individual expert errors. In its probability-mixture version, the known target helps decide each expert's responsibility for a case. More successful experts receive stronger learning signals, while the gate learns where they tend to succeed.
 
-**Inputs/outputs and typical data types:** Numeric features and explicit target vectors become a prediction or conditional output distribution. The original application uses two acoustic formants to discriminate four vowel classes.
+**Inputs/outputs and typical data types:** Numeric features and explicit target vectors become a prediction or output distribution. The original application uses two formants, measurements of sound resonances, to distinguish four vowel classes.
 
-**Architecture diagram description:**
+**Architecture diagram description:** Every expert contributes through the gate's weights. Labels train both the experts and the gate.
 
 ```text
                        +-> expert 1 -> output distribution --+
@@ -1421,45 +1540,52 @@ input x ---------------+-> expert 2 -> output distribution --+-> weighted mixtur
 label y -> expert errors/responsibilities -> update experts and gate
 ```
 
-**Activation functions used and why:** Softmax normalizes gate outputs. Expert activation depends on the supervised output distribution; the vowel experiment restricts experts to simple linear decision boundaries. The paper does not establish one universal hidden-layer activation recipe, and no modern ReLU stack is implied.
+**Activation functions used and why:** Softmax makes gate probabilities sum to one. Expert activations depend on the task's output model. The vowel test restricts experts to simple linear boundaries. The paper gives no universal hidden activation recipe and implies no modern ReLU stack.
 
-**Loss function(s):** The paper develops expected expert squared error, $`\sum_i g_i\|y-f_i(x)\|^2`$, and a Gaussian-mixture-style negative log-likelihood, $`-\log\sum_i g_i\exp[-\|y-f_i(x)\|^2/2]`$, with fixed-scale constants suppressed. Neither equals squared error of the mixture's average prediction. The experiment uses average squared error 0.08 as its stopping criterion.
+**Loss function(s):** The paper considers both gate-weighted expert errors and the likelihood of a mixture of expert outputs. Neither is simply squared error after averaging all predictions. The experiment stops at average squared error 0.08.
 
-**Optimization algorithm(s):** The reported vowel experiments use **full-batch gradient descent with a fixed step size**, chosen by limited convergence exploration for each system. They use **no momentum**. A numerical schedule not supplied for every configuration is not reconstructed from later MoE practice.
+**Optional math:** The losses include $`\sum_i g_i\|y-f_i(x)\|^2`$ and $`-\log\sum_i g_i\exp[-\|y-f_i(x)\|^2/2]`$. Here x is input, y target, i an expert, fi its prediction, and gi its gate probability. The squared norm adds squared target differences. The second formula uses a Gaussian-mixture-style likelihood, with fixed-scale constants left out.
 
-**Regularization techniques:** Small experts with restricted decision surfaces control capacity. The original encourages specialization and can leave an expert effectively unused; it does not contain today's auxiliary load-balancing penalty.
+**Optimization algorithm(s):** Vowel experiments use **full-batch gradient descent with a fixed step size**. Each update uses the entire training set. Limited trials of training progress choose step sizes for each system. There is **no momentum**. Missing numerical schedules are not filled in from modern MoE recipes.
 
-**Backpropagation considerations:** The gate and experts receive coupled but distinct gradients. For a likelihood mixture, responsibilities are proportional to $`g_i p_i(y\mid x)`$, so a good expert receives stronger credit. Expert permutation symmetry and poor initialization can produce nonunique or unhelpful decompositions.
+**Regularization techniques:** Small experts and restricted decision boundaries limit capacity. Training encourages specialization, but can leave an expert nearly unused. The model does not have today's extra load-balancing penalty.
 
-**Parameter count / scaling behavior:** With $`k`$ equal-size experts, total parameters are approximately $`kp_{\rm expert}+p_{\rm gate}`$. The experiment compares four/eight experts with roughly parameter-matched six/twelve-hidden-unit conventional networks; no modern billion-parameter count is applicable.
+**Backpropagation considerations:** Gate and experts receive related but different error signals. Swapping expert identities can leave the same prediction, so specialization need not be unique. Bad starting weights can also lead to unhelpful divisions of work. **Optional math:** A likelihood responsibility is proportional to $`g_i p_i(y\mid x)`$, where gi is gate probability and pi is expert i's probability for target y given input x.
 
-**Training paradigm:** Explicitly supervised learning from labelled vowel cases. A probabilistic latent expert identity does not make the training unsupervised.
+**Parameter count / scaling behavior:** More experts usually mean proportionally more stored expert weights. **Optional math:** Total count is about $`kp_{\rm expert}+p_{\rm gate}`$, with k equal-size experts, p-expert weights per expert, and p-gate gate weights. The study compares four/eight experts with roughly size-matched six/twelve-hidden-unit conventional networks. Modern billion-parameter counts do not apply.
 
-**Hardware/parallelism considerations:** Experts can evaluate in parallel, but the classical training objective generally evaluates all experts. This is **not** automatically the sparse per-token execution of later top-k Transformer MoEs.
+**Training paradigm:** Labelled vowel cases supervise learning. The expert identity may be hidden, but known output targets still make this supervised learning.
 
-**Strengths and limitations:** Input-dependent specialists can reduce interference between subtasks. Specialization is not guaranteed to be interpretable, load-balanced, or beneficial; extra experts can remain unused, and dense mixture evaluation can cost more than one expert.
+**Hardware/parallelism considerations:** Experts can run together, but the classical training objective generally evaluates all of them. This is **not automatically sparse per-token execution** like later top-k Transformer mixtures, where only selected experts run.
 
-**Computational complexity / scalability notes:** Per-example evaluation costs $`O(kC_{\rm expert}+C_{\rm gate})`$ when all experts run. Training epochs add backward costs for the expert and gate computations. Fewer epochs to a stopping criterion is not by itself an equal-factor reduction in wall-clock cost.
+**Strengths and limitations:** Specialization can reduce conflict between different subtasks. It need not produce understandable experts, equal workloads, or better results. Some experts may stay unused, while evaluating the full mixture costs more than evaluating one.
+
+**Computational complexity / scalability notes:** If every expert runs, adding experts adds prediction work. **Optional math:** Per example, cost is $`O(kC_{\rm expert}+C_{\rm gate})`$. k counts experts; the C terms are costs per expert and for the gate. Training adds their backward work. Fewer epochs do not automatically mean an equal reduction in elapsed time.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** The [original study](https://www.cs.toronto.edu/~hinton/absps/jacobs.pdf) uses Peterson-Barney vowel formants from **75 speakers**, training on the first 50 and testing on the remaining 25. Across **25 simulations per configuration**, both mixtures and conventional networks report **90% test classification accuracy**. Four experts require an average **1,124 epochs** to the stated error criterion, versus **2,209** for the six-hidden-unit backpropagation network. Thus the reported advantage is convergence in epochs, **not improved test accuracy**. Two formants enter specialists and a gate; weighted class distributions select a vowel. The documented rationale is reduced interference between naturally different decision regions. No speech-service deployment, runtime speedup, or commercial KPI is established.
+**Evidence status: Research benchmark.** The [original study](https://www.cs.toronto.edu/~hinton/absps/jacobs.pdf) uses Peterson-Barney vowel formants from **75 speakers**. The first 50 train the system; the remaining 25 test it. Across **25 simulations per configuration**, mixtures and conventional networks both report **90% test classification accuracy**. Four experts take an average **1,124 epochs** to the error stopping point, versus **2,209** for a six-hidden-unit backpropagation network.
 
-**Notable vendor implementations/libraries:** The architecture can be implemented with ordinary neural-network layers and mixture-distribution utilities. Such a custom implementation must choose its expert likelihood and gate explicitly; no modern MoE package is automatically an exact 1991 reproduction.
+The advantage is fewer epochs to the stated error level, **not better test accuracy**. Two formants enter the experts and gate; weighted class distributions choose a vowel. Reducing interference between different input regions motivates the design. The study establishes no speech-service deployment, runtime speedup, or commercial benefit.
+
+**Notable vendor implementations/libraries:** Ordinary network layers and mixture-distribution tools can implement the method. A reconstruction must choose expert output probabilities and the gate explicitly. A modern MoE package is not automatically an exact 1991 reproduction.
 
 ### 1.11.2 GShard multilingual translation
+**In plain English:** GShard keeps huge sets of subnetworks but uses at most two per token in each expert layer. It spreads the work across many devices to learn translations into English.
 
-**Name:** **GShard's sparsely gated multilingual translation Transformer**, as reported in 2020. GShard is also the name of the automatic-sharding system supporting the model.
+**Name:** **GShard's sparsely gated multilingual translation Transformer**, reported in 2020. GShard also names the system that automatically divides the model across devices.
 
-**Category & sub-category:** Supervised learning; supervised mixtures; distributed sparse expert encoder-decoder translation.
+**Category & sub-category:** Supervised learning; supervised mixtures. A distributed encoder-decoder routes translation tokens through selected expert networks.
 
-**Originating paper/vendor/year:** Dmitry Lepikhin and colleagues, Google, [GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding](https://arxiv.org/html/2006.16668v1), June 2020 technical report, subsequently presented at ICLR 2021.
+**Originating paper/vendor/year:** Dmitry Lepikhin and colleagues, Google, [GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding](https://arxiv.org/html/2006.16668v1), June 2020 technical report, later presented at ICLR 2021.
 
-**Core mechanism:** Replace every other positionwise feed-forward layer in a Transformer encoder and decoder with an MoE layer. A softmax router selects up to two experts per token under the paper's capacity-limited, partly stochastic dispatch procedure. Tokens are grouped for dispatch; overloaded experts cannot accept unlimited tokens. Expert outputs are weighted and combined back into the residual stream. Automatic SPMD sharding distributes the computation and parameters instead of manually rewriting the model for each device configuration.
+**Core mechanism:** Every other feed-forward layer in both Transformer stacks is replaced by a mixture-of-experts (MoE) layer. A softmax router chooses up to two expert subnetworks per token. Tokens are grouped, experts have capacity limits, and the second route is partly random. Overloaded experts cannot accept unlimited tokens. The model weights accepted expert outputs, combines them, and adds the result through the residual path.
 
-**Inputs/outputs and typical data types:** Source-language subword sequences paired with English translations become conditional English-token distributions. Source and target tokenizers use distinct multilingual-source and English-target vocabularies.
+Automatic sharding splits weights and calculations across devices. The SPMD approach runs the same program on different portions of the data and model. This avoids manually rewriting the network for each device arrangement.
 
-**Architecture diagram description:**
+**Inputs/outputs and typical data types:** Source-language subword sequences, paired with English translations, become probabilities for English output tokens. Source and target use distinct vocabularies: multilingual source and English target.
+
+**Architecture diagram description:** Both encoder and decoder alternate dense feed-forward and routed expert layers. The decoder also retrieves source information through cross-attention.
 
 ```text
 source tokens -> encoder: attention + alternating dense FFN / routed MoE
@@ -1470,55 +1596,65 @@ MoE: softmax router -> capacity-limited top-2 dispatch -> expert FFNs -> combine
                          [experts sharded across TPU cores]
 ```
 
-**Activation functions used and why:** ReLU in the two-layer expert feed-forward transformations, softmax for attention/routing and output classification, and Transformer residual/normalization operations. This is not a later SwiGLU-based sparse language-model recipe.
+**Activation functions used and why:** Each expert's two-layer feed-forward network uses ReLU. Softmax supplies attention lookup weights, router probabilities, and output-class probabilities. Residual additions and normalization follow the Transformer design. This is not a later sparse language model using SwiGLU.
 
-**Loss function(s):** Conditional translation negative log-likelihood plus the paper's auxiliary load-balancing term. The auxiliary objective discourages routing concentration that would waste expert capacity; it does not replace translation supervision.
+**Loss function(s):** Translation negative log-likelihood penalizes low probability on paired English targets. An extra balancing loss discourages sending too much work to only a few experts. This supports efficient routing; it does not replace translation supervision.
 
-**Optimization algorithm(s):** Appendix A.2 specifies Adafactor with factored second moments, no first moment, a second-moment schedule described as $`1-t^{-0.8}`$, update clipping threshold one, and learning rate one followed by inverse-square-root decay after 10,000 steps. These are the report's adaptive-optimizer conventions, not an interchangeable Adam learning rate.
+**Optimization algorithm(s):** Appendix A.2 uses Adafactor. It stores compressed summaries of squared gradients, called factored second moments, and no first-moment average. Update clipping threshold is one. Learning rate is one, followed by inverse-square-root decay after 10,000 steps. These adaptive settings are not interchangeable with an Adam learning rate. **Optional math:** The second-moment schedule is described as $`1-t^{-0.8}`$, where t counts training steps.
 
-**Regularization techniques:** Input, residual, and attention dropout 0.1, plus auxiliary routing balance. Capacity constraints and stochastic second-expert routing affect which expert computations occur; they are systems/training choices, not guarantees of uniform expert use.
+**Regularization techniques:** Input, residual, and attention dropout are 0.1, alongside routing balance. Capacity limits and random second-expert routing change which calculations occur. They are training and system choices, not guarantees that all experts receive equal work.
 
-**Backpropagation considerations:** Selected experts receive task gradients, while router probabilities and the balancing objective provide routing-related gradients. Discrete selection/capacity decisions do not have an ordinary continuous derivative. Dispatch and combine operations must preserve correct token-to-expert correspondence in both passes.
+**Backpropagation considerations:** Selected experts receive translation error signals. Router probabilities and balancing loss also receive signals that guide routing. Discrete selection and capacity decisions have no ordinary continuous derivative. Sending tokens to experts and combining outputs must preserve the right token matches in both directions.
 
-**Parameter count / scaling behavior:** The principal large model is reported as approximately **600 billion total weights**, dominated by expert parameters, with **2,048 experts per MoE layer** and **36 combined encoder-plus-decoder layers**. The appendix specifies model width 1,024, expert/FFN hidden width 8,192, and sixteen attention heads with 128-dimensional keys/values. **The original 2020 GShard report does not give a precise whole-model active-parameters-per-token inventory.** Multiplying 600B by $`2/2048`$ incorrectly ignores shared layers, embeddings, attention, depth, and actual capacity-limited routing.
+**Parameter count / scaling behavior:** The main large model has about **600 billion total weights**, mostly in experts. It uses **2,048 experts per MoE layer** and **36 combined encoder-plus-decoder layers**, not 36 in each stack. The appendix lists model width 1,024, expert/FFN width 8,192, and sixteen attention heads with 128-dimensional keys and values.
 
-A later cross-paper comparison, [Du et al.'s GLaM Table 2, v2 dated 2022-08-01](https://arxiv.org/html/2112.06905v2#S2.T2), lists **GShard-M4: 600B total / 1.5B activated parameters per input token**. This is the GLaM authors' rounded count under that table's counting convention for the representative encoder-decoder, not an independent recomputation or a universal count for every GShard configuration. It does not supply the missing precise inventory in the original report or change GShard's supervised translation signal.
+**The original 2020 report does not give a precise whole-model active-parameters-per-token inventory.** A route fraction cannot establish that total. **Optional math:** Multiplying 600B by $`2/2048`$ is not a valid shortcut. The fraction represents two routes out of 2,048 experts. It ignores shared layers, embeddings, attention, depth, and whether capacity allows both routes.
 
-**Training paradigm:** **Supervised translation, not next-token unsupervised pretraining.** The mined parallel corpus contains about 25 billion examples across directions; the reported many-to-English training uses approximately **13 billion examples**. Web origin and noisy alignment do not remove the supervision supplied by paired translations.
+A later comparison, [Du et al.'s GLaM Table 2, v2 dated 2022-08-01](https://arxiv.org/html/2112.06905v2#S2.T2), lists **GShard-M4: 600B total / 1.5B activated parameters per input token**. This is the GLaM authors' rounded count under that table's rules for a representative encoder-decoder. It is not an independent calculation here or a universal GShard count. It neither supplies the original's missing precise inventory nor changes the supervised translation objective.
 
-**Hardware/parallelism considerations:** Expert parallelism requires substantial cross-device dispatch/combination traffic. The 600B experiment uses **2,048 TPU v3 cores** and about **four days**. These hardware-specific research figures establish neither portable GPU timing nor commercial energy or cost savings.
+**Training paradigm:** **Supervised translation, not next-token unsupervised pretraining.** The mined parallel corpus has about 25 billion examples across directions; the many-to-English training uses about **13 billion examples**. Web-sourced sentence pairs can be noisy, but their paired translations still supply the learning targets.
 
-**Strengths and limitations:** Sparse expert activation grows total capacity without evaluating every expert for each token. Routing balance, communication, deployment memory, low-resource transfer, and sequential autoregressive inference remain constraints; more stored parameters do not guarantee universally better sharing.
+**Hardware/parallelism considerations:** Experts must exchange many tokens and outputs across devices. The 600B experiment uses **2,048 TPU v3 cores** for about **four days**. TPUs are specialized learning accelerators. These research measurements do not establish equivalent GPU timing or commercial energy and cost savings.
 
-**Computational complexity / scalability notes:** With $`k`$ experts, routing scores can require $`O(BTdk)`$ work. Selected two-layer experts add approximately $`O(BT r d f)`$ for at most $`r=2`$ accepted routes, **in addition to** dense/shared Transformer, attention, and communication costs. Total expert storage grows roughly as the number of MoE layers times $`kdf`$. Grouped capacity and sharding assumptions determine actual scaling.
+**Strengths and limitations:** Running only selected experts grows stored model capacity without evaluating every expert per token. Limits remain: uneven routing, communication, memory for deployment, transfer to low-resource languages, and step-by-step output generation. More stored weights do not guarantee better sharing across all languages.
+
+**Computational complexity / scalability notes:** Routing must score experts, selected experts must run, and devices must exchange their data. **Optional math:** With batch size B, length T, model width d, and k experts, routing can cost $`O(BTdk)`$. Selected two-layer experts add about $`O(BT r d f)`$, with expert hidden width f and at most $`r=2`$ accepted routes. Shared Transformer and attention work are additional. Expert storage grows roughly with MoE-layer count times $`kdf`$. Group capacities and device partitioning affect real scaling.
 
 **Real-world problem solved - REQUIRED WORKED EXAMPLE:**
 
-**Evidence status: Research benchmark.** In [Table 3](https://arxiv.org/html/2006.16668v1), **MoE(2048E,36L)** reports **44.3 average BLEU** on the study's held-out **100-language-to-English evaluation**, versus **36.9** for its listed dense **T(96L)** baseline. These are the authors' multilingual test sets and averaging protocol, not WMT newstest2014 or a universally comparable BLEU aggregate. The underlying mined corpus and exact test reconstruction are not fully released in this report. A non-English sentence is encoded; successive English tokens route through experts while attending to the source, and beam search selects a translation. This demonstrates supervised translation scaling, not evidence that Google Translate commercially deployed this exact model. Later sparse language models are covered in [07](07-moe-models.md) and [08](08-moe-deep-dive.md).
+**Evidence status: Research benchmark.** [Table 3](https://arxiv.org/html/2006.16668v1) gives **MoE(2048E,36L) 44.3 average BLEU** on the held-out **100-language-to-English evaluation**, versus **36.9** for the listed dense **T(96L)** baseline. BLEU compares wording with reference translations, not percent correct. These are the authors' multilingual test sets and averaging rules, not WMT newstest2014 or a universally comparable aggregate. The mined corpus and details needed to rebuild the exact tests are not fully released.
 
-**Notable vendor implementations/libraries:** The paper's TensorFlow/XLA SPMD sharding approach and related research code illustrate the systems contribution. Modern expert-parallel libraries implement related ideas, but do not establish release of every GShard training artifact or an exact public 600B checkpoint.
+A source sentence is encoded. Successive English tokens use selected experts while retrieving source information, and beam search chooses a translation. This shows supervised translation scaling, not that Google Translate commercially deployed this exact model. Later sparse language models appear in [07](07-moe-models.md) and [08](08-moe-deep-dive.md).
+
+**Notable vendor implementations/libraries:** The TensorFlow/XLA SPMD sharding approach and related research code show the systems contribution. Modern expert-parallel tools use related ideas, but do not prove that every training artifact or an exact public 600B checkpoint was released.
 
 | Algorithm | Best-fit data type | Key strength | Key limitation | Real-world example |
 |---|---|---|---|---|
-| Adaptive mixture of local experts, 1991 | Labelled data with distinct input regimes | Learned specialization can reduce interference | All-expert cost and unused or unstable specialists | Speaker-disjoint vowel experiment: equal accuracy, fewer training epochs |
-| GShard translation, 2020 | Large multilingual parallel corpora | Sparse expert capacity with automatic sharding | Communication, routing capacity, and incomplete public reproduction artifacts | Supervised 100-language-to-English research benchmark |
+| Adaptive mixture of local experts, 1991 | Labelled data with different kinds of input | Specialists can reduce conflict between subtasks | Every expert runs; some may be unused or unstable | Vowels with separate test speakers: equal accuracy, fewer epochs |
+| GShard translation, 2020 | Huge collections of paired multilingual sentences | Runs selected experts across automatically divided devices | Token transfers, capacity limits, and incomplete public artifacts | Supervised translation from 100 languages into English |
 
 ## Coverage and continuation manifest
 
-This bounded first-edition chapter contains **30 entries**. Every entry identifies a representative supervision signal, includes the nine common fields and nine neural-specific fields, supplies a text architecture diagram, and distinguishes its example's evidence status.
+This first-edition chapter covers **30 entries** within the stated limits. Every entry explains its training signal, keeps nine common and nine neural-specific fields, and includes a text diagram. Each worked example labels its evidence type.
 
 | Covered range | Sub-category | Entries |
 |---|---|---:|
-| 1.5.1-1.5.2 | Perceptron and MLP foundations | 2 |
-| 1.6.1-1.6.10 | Generic CNN, LeNet, AlexNet, VGG, ResNet, Inception, EfficientNet, ConvNeXt, DenseNet, MobileNet | 10 |
-| 1.7.1-1.7.5 | RNN, LSTM, GRU, Bahdanau-attention Seq2Seq, original Transformer | 5 |
-| 1.8.1-1.8.6 | ViT, Swin, U-Net, Faster R-CNN, YOLOv1, DETR | 6 |
-| 1.9.1-1.9.3 | GCN, GAT, GraphSAGE | 3 |
-| 1.10.1-1.10.2 | Supervised Siamese networks and surrogate-gradient SNNs | 2 |
-| 1.11.1-1.11.2 | Original adaptive local experts and GShard translation | 2 |
+| 1.5.1-1.5.2 | Basic decision networks: perceptron and MLP | 2 |
+| 1.6.1-1.6.10 | Image-filter networks: generic CNN, LeNet, AlexNet, VGG, ResNet, Inception, EfficientNet, ConvNeXt, DenseNet, MobileNet | 10 |
+| 1.7.1-1.7.5 | Sequence models: RNN, LSTM, GRU, Bahdanau-attention Seq2Seq, original Transformer | 5 |
+| 1.8.1-1.8.6 | Image features and predictions: ViT, Swin, U-Net, Faster R-CNN, YOLOv1, DETR | 6 |
+| 1.9.1-1.9.3 | Connected-data networks: GCN, GAT, GraphSAGE | 3 |
+| 1.10.1-1.10.2 | Pair comparisons and spikes: supervised Siamese networks and surrogate-gradient SNNs | 2 |
+| 1.11.1-1.11.2 | Supervised mixtures: original adaptive local experts and GShard translation | 2 |
 
-**Reading connections.** Begin with the [reading guide and evidence policy](00-reading-guide.md) and [supervised classical models](01-supervised-classical.md). Continue to [semi-supervised learning](03-semi-supervised.md) for masked-label graph settings, consistency, and pseudo-label variants; [unsupervised classical learning](04-unsupervised-classical.md) for non-neural representation and clustering methods; and [unsupervised neural learning](05-unsupervised-neural.md) for autoencoders, contrastive/masked objectives, and the STDP cross-reference. [Foundation models](06-foundation-models.md) distinguish BERT/GPT/T5 pretraining from the original supervised Transformer. [MoE model families](07-moe-models.md) and the [dedicated MoE deep dive](08-moe-deep-dive.md) extend the routing discussion. The [comparative guide](09-comparative-guide.md) and [glossary](10-glossary.md) connect terminology across the book.
+**Reading connections.** Start with the [reading guide and evidence policy](00-reading-guide.md) and [supervised classical models](01-supervised-classical.md). [Semi-supervised learning](03-semi-supervised.md) explains graphs with only some node labels, consistency learning, and pseudo-labels. [Unsupervised classical learning](04-unsupervised-classical.md) covers non-neural features and clustering. [Unsupervised neural learning](05-unsupervised-neural.md) covers autoencoders, contrastive and masked-input objectives, and the STDP cross-reference.
 
-**Evidence boundaries.** Documentation runs are labelled as such, including the perceptron's in-sample score and the weak recorded PROTEINS result. Historical crop, ensemble, checkpoint, dataset, and loss distinctions are retained. Missing complete schedules or unpublished artifacts are not filled with another implementation's defaults. No neural family is assigned a proprietary product recipe without evidence. SNN energy claims remain hardware-qualified; the GShard-M4 active count is attributed to the later GLaM comparison rather than inferred from routing sparsity.
+[Foundation models](06-foundation-models.md) separates BERT/GPT/T5 pretraining from the original supervised Transformer. [MoE model families](07-moe-models.md) and the [MoE deep dive](08-moe-deep-dive.md) extend the routing discussion. Use the [comparative guide](09-comparative-guide.md) and [glossary](10-glossary.md) to connect terms across chapters.
 
-**Further non-required depth not included.** Separate full entries for Inception-v2/v3, EfficientNetV2, ConvNeXt V2, MobileNet-v2/v3, later YOLO generations, Mask R-CNN, RetinaNet, Deformable DETR, volumetric U-Nets, and nnU-Net's configuration algorithm would extend the vision coverage. Graph isomorphism networks, relational/heterogeneous and temporal GNNs, graph Transformers, advanced samplers, continuous-time recurrent models, neural differential equations, and state-space sequence models are further extensions. Detailed quantization recipes, compiler/kernel implementations, calibrated deployment studies, and controlled neuromorphic energy comparisons require their own evidence and experiments. Their omission bounds this edition; it is not a claim that the architectures above exhaust neural learning.
+**Evidence boundaries.** Documentation demonstrations remain identified as demonstrations. That includes the perceptron's score on its training data and the poor PROTEINS result. Historical crops, ensembles, checkpoints, datasets, and losses remain separate. Missing schedules and unpublished artifacts are not replaced by another library's defaults. No proprietary product recipe is assigned to a neural family without evidence. SNN energy claims remain tied to hardware. GShard-M4's active count is credited to the later GLaM comparison, not calculated from the fraction of selected experts.
+
+**Further non-required depth not included.** Additional vision entries could cover Inception-v2/v3, EfficientNetV2, ConvNeXt V2, MobileNet-v2/v3, later YOLO generations, Mask R-CNN, RetinaNet, Deformable DETR, three-dimensional U-Nets, and nnU-Net's configuration algorithm. These do not receive separate full entries here.
+
+Other extensions include graph isomorphism networks and networks with different node or edge types, called relational/heterogeneous GNNs. Temporal GNNs handle changing connections over time. Graph Transformers and advanced neighbor samplers are also further topics. Further sequence topics include continuous-time recurrent models, neural differential equations, and state-space models. These are outside this edition's scope.
+
+Detailed lower-precision, or quantization, recipes and compiler/kernel implementations also need separate treatment. So do deployment studies checking whether predicted chances match real frequencies, and controlled energy comparisons on neuromorphic hardware. Each needs its own evidence and experiments. These limits do not mean the listed architectures exhaust neural learning.
